@@ -1,6 +1,10 @@
+// main.go
 package main
 
 import (
+	"time"
+
+	"github.com/gin-contrib/cors" // << add this
 	"github.com/gin-gonic/gin"
 	"github.com/kiranraoboinapally/student/backend/config"
 	"github.com/kiranraoboinapally/student/backend/controllers"
@@ -11,6 +15,18 @@ func main() {
 	config.Init()
 
 	r := gin.Default()
+
+	// ---------- CORS: allow frontend to call backend ----------
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173"}, // your dev frontend origin
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+	// ---------------------------------------------------------
+
 	api := r.Group("/api")
 
 	// Public auth routes
@@ -25,7 +41,7 @@ func main() {
 	admin.Use(middleware.AuthRoleMiddleware(1)) // only Admin (role_id = 1)
 	{
 		admin.POST("/create-user", controllers.CreateUserByAdmin)
-		// add more admin routes here...
+		// add more admin routes here.
 	}
 
 	// Student-only routes - require role 5
@@ -33,11 +49,8 @@ func main() {
 	students.Use(middleware.AuthRoleMiddleware(5)) // only students allowed
 	{
 		students.GET("/me", controllers.GetMyProfile)
-
-		// add more student-only endpoints here...
 		students.GET("/fees", controllers.GetStudentFees)
 		students.GET("/dashboard", controllers.GetStudentDashboard)
-
 	}
 
 	// General profile route - any logged-in user
