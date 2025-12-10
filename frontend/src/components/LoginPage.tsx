@@ -104,7 +104,7 @@ export default function LoginPage(): JSX.Element {
 
         {/* RIGHT PANEL */}
         <div
-          className="w-[64%] flex flex-col justify-between text-white p-10"
+          className="w-[64%] flex-1 flex flex-col text-white p-10 min-h-full"
           style={rightPanelStyle}
         >
           {/* Header */}
@@ -115,18 +115,17 @@ export default function LoginPage(): JSX.Element {
           </div>
 
           {/* FORM */}
-          <form onSubmit={handleLogin} className="mt-6">
+          <form onSubmit={handleLogin} className="mt-6 flex-grow">
             <label className="font-semibold">Student ID</label>
-<input
-  type="text"
-  inputMode="numeric"
-  required
-  disabled={loading}
-  value={studentId}
-  onChange={(e) => setStudentId(e.target.value.replace(/\D/g, ""))} 
-  className="w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200"
-/>
-
+            <input
+              type="text"
+              inputMode="numeric"
+              required
+              disabled={loading}
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value.replace(/\D/g, ""))}
+              className="w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200"
+            />
 
             <label className="font-semibold">Password</label>
             <input
@@ -147,7 +146,6 @@ export default function LoginPage(): JSX.Element {
                 {loading ? "Signing in…" : "Log In"}
               </button>
 
-              {/* FORGOT PASSWORD RESTORED */}
               <a href="#" className="underline font-semibold text-rose-100">
                 Forgot password?
               </a>
@@ -164,10 +162,10 @@ export default function LoginPage(): JSX.Element {
             </p>
           </form>
 
-          {/* Footer */}
-          <div className="flex justify-between text-sm opacity-90 mt-6">
+          {/* FOOTER — pinned to bottom */}
+          <div className="flex justify-between text-sm opacity-90 mt-auto pt-6">
             <span>{currentDate}</span>
-            <span>eVarsity ERP • SlashCurate Technologies</span>
+            <span>eVarsity ERP • ABC Technologies</span>
           </div>
 
         </div>
