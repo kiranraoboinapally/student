@@ -1,5 +1,38 @@
 package models
 
+import "time"
+
+// ---------------- FEE DUES -------------------
+
+type FeeDue struct {
+	FeeDueID       int       `gorm:"column:fee_due_id;primaryKey;autoIncrement" json:"fee_due_id"`
+	StudentID      int       `gorm:"column:student_id;index" json:"student_id"`
+	FeeTypeID      int       `gorm:"column:fee_type_id" json:"fee_type_id"`
+	FeeHead        string    `gorm:"column:fee_head" json:"fee_head"`
+	DueDate        time.Time `gorm:"column:due_date" json:"due_date"`
+	OriginalAmount float64   `gorm:"column:original_amount" json:"original_amount"`
+	AmountPaid     float64   `gorm:"column:amount_paid" json:"amount_paid"`
+	Status         string    `gorm:"column:status" json:"status"` // due|partial|paid|waived
+	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (FeeDue) TableName() string { return "fee_dues" }
+
+type FeePayment struct {
+	PaymentID     int       `gorm:"column:payment_id;primaryKey;autoIncrement" json:"payment_id"`
+	FeeDueID      int       `gorm:"column:fee_due_id;index" json:"fee_due_id"`
+	StudentID     int       `gorm:"column:student_id;index" json:"student_id"`
+	PaidAmount    float64   `gorm:"column:paid_amount" json:"paid_amount"`
+	PaymentMethod string    `gorm:"column:payment_method" json:"payment_method"`
+	PaymentNote   string    `gorm:"column:payment_note" json:"payment_note"`
+	PaidAt        time.Time `gorm:"column:paid_at" json:"paid_at"`
+}
+
+func (FeePayment) TableName() string { return "fee_payments" }
+
+// ---------------- REGISTRATION FEES -------------------
+
 type RegistrationFee struct {
 	RegnFeeID             int      `gorm:"column:regn_fee_id;primaryKey" json:"regn_fee_id"`
 	EnrollmentNumber      int64    `gorm:"column:enrollment_number" json:"enrollment_number"`
@@ -27,7 +60,7 @@ type RegistrationFee struct {
 
 func (RegistrationFee) TableName() string { return "registration_fees" }
 
-// ---------------- EXAM FEES -------------------
+// ---------------- EXAMINATION FEES -------------------
 
 type ExaminationFee struct {
 	ExamFeeID          int      `gorm:"column:exam_fee_id;primaryKey" json:"exam_fee_id"`

@@ -56,7 +56,7 @@ export default function LoginPage(): JSX.Element {
       }
 
       login(data.token, data.expires_in_hours);
-      navigate("/student/profile");
+      navigate("/student/dashboard");
     } catch {
       setError("Network error");
     } finally {

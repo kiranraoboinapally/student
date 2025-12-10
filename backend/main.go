@@ -1,10 +1,9 @@
-// main.go
 package main
 
 import (
 	"time"
 
-	"github.com/gin-contrib/cors" // << add this
+	"github.com/gin-contrib/cors" // << added for CORS
 	"github.com/gin-gonic/gin"
 	"github.com/kiranraoboinapally/student/backend/config"
 	"github.com/kiranraoboinapally/student/backend/controllers"
@@ -41,7 +40,7 @@ func main() {
 	admin.Use(middleware.AuthRoleMiddleware(1)) // only Admin (role_id = 1)
 	{
 		admin.POST("/create-user", controllers.CreateUserByAdmin)
-		// add more admin routes here.
+		// add more admin routes here
 	}
 
 	// Student-only routes - require role 5
@@ -50,6 +49,7 @@ func main() {
 	{
 		students.GET("/me", controllers.GetMyProfile)
 		students.GET("/fees", controllers.GetStudentFees)
+		students.POST("/fees/pay", controllers.PayFee)
 		students.GET("/dashboard", controllers.GetStudentDashboard)
 	}
 
