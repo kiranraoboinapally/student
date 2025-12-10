@@ -49,22 +49,13 @@ export default function LoginPage(): JSX.Element {
 
       const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        setError(data.error || data.message || "Login failed");
+      if (!res.ok || !data.token) {
+        setError("Invalid Student ID or Password");
         setLoading(false);
         return;
       }
 
-      const token = data.token;
-      const expires = data.expires_in_hours;
-
-      if (!token) {
-        setError("No token returned by server");
-        setLoading(false);
-        return;
-      }
-
-      login(token, expires);
+      login(data.token, data.expires_in_hours);
       navigate("/student/profile");
     } catch {
       setError("Network error");
@@ -110,7 +101,12 @@ export default function LoginPage(): JSX.Element {
           {/* Header */}
           <div className="text-center">
             <h1 className="text-2xl font-bold">Singhania University</h1>
-            <p className="opacity-90 mt-1">Degree &amp; PG College (Private University)</p>
+            <p className="opacity-80 font-semibold">
+              Diploma, Degree, PG &amp; PhD College (Private University)
+            </p>
+            <p className="opacity-80 ">
+              Pacheri Bari, SH 17, Buhana, Rajasthan 333515
+            </p>
             <h2 className="text-3xl font-extrabold mt-6 text-rose-100">STUDENT PORTAL</h2>
           </div>
 
@@ -124,7 +120,7 @@ export default function LoginPage(): JSX.Element {
               disabled={loading}
               value={studentId}
               onChange={(e) => setStudentId(e.target.value.replace(/\D/g, ""))}
-              className="w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200"
+              className={`w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200 ${error ? "border-2 border-red-400" : ""}`}
             />
 
             <label className="font-semibold">Password</label>
@@ -134,7 +130,7 @@ export default function LoginPage(): JSX.Element {
               disabled={loading}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200"
+              className={`w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200 ${error ? "border-2 border-red-400" : ""}`}
             />
 
             <div className="flex items-center gap-4 mt-4">
@@ -165,9 +161,8 @@ export default function LoginPage(): JSX.Element {
           {/* FOOTER — pinned to bottom */}
           <div className="flex justify-between text-sm opacity-90 mt-auto pt-6">
             <span>{currentDate}</span>
-            <span>eVarsity ERP • ABC Technologies</span>
+            <span>eVarsity ERP • SlashCurate Technologies Pvt Ltd</span>
           </div>
-
         </div>
       </div>
     </div>
