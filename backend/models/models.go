@@ -19,7 +19,7 @@ type User struct {
 	PasswordResetExpires *time.Time `gorm:"column:password_reset_expires" json:"-"`
 	FailedLoginAttempts  int        `gorm:"column:failed_login_attempts" json:"-"`
 	LockedUntil          *time.Time `gorm:"column:locked_until" json:"-"`
-	IsTempPassword       bool       `gorm:"column:is_temp_password" json:"-"`
+	IsTempPassword       bool       `gorm:"column:is_temp_password" json:"is_temp_password"`
 	CreatedAt            *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
 	UpdatedAt            *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }

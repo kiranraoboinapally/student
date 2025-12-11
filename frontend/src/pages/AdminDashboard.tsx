@@ -4,10 +4,10 @@ import { useAuth, apiBase } from "../auth/AuthProvider";
 interface Student {
   student_id: number;
   student_name: string;
-  father_name: string;
-  student_email_id: string;
-  enrollment_number: number;
-  // add other fields as needed
+  father_name?: string | null;
+  student_email_id?: string | null;
+  enrollment_number?: number | null;
+  temp_password?: string; // optional to display after activation
 }
 
 export default function AdminDashboard(): JSX.Element {
@@ -19,19 +19,51 @@ export default function AdminDashboard(): JSX.Element {
     student_name: "",
     father_name: "",
     student_email_id: "",
-    // ... other fields
   });
   const [dobInputs, setDobInputs] = useState<{ [key: number]: string }>({});
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(25);
 
-  // Fetch students
+  // Fetch students (paginated)
   const loadStudents = async () => {
     setLoading(true);
     try {
-      const res = await authFetch(`${apiBase}/admin/students`);
-      const data = await res.json();
-      setStudents(data);
+      // Explicit pagination params - backend returns { data: [...], meta: {...} }
+      const res = await authFetch(`${apiBase}/admin/students?page=${page}&page_size=${pageSize}`);
+      
+      // handle non-OK responses first to avoid JSON parse errors
+      if (!res.ok) {
+        const text = await res.text().catch(() => "<no-body>");
+        console.error("Failed to load students:", res.status, res.statusText, text);
+        // Optionally show a UI error here
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
+
+      // Parse JSON safely
+      const data = await res.json().catch((err) => {
+        console.error("Failed parsing students JSON:", err);
+        return null;
+      });
+      if (!data) {
+        setStudents([]);
+        return;
+      }
+
+      // Backend returns { data: [...], meta: {...} }
+      if (Array.isArray(data.data)) {
+        setStudents(data.data as Student[]);
+      } else if (Array.isArray(data)) {
+        // fallback if API returns raw array
+        setStudents(data as Student[]);
+      } else {
+        console.warn("Unexpected students payload shape:", data);
+        setStudents([]);
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Network/load error while fetching students:", err);
+      setStudents([]);
     } finally {
       setLoading(false);
     }
@@ -39,49 +71,94 @@ export default function AdminDashboard(): JSX.Element {
 
   useEffect(() => {
     loadStudents();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]); // reload when page changes
 
   // Add new student
   const addStudent = async () => {
     try {
-      await authFetch(`${apiBase}/admin/students/add`, {
+      const res = await authFetch(`${apiBase}/admin/students/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newStudent),
       });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "<no-body>");
+        console.error("Add student failed:", res.status, text);
+        alert("Failed to add student. See console for details.");
+        return;
+      }
       setNewStudent({ student_name: "", father_name: "", student_email_id: "" });
+      // reload first page after add
+      setPage(1);
       loadStudents();
     } catch (err) {
       console.error(err);
+      alert("Network error while adding student");
     }
   };
 
-  // Generate enrollment number
-  const generateEnrollment = async (id: number) => {
-    try {
-      await authFetch(`${apiBase}/admin/students/generate-enrollment/${id}`, {
-        method: "PUT",
-      });
-      loadStudents();
-    } catch (err) {
-      console.error(err);
-    }
+  // GENERATE ENROLLMENT: removed/disabled because you said enrollment already exists.
+  // If you later want to enable, implement backend route and call it here.
+  const generateEnrollment = async (_id: number) => {
+    alert("Enrollment generation disabled (not required).");
+    // TODO: call /admin/students/generate-enrollment/:id if you re-enable on server
   };
 
-  // Activate login using DOB
+  // Activate login using DOB (ddmmyyyy -> YYYY-MM-DD)
   const activateLogin = async (id: number) => {
-    const dob = dobInputs[id];
+    let dob = dobInputs[id];
     if (!dob) return alert("Enter DOB in ddmmyyyy format");
+
+    // Convert ddmmyyyy -> YYYY-MM-DD
+    if (dob.length === 8) {
+      const dd = dob.slice(0, 2);
+      const mm = dob.slice(2, 4);
+      const yyyy = dob.slice(4, 8);
+      dob = `${yyyy}-${mm}-${dd}`;
+    } else {
+      return alert("Invalid DOB format, use ddmmyyyy");
+    }
+
     try {
-      await authFetch(`${apiBase}/admin/students/activate-login/${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dob }),
+      const res = await authFetch(
+        `${apiBase}/admin/students/activate-login/${id}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dob }),
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "<no-body>");
+        console.error("Activate login failed:", res.status, text);
+        alert("Failed to activate login. See console for details.");
+        return;
+      }
+
+      const data = await res.json().catch((e) => {
+        console.error("Failed parsing activate-login response:", e);
+        return null;
       });
+      if (!data) {
+        alert("Unexpected response from server");
+        return;
+      }
+
+      alert(`Login activated!\nEnrollment: ${data.enrollment}\nTemp Password: ${data.temp_password}`);
+
+      // Update temp password in state to display in table
+      setStudents(prev =>
+        prev.map(s => (s.student_id === id ? { ...s, temp_password: data.temp_password } : s))
+      );
+
       setDobInputs(prev => ({ ...prev, [id]: "" }));
+      // reload list (keeps page)
       loadStudents();
     } catch (err) {
       console.error(err);
+      alert("Network error while activating login");
     }
   };
 
@@ -128,50 +205,62 @@ export default function AdminDashboard(): JSX.Element {
             <th className="border px-2 py-1">ID</th>
             <th className="border px-2 py-1">Name</th>
             <th className="border px-2 py-1">Enrollment</th>
+            <th className="border px-2 py-1">Temp Password</th>
             <th className="border px-2 py-1">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {students.map((s) => (
-            <tr key={s.student_id} className="odd:bg-gray-50">
-              <td className="border px-2 py-1">{s.student_id}</td>
-              <td className="border px-2 py-1">{s.student_name}</td>
-              <td className="border px-2 py-1">{s.enrollment_number || "0"}</td>
-              <td className="border px-2 py-1 space-x-2">
-                {s.enrollment_number === 0 && (
-                  <button
-                    onClick={() => generateEnrollment(s.student_id)}
-                    className="bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
-                  >
-                    Generate Enrollment
-                  </button>
-                )}
-                {s.enrollment_number > 0 && (
-                  <>
-                    <input
-                      type="text"
-                      placeholder="DOB ddmmyyyy"
-                      value={dobInputs[s.student_id] || ""}
-                      onChange={(e) =>
-                        setDobInputs(prev => ({ ...prev, [s.student_id]: e.target.value }))
-                      }
-                      className="border px-1 py-0.5 rounded w-32"
-                    />
+          {students.length === 0 && !loading ? (
+            <tr><td colSpan={5} className="text-center p-4">No students found</td></tr>
+          ) : (
+            students.map((s) => (
+              <tr key={s.student_id} className="odd:bg-gray-50">
+                <td className="border px-2 py-1">{s.student_id}</td>
+                <td className="border px-2 py-1">{s.student_name}</td>
+                <td className="border px-2 py-1">{s.enrollment_number ?? "0"}</td>
+                <td className="border px-2 py-1">{s.temp_password ?? "-"}</td>
+                <td className="border px-2 py-1 space-x-2">
+                  {s.enrollment_number === 0 && (
                     <button
-                      onClick={() => activateLogin(s.student_id)}
-                      className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                      onClick={() => generateEnrollment(s.student_id)}
+                      className="bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
                     >
-                      Activate Login
+                      Generate Enrollment
                     </button>
-                  </>
-                )}
-              </td>
-            </tr>
-          ))}
+                  )}
+                  {s.enrollment_number && s.enrollment_number > 0 && !s.temp_password && (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="DOB ddmmyyyy"
+                        value={dobInputs[s.student_id] || ""}
+                        onChange={(e) =>
+                          setDobInputs(prev => ({ ...prev, [s.student_id]: e.target.value }))
+                        }
+                        className="border px-1 py-0.5 rounded w-32"
+                      />
+                      <button
+                        onClick={() => activateLogin(s.student_id)}
+                        className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                      >
+                        Activate Login
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
 
-      {loading && <p className="mt-2 text-gray-500">Loading...</p>}
+      <div className="mt-4 flex items-center justify-between">
+        <div>
+          <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="mr-2 px-3 py-1 border rounded">Prev</button>
+          <button onClick={() => setPage(p => p + 1)} className="px-3 py-1 border rounded">Next</button>
+        </div>
+        {loading && <p className="mt-2 text-gray-500">Loading...</p>}
+      </div>
     </div>
   );
 }

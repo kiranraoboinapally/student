@@ -42,7 +42,7 @@ func main() {
 	{
 		// From first version
 		admin.POST("/students/add", controllers.AddStudent)
-		admin.PUT("/students/generate-enrollment/:id", controllers.GenerateEnrollment)
+		//admin.PUT("/students/generate-enrollment/:id", controllers.GenerateEnrollment)
 		admin.POST("/students/activate-login/:id", controllers.ActivateStudentLogin)
 		admin.GET("/students", controllers.ListStudents)
 
