@@ -81,12 +81,12 @@ export default function LoginPage(): JSX.Element {
 
         {/* LEFT PANEL */}
         <div className="w-[30%] min-w-[200px] bg-gray-100 flex flex-col justify-center items-center p-3">
-          <div
-            className="w-26 h-26 rounded-full flex justify-center items-center shadow-xl"
-            style={{ backgroundColor: "#650C08" }}
-          >
-            <img src={logoSrc} alt="Logo" className="w-[70%] h-[70%] object-contain" />
-          </div>
+        <div
+  className="w-[6.5rem] h-[6.5rem] rounded-full overflow-hidden flex justify-center items-center shadow-xl"
+>
+  <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+</div>
+
 
           <div className="mt-2 font-semibold text-gray-800 tracking-wide">
             Welcome To Login Page!
@@ -161,7 +161,7 @@ export default function LoginPage(): JSX.Element {
           {/* FOOTER — pinned to bottom */}
           <div className="flex justify-between text-sm opacity-90 mt-auto pt-6">
             <span>{currentDate}</span>
-            <span>eVarsity ERP • SlashCurate Technologies Pvt Ltd</span>
+            <span> ERP • SlashCurate Technologies Pvt Ltd</span>
           </div>
         </div>
       </div>
