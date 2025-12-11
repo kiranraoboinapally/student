@@ -11,12 +11,25 @@ import (
 
 // GetMyProfile returns the logged-in user's profile + associated student records
 func GetMyProfile(c *gin.Context) {
-	userIDVal, ok := c.Get("user_id")
+	uidVal, ok := c.Get("user_id")
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "user id missing in context"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
-	userID := userIDVal.(int64)
+
+	var userID int64
+	switch v := uidVal.(type) {
+	case int64:
+		userID = v
+	case float64:
+		userID = int64(v)
+	case int:
+		userID = int64(v)
+	default:
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return
+	}
+
 	db := config.DB
 
 	var user models.User
@@ -26,11 +39,11 @@ func GetMyProfile(c *gin.Context) {
 	}
 
 	var master models.MasterStudent
-	// try numeric username -> enrollment conversion, else try raw string
+	// Try numeric conversion first
 	if en, err := strconv.ParseInt(user.Username, 10, 64); err == nil {
 		_ = db.Where("enrollment_number = ?", en).First(&master).Error
 	} else {
-		// fallback try direct match (rare)
+		// fallback: direct string match (rare case)
 		_ = db.Where("enrollment_number = ?", user.Username).First(&master).Error
 	}
 
@@ -47,16 +60,17 @@ func GetMyProfile(c *gin.Context) {
 
 // GetStudentByID returns student info by master_students.student_id
 func GetStudentByID(c *gin.Context) {
-	id := c.Param("id")
+	idStr := c.Param("id")
 	db := config.DB
 
 	var master models.MasterStudent
-	if err := db.Where("student_id = ?", id).First(&master).Error; err != nil {
+	if err := db.Where("student_id = ?", idStr).First(&master).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "student not found"})
 		return
 	}
 
 	var act models.ActStudent
+	// Convert enrollment_number to string safely
 	enrollment := strconv.FormatInt(master.EnrollmentNumber, 10)
 	_ = db.Where("Enrollment_Number = ? OR Regn_no = ?", enrollment, enrollment).First(&act).Error
 

@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/gin-contrib/cors" // << added for CORS
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kiranraoboinapally/student/backend/config"
 	"github.com/kiranraoboinapally/student/backend/controllers"
@@ -17,7 +17,7 @@ func main() {
 
 	// ---------- CORS: allow frontend to call backend ----------
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"}, // your dev frontend origin
+		AllowOrigins:     []string{"http://localhost:5173"}, // your frontend origin
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -28,34 +28,41 @@ func main() {
 
 	api := r.Group("/api")
 
-	// Public auth routes
+	// ---------------- Auth Routes ----------------
 	auth := api.Group("/auth")
 	{
-		auth.POST("/register", controllers.Register)
+		auth.POST("/register", controllers.Register) // from second version
 		auth.POST("/login", controllers.Login)
+		auth.POST("/change-password", middleware.AuthRoleMiddleware(5), controllers.ChangePassword) // from first version
 	}
 
-	// Admin routes - require role 1 (Admin)
+	// ---------------- Admin Routes ----------------
 	admin := api.Group("/admin")
-	admin.Use(middleware.AuthRoleMiddleware(1)) // only Admin (role_id = 1)
+	admin.Use(middleware.AuthRoleMiddleware(1)) // only Admin
 	{
+		// From first version
+		admin.POST("/students/add", controllers.AddStudent)
+		admin.PUT("/students/generate-enrollment/:id", controllers.GenerateEnrollment)
+		admin.POST("/students/activate-login/:id", controllers.ActivateStudentLogin)
+		admin.GET("/students", controllers.ListStudents)
+
+		// Optional from second version
 		admin.POST("/create-user", controllers.CreateUserByAdmin)
-		// add more admin routes here
 	}
 
-	// Student-only routes - require role 5
+	// ---------------- Student Routes ----------------
 	students := api.Group("/students")
-	students.Use(middleware.AuthRoleMiddleware(5)) // only students allowed
+	students.Use(middleware.AuthRoleMiddleware(5)) // only students
 	{
-		students.GET("/me", controllers.GetMyProfile)
+		students.GET("/dashboard", controllers.GetStudentDashboard)
 		students.GET("/fees", controllers.GetStudentFees)
 		students.POST("/fees/pay", controllers.PayFee)
-		students.GET("/dashboard", controllers.GetStudentDashboard)
+		students.GET("/me", controllers.GetMyProfile)
 	}
 
-	// General profile route - any logged-in user
+	// ---------------- Profile Routes ----------------
 	profile := api.Group("/profile")
-	profile.Use(middleware.AuthRoleMiddleware()) // any authenticated user
+	profile.Use(middleware.AuthRoleMiddleware()) // any logged-in user
 	{
 		profile.GET("/me", controllers.GetMyProfile)
 	}

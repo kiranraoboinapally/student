@@ -38,7 +38,7 @@ func GetStudentDashboard(c *gin.Context) {
 		return
 	}
 
-	username, _ := c.Get("username") // may be string, may be absent
+	username, _ := c.Get("username")
 	usernameStr := ""
 	if s, ok := username.(string); ok {
 		usernameStr = s
@@ -62,43 +62,49 @@ func GetStudentDashboard(c *gin.Context) {
 		return
 	}
 
-	enrollmentNum, err := strconv.ParseInt(enrollmentStr, 10, 64)
-	if err != nil {
-		// if username is not numeric, still try to find by matching strings in act_students
-		// but for secure student-dashboard we require numeric enrollment
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid enrollment number stored for user"})
-		return
+	// 4) parse numeric enrollment for master_students and fees
+	var enrollmentNum int64
+	if n, err := strconv.ParseInt(enrollmentStr, 10, 64); err == nil {
+		enrollmentNum = n
+	} else {
+		// if username is not numeric, set 0 so master_students and fees queries won't return anything
+		enrollmentNum = 0
 	}
 
-	// 4) Security check: ensure students cannot fetch other students' dashboards.
-	//    If the caller is role_id = 5 (student) enforce that enrollment matches user's username.
-	//    We already used user.Username; this prevents a student with a valid token trying to pass another id.
+	// 5) Security check: ensure students cannot fetch other students' dashboards.
 	if user.RoleID == 5 {
-		// fetched enrollmentStr came from user.Username already, so OK.
-		// nothing extra to check here (we won't accept any other query param).
+		// usernameStr already matches user's enrollment, so safe
 	}
 
-	// 5) fetch master_students
+	// 6) fetch master_students
 	var master models.MasterStudent
-	_ = db.Where("enrollment_number = ?", enrollmentNum).First(&master).Error
+	if enrollmentNum != 0 {
+		_ = db.Where("enrollment_number = ?", enrollmentNum).First(&master).Error
+	}
 
-	// 6) fetch act_students (may match Enrollment_Number or Regn_no)
+	// 7) fetch act_students (string comparison)
 	var act models.ActStudent
 	_ = db.Where("Enrollment_Number = ? OR Regn_no = ?", enrollmentStr, enrollmentStr).First(&act).Error
 
-	// 7) fetch registration fees
+	// 8) fetch registration fees (only numeric enrollments)
 	var regFees []models.RegistrationFee
-	db.Where("enrollment_number = ?", enrollmentNum).Order("created_at desc").Find(&regFees)
+	if enrollmentNum != 0 {
+		db.Where("enrollment_number = ?", enrollmentNum).Order("created_at desc").Find(&regFees)
+	}
 
-	// 8) fetch examination fees
+	// 9) fetch examination fees
 	var examFees []models.ExaminationFee
-	db.Where("enrollment_number = ?", enrollmentNum).Order("created_at desc").Find(&examFees)
+	if enrollmentNum != 0 {
+		db.Where("enrollment_number = ?", enrollmentNum).Order("created_at desc").Find(&examFees)
+	}
 
-	// 9) fetch expected fee summary (single row)
+	// 10) fetch expected fee summary
 	var expFee models.ExpectedFee
-	_ = db.Where("enrollment_number = ?", enrollmentNum).First(&expFee).Error
+	if enrollmentNum != 0 {
+		_ = db.Where("enrollment_number = ?", enrollmentNum).First(&expFee).Error
+	}
 
-	// 10) aggregate response
+	// 11) aggregate response
 	resp := gin.H{
 		"user":              user,
 		"master_student":    master,

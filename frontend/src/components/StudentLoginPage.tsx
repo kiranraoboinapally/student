@@ -2,18 +2,17 @@ import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, apiBase } from "../auth/AuthProvider";
 
-export default function LoginPage(): JSX.Element {
+export default function StudentLoginPage(): JSX.Element {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [studentId, setStudentId] = useState("");
+  const [enrollment, setEnrollment] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const logoSrc = "/Logo.png";
 
-  // formatted current date/time
   const currentDate = useMemo(() => {
     const d = new Date();
     return d
@@ -37,7 +36,7 @@ export default function LoginPage(): JSX.Element {
 
     try {
       const payload = {
-        student_id: Number(studentId),
+        username: enrollment, // key expected by backend
         password,
       };
 
@@ -50,13 +49,20 @@ export default function LoginPage(): JSX.Element {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.token) {
-        setError("Invalid Student ID or Password");
+        setError("Invalid Enrollment Number or Password");
         setLoading(false);
         return;
       }
 
-      login(data.token, data.expires_in_hours);
-      navigate("/student/dashboard");
+      // login stores token, roleId, expires_in_hours
+      login(data.token, data.role_id, data.expires_in_hours);
+
+      // Redirect depending on force_password_change
+      if (data.force_password_change) {
+        navigate("/change-password");
+      } else {
+        navigate("/student/dashboard");
+      }
     } catch {
       setError("Network error");
     } finally {
@@ -64,7 +70,6 @@ export default function LoginPage(): JSX.Element {
     }
   }
 
-  // right panel gradient + grid effect
   const rightPanelStyle: React.CSSProperties = {
     backgroundColor: "#650C08",
     backgroundImage: [
@@ -81,45 +86,34 @@ export default function LoginPage(): JSX.Element {
 
         {/* LEFT PANEL */}
         <div className="w-[30%] min-w-[200px] bg-gray-100 flex flex-col justify-center items-center p-3">
-        <div
-  className="w-[6.5rem] h-[6.5rem] rounded-full overflow-hidden flex justify-center items-center shadow-xl"
->
-  <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
-</div>
-
-
+          <div className="w-[6.5rem] h-[6.5rem] rounded-full overflow-hidden flex justify-center items-center shadow-xl">
+            <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+          </div>
           <div className="mt-2 font-semibold text-gray-800 tracking-wide">
             Welcome To Login Page!
           </div>
         </div>
 
         {/* RIGHT PANEL */}
-        <div
-          className="w-[64%] flex-1 flex flex-col text-white p-10 min-h-full"
-          style={rightPanelStyle}
-        >
-          {/* Header */}
+        <div className="w-[64%] flex-1 flex flex-col text-white p-10 min-h-full" style={rightPanelStyle}>
           <div className="text-center">
             <h1 className="text-2xl font-bold">Singhania University</h1>
             <p className="opacity-80 font-semibold">
               Diploma, Degree, PG &amp; PhD College (Private University)
             </p>
-            <p className="opacity-80 ">
-              Pacheri Bari, SH 17, Buhana, Rajasthan 333515
-            </p>
+            <p className="opacity-80">Pacheri Bari, SH 17, Buhana, Rajasthan 333515</p>
             <h2 className="text-3xl font-extrabold mt-6 text-rose-100">STUDENT PORTAL</h2>
           </div>
 
-          {/* FORM */}
           <form onSubmit={handleLogin} className="mt-6 flex-grow">
-            <label className="font-semibold">Student ID</label>
+            <label className="font-semibold">Enrollment Number</label>
             <input
               type="text"
               inputMode="numeric"
               required
               disabled={loading}
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value.replace(/\D/g, ""))}
+              value={enrollment}
+              onChange={(e) => setEnrollment(e.target.value.replace(/\D/g, ""))}
               className={`w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200 ${error ? "border-2 border-red-400" : ""}`}
             />
 
@@ -141,7 +135,6 @@ export default function LoginPage(): JSX.Element {
               >
                 {loading ? "Signing in…" : "Log In"}
               </button>
-
               <a href="#" className="underline font-semibold text-rose-100">
                 Forgot password?
               </a>
@@ -154,14 +147,13 @@ export default function LoginPage(): JSX.Element {
             )}
 
             <p className="mt-5 text-sm opacity-90">
-              First login: Use Student ID &amp; DOB (ddmmyyyy) as password.
+              First login: Use Enrollment Number &amp; DOB (ddmmyyyy) as password.
             </p>
           </form>
 
-          {/* FOOTER — pinned to bottom */}
           <div className="flex justify-between text-sm opacity-90 mt-auto pt-6">
             <span>{currentDate}</span>
-            <span> ERP • SlashCurate Technologies Pvt Ltd</span>
+            <span>ERP • SlashCurate Technologies Pvt Ltd</span>
           </div>
         </div>
       </div>
