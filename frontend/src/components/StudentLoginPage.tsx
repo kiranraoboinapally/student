@@ -23,8 +23,6 @@ export default function StudentLoginPage(): JSX.Element {
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
       })
       .replace(",", "");
   }, []);
@@ -35,11 +33,7 @@ export default function StudentLoginPage(): JSX.Element {
     setError(null);
 
     try {
-      const payload = {
-        username: enrollment, // key expected by backend
-        password,
-      };
-
+      const payload = { username: enrollment, password };
       const res = await fetch(`${apiBase}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -54,17 +48,15 @@ export default function StudentLoginPage(): JSX.Element {
         return;
       }
 
-      // login stores token, roleId, expires_in_hours
       login(data.token, data.role_id, data.expires_in_hours);
 
-      // Redirect depending on force_password_change
       if (data.force_password_change) {
         navigate("/change-password");
       } else {
         navigate("/student/dashboard");
       }
     } catch {
-      setError("Network error");
+      setError("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -81,79 +73,94 @@ export default function StudentLoginPage(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-white flex justify-center items-center p-4">
-      <div className="w-full max-w-6xl min-h-[560px] rounded-xl shadow-1xl flex overflow-hidden">
+    <div className="min-h-screen bg-white flex justify-center items-center p-6">
+      <div className="w-full max-w-6xl min-h-[620px] rounded-2xl shadow-2xl flex overflow-hidden flex-col lg:flex-row">
 
         {/* LEFT PANEL */}
-        <div className="w-[30%] min-w-[200px] bg-gray-100 flex flex-col justify-center items-center p-3">
-          <div className="w-[6.5rem] h-[6.5rem] rounded-full overflow-hidden flex justify-center items-center shadow-xl">
-            <img src={logoSrc} alt="Logo" className="w-full h-full object-contain" />
+        <div className="w-full lg:w-[35%] bg-gray-100 flex flex-col items-center justify-center p-10 text-center">
+          <div className="w-36 h-36 rounded-full overflow-hidden shadow-2xl border-8 border-white">
+            <img src={logoSrc} alt="ABCD University" className="w-full h-full object-contain" />
           </div>
-          <div className="mt-2 font-semibold text-gray-800 tracking-wide">
-            Welcome To Login Page!
+
+          <h1 className="mt-8 text-4xl font-bold text-gray-800 tracking-wide">
+            ABCD University
+          </h1>
+          <p className="mt-3 text-lg font-semibold text-gray-700">
+            Diploma • Degree • PG • PhD
+          </p>
+          <p className="text-sm text-gray-600">(Private University)</p>
+          <p className="mt-4 text-sm text-gray-500">Location, State Pincode</p>
+
+          <div className="mt-10 text-gray-600 font-medium text-lg">
+            Student Portal Login
           </div>
         </div>
 
         {/* RIGHT PANEL */}
-        <div className="w-[64%] flex-1 flex flex-col text-white p-10 min-h-full" style={rightPanelStyle}>
-          <div className="text-center">
-            <h1 className="text-2xl font-bold">Singhania University</h1>
-            <p className="opacity-80 font-semibold">
-              Diploma, Degree, PG &amp; PhD College (Private University)
-            </p>
-            <p className="opacity-80">Pacheri Bari, SH 17, Buhana, Rajasthan 333515</p>
-            <h2 className="text-3xl font-extrabold mt-6 text-rose-100">STUDENT PORTAL</h2>
-          </div>
+        <div className="w-full lg:w-[65%] flex flex-col p-12 text-white" style={rightPanelStyle}>
+          <div className="max-w-md mx-auto w-full flex-1 flex flex-col justify-center">
+            <h2 className="text-4xl font-extrabold text-rose-100 text-center mb-10">
+              STUDENT LOGIN
+            </h2>
 
-          <form onSubmit={handleLogin} className="mt-6 flex-grow">
-            <label className="font-semibold">Enrollment Number</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              required
-              disabled={loading}
-              value={enrollment}
-              onChange={(e) => setEnrollment(e.target.value.replace(/\D/g, ""))}
-              className={`w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200 ${error ? "border-2 border-red-400" : ""}`}
-            />
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div>
+                <label className="block text-lg font-semibold mb-2">Enrollment Number</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  required
+                  disabled={loading}
+                  value={enrollment}
+                  onChange={(e) => setEnrollment(e.target.value.replace(/\D/g, ""))}
+                  className={`w-full px-5 py-4 rounded-lg text-black bg-white focus:ring-4 focus:ring-rose-200 outline-none transition ${
+                    error ? "ring-2 ring-red-400" : ""
+                  }`}
+                  placeholder="Enter enrollment number"
+                />
+              </div>
 
-            <label className="font-semibold">Password</label>
-            <input
-              type="password"
-              required
-              disabled={loading}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={`w-full p-3 rounded-md mt-2 mb-4 text-black bg-white outline-none focus:ring-2 focus:ring-rose-200 ${error ? "border-2 border-red-400" : ""}`}
-            />
+              <div>
+                <label className="block text-lg font-semibold mb-2">Password</label>
+                <input
+                  type="password"
+                  required
+                  disabled={loading}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`w-full px-5 py-4 rounded-lg text-black bg-white focus:ring-4 focus:ring-rose-200 outline-none transition ${
+                    error ? "ring-2 ring-red-400" : ""
+                  }`}
+                  placeholder="Enter password"
+                />
+              </div>
 
-            <div className="flex items-center gap-4 mt-4">
+              {error && (
+                <div className="p-4 rounded-lg bg-black/30 text-red-200 text-center font-semibold">
+                  {error}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
-                className="bg-white text-[#650C08] font-bold px-5 py-2 rounded-md shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
+                className="w-full bg-white text-[#650C08] font-bold text-lg py-4 rounded-lg shadow-xl hover:shadow-2xl transition disabled:opacity-60"
               >
                 {loading ? "Signing in…" : "Log In"}
               </button>
-              <a href="#" className="underline font-semibold text-rose-100">
-                Forgot password?
+
+              <p className="text-sm text-rose-100 mt-6 text-center">
+                First time login? Use Enrollment No. & DOB (ddmmyyyy) as password.
+              </p>
+              <a href="#" className="block text-center text-rose-100 underline mt-3 font-medium">
+                Forgot Password?
               </a>
+            </form>
+
+            <div className="mt-auto pt-10 flex justify-between text-sm opacity-90">
+              <span>{currentDate}</span>
+              <span>ERP • SlashCurate Technologies Pvt Ltd</span>
             </div>
-
-            {error && (
-              <div className="mt-4 p-3 rounded-md bg-black/30 text-red-200 font-semibold">
-                {error}
-              </div>
-            )}
-
-            <p className="mt-5 text-sm opacity-90">
-              First login: Use Enrollment Number &amp; DOB (ddmmyyyy) as password.
-            </p>
-          </form>
-
-          <div className="flex justify-between text-sm opacity-90 mt-auto pt-6">
-            <span>{currentDate}</span>
-            <span>ERP • SlashCurate Technologies Pvt Ltd</span>
           </div>
         </div>
       </div>

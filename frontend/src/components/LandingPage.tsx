@@ -1,78 +1,123 @@
+// LandingPage.tsx
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { GraduationCap, User, ArrowRight } from "lucide-react";
 
 export default function LandingPage() {
-  const navigate = useNavigate();
+  const openInNewTab = (path: string) => {
+    window.open(`${window.location.origin}${path}`, "_blank", "noopener,noreferrer");
+  };
+
+  const rightPanelGradient = {
+    backgroundColor: "#650C08",
+    backgroundImage: [
+      "radial-gradient(circle at 95% 5%, rgba(255,220,210,0.28) 0%, rgba(255,220,210,0.12) 12%, rgba(255,220,210,0.03) 28%, transparent 45%)",
+      "linear-gradient(135deg, #7a1d16 0%, #650C08 35%, #b77a6f 100%)",
+      "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1.5px, transparent 1.5px, transparent 18px)"
+    ].join(", "),
+    backgroundBlendMode: "overlay, normal, normal" as const,
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-amber-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-5xl">
-        {/* University Logo + Name */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-32 h-32 bg-white rounded-full shadow-2xl mb-6">
-            <img src="/Logo.png" alt="University Logo" className="w-24 h-24 object-contain" />
+    <div className="min-h-screen bg-white flex items-center justify-center p-6">
+      <div className="w-full max-w-6xl min-h-[620px] rounded-2xl shadow-2xl overflow-hidden flex flex-col lg:flex-row">
+
+        {/* LEFT PANEL - Logo & Welcome */}
+        <div className="w-full lg:w-[35%] bg-gray-100 flex flex-col items-center justify-center p-10 text-center">
+          <div className="w-36 h-36 rounded-full overflow-hidden shadow-2xl border-8 border-white">
+            <img
+              src="/Logo.png"
+              alt="ABCD University"
+              className="w-full h-full object-contain"
+            />
           </div>
-          <h1 className="text-5xl font-bold text-gray-800 mb-3">
-            Singhania University
+
+          <h1 className="mt-8 text-4xl font-bold text-gray-800 tracking-wide">
+            ABCD University
           </h1>
-          <p className="text-xl text-gray-600 font-medium">
-            Diploma • Degree • PG • PhD (Private University)
+
+          <p className="mt-3 text-lg font-semibold text-gray-700">
+            Diploma • Degree • PG • PhD
           </p>
-          <p className="text-lg text-gray-500 mt-2">
-            Pacheri Bari, Rajasthan 333515
+          <p className="text-sm text-gray-600 font-medium">
+            (Private University)
           </p>
+          <p className="mt-4 text-sm text-gray-500">
+            Location, State Pincode
+          </p>
+
+          <div className="mt-10 text-gray-600 font-medium">
+            Welcome to the Portal
+          </div>
         </div>
 
-        {/* Two Big Cards */}
-        <div className="grid md:grid-cols-2 gap-10 max-w-4xl mx-auto">
-          {/* Student Login Card */}
-          <button
-            onClick={() => navigate("/login")}
-            className="group relative bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-blue-700 opacity-0 group-hover:opacity-90 transition-opacity" />
-            <div className="relative p-12 text-center">
-              <div className="w-20 h-20 mx-auto mb-6 bg-blue-100 rounded-full flex items-center justify-center">
-                <svg className="w-40 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292A4 4 0 0112 4.354zM15 21H9v-2a4 4 0 014-4h2a4 4 0 014 4v2z" />
-                </svg>
-              </div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-3">Student Login</h2>
-              <p className="text-gray-600 text-lg">
-                Access your dashboard, fees, results & attendance
-              </p>
-              <p className="mt-6 text-blue-600 font-semibold text-lg group-hover:text-white transition-colors">
-                Login with Enrollment Number → 
-              </p>
-            </div>
-          </button>
+        {/* RIGHT PANEL - Login Options with exact same gradient */}
+        <div
+          className="w-full lg:w-[65%] flex flex-col justify-center p-12 text-white"
+          style={rightPanelGradient}
+        >
+          <div className="max-w-lg mx-auto w-full">
+            <h2 className="text-4xl font-extrabold text-rose-100 text-center mb-12">
+              PORTAL ACCESS
+            </h2>
 
-          {/* Staff / Admin Login Card */}
-          <button
-            onClick={() => navigate("/admin/login")}
-            className="group relative bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-emerald-700 opacity-0 group-hover:opacity-90 transition-opacity" />
-            <div className="relative p-12 text-center">
-              <div className="w-20 h-20 mx-auto mb-6 bg-emerald-100 rounded-full flex items-center justify-center">
-                <svg className="w-40 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+              {/* Student Card */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => openInNewTab("/login")}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInNewTab("/login")}
+                className="group bg-white/95 backdrop-blur-sm rounded-2xl p-8 text-center 
+                           cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-white 
+                           hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-white/30"
+              >
+                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-[#650C08] flex items-center justify-center
+                                transition-all duration-400 group-hover:bg-white group-hover:ring-8 group-hover:ring-[#650C08]/30">
+                  <GraduationCap className="w-12 h-12 text-white transition-all duration-400 
+                                            group-hover:text-[#650C08] group-hover:scale-110" strokeWidth={2.5} />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Student Login</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Access dashboard, results, fees & attendance
+                </p>
+                <div className="flex items-center justify-center gap-2 text-[#650C08] font-bold">
+                  <span>Enter Portal</span>
+                  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-2" />
+                </div>
               </div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-3">Staff / Admin Login</h2>
-              <p className="text-gray-600 text-lg">
-                Manage students, fees, attendance & reports
-              </p>
-              <p className="mt-6 text-emerald-600 font-semibold text-lg group-hover:text-white transition-colors">
-                Login with Username → 
-              </p>
-            </div>
-          </button>
-        </div>
 
-        {/* Footer */}
-        <div className="text-center mt-16 text-gray-500">
-          <p>© 2025 Singhania University • Powered by SlashCurate Technologies Pvt Ltd</p>
+              {/* Faculty Card */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => openInNewTab("/admin/login")}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInNewTab("/admin/login")}
+                className="group bg-white/95 backdrop-blur-sm rounded-2xl p-8 text-center 
+                           cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-white 
+                           hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-white/30"
+              >
+                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-[#650C08] flex items-center justify-center
+                                transition-all duration-400 group-hover:bg-white group-hover:ring-8 group-hover:ring-[#650C08]/30">
+                  <User className="w-12 h-12 text-white transition-all duration-400 
+                                   group-hover:text-[#650C08] group-hover:scale-110" strokeWidth={2.5} />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Faculty Login</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Manage attendance, marks & student records
+                </p>
+                <div className="flex items-center justify-center gap-2 text-[#650C08] font-bold">
+                  <span>Enter Portal</span>
+                  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-2" />
+                </div>
+              </div>
+            </div>
+
+            {/* Footer inside right panel */}
+            <div className="mt-16 text-center text-sm opacity-90">
+              <p>ERP • Powered by <span className="font-bold">SlashCurate Technologies Pvt Ltd</span></p>
+              <p className="mt-2">© 2025 ABCD University. All rights reserved.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
