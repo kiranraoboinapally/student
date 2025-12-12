@@ -14,8 +14,19 @@ import { useNavigate } from "react-router-dom";
 type ProfileShape = {
   user?: any;
   master_student?: any;
-  act_student?: any;
+  act_student?: {
+    Candidate_Name?: string;
+    Enrollment_Number?: string;
+    Course_Name?: string;
+    Stream_Name?: string;
+    Year_Sem?: string;
+    center_name?: string;
+    candidate_address?: string;  // <- Add this
+    mother_name?: string;
+    father_name?: string;
+  };
 };
+
 
 type FeeItem = {
   fee_due_id?: number;
@@ -254,7 +265,7 @@ export default function StudentDashboard(): JSX.Element {
               <Field label="Admitted Date" value={(master as any).created_at ? new Date(master.created_at).toLocaleDateString() : "-"} />
               <Field label="Parent Contact" value={(master as any).parent_contact || "-"} />
               <Field label="Community / Nationality" value={`${(act as any).Community || "-"} / ${(act as any).Nationality || "-"}`} />
-              <Field label="Residential Address" value={(act as any).address || (act as any).Residential_Address || "-"} />
+              <Field label="Residential Address" value={(act as any).candidate_address || "-"} />
               <Field label="District / State" value={`${(act as any).District || "-"} / ${(act as any).State || "-"}`} />
             </div>
           </div>

@@ -57,7 +57,7 @@ export default function LandingPage() {
         >
           <div className="max-w-lg mx-auto w-full">
             <h2 className="text-4xl font-extrabold text-rose-100 text-center mb-12">
-              PORTAL ACCESS
+              ERP LOGIN
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
