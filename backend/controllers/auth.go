@@ -41,15 +41,14 @@ func Register(c *gin.Context) {
 	// fallback to act_students
 	if !found {
 		var act models.ActStudent
-		if err := db.Where("Enrollment_Number = ? OR Regn_no = ?", req.EnrollmentNumber, req.EnrollmentNumber).First(&act).Error; err == nil {
-			if act.CandidateName != nil {
-				master.StudentName = *act.CandidateName
-			}
-			if act.EmailID != nil {
-				master.StudentEmailID = act.EmailID
-			}
-			found = true
+		if err := db.Where("Enrollment_Number = ?", req.EnrollmentNumber).
+			First(&act).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "invalid enrollment number",
+			})
+			return
 		}
+
 	}
 
 	if !found {

@@ -46,7 +46,8 @@ func GetMyProfile(c *gin.Context) {
 
 	var act models.ActStudent
 	enrollment := user.Username
-	_ = db.Where("Enrollment_Number = ? OR Regn_no = ?", enrollment, enrollment).First(&act).Error
+	_ = db.Where("Enrollment_Number = ?", enrollment).
+		First(&act).Error
 
 	c.JSON(http.StatusOK, gin.H{
 		"user":           user,
