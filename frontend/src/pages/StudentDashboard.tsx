@@ -94,7 +94,7 @@ export default function StudentDashboard(): JSX.Element {
   async function loadFees() {
     setLoadingFees(true);
     try {
-      const res = await authFetch(`${apiBase}/students/fees`);
+      const res = await authFetch(`${apiBase}/student/fees/summary`);
       if (!res.ok) {
         setFees([]);
         return;
@@ -113,7 +113,7 @@ export default function StudentDashboard(): JSX.Element {
   async function loadAttendance() {
     setLoadingAttendance(true);
     try {
-      const res = await authFetch(`${apiBase}/students/attendance`);
+      const res = await authFetch(`${apiBase}/student/attendance`);
       if (!res.ok) {
         setAttendance([]);
         return;
@@ -152,7 +152,7 @@ export default function StudentDashboard(): JSX.Element {
         payment_method: "online",
         payment_note: "Paid via portal",
       };
-      const res = await authFetch(`${apiBase}/students/fees/pay`, {
+      const res = await authFetch(`${apiBase}/student/fees/pay`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
