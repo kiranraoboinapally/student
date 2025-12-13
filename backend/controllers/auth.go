@@ -118,13 +118,13 @@ func Login(c *gin.Context) {
 	err = db.Where("username = ?", req.UsernameOrStudentID).First(&user).Error
 	if err != nil {
 		// 2) fallback: student_id -> enrollment -> username
-		if studentID, convErr := strconv.ParseInt(req.UsernameOrStudentID, 10, 64); convErr == nil {
-			var master models.MasterStudent
-			if db.Where("student_id = ?", studentID).First(&master).Error == nil {
-				username := strconv.FormatInt(master.EnrollmentNumber, 10)
-				err = db.Where("username = ?", username).First(&user).Error
-			}
+		// ONLY enrollment number (username)
+		err = db.Where("username = ?", req.UsernameOrStudentID).First(&user).Error
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid enrollment number or password"})
+			return
 		}
+
 	}
 
 	if err != nil {

@@ -15,12 +15,13 @@ import (
 func GetStudentFees(c *gin.Context) {
 	db := config.DB
 
-	// 1. Get user → enrollment number
+	// --- get user_id ---
 	uidVal, ok := c.Get("user_id")
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
+
 	var userID int64
 	switch v := uidVal.(type) {
 	case int64:
@@ -34,6 +35,7 @@ func GetStudentFees(c *gin.Context) {
 		return
 	}
 
+	// --- load user ---
 	var user models.User
 	if err := db.Where("user_id = ?", userID).First(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
@@ -42,28 +44,30 @@ func GetStudentFees(c *gin.Context) {
 
 	enrollmentStr := user.Username
 	if enrollmentStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no enrollment number associated with user"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no enrollment number"})
 		return
 	}
 
 	enrollmentNum, err := strconv.ParseInt(enrollmentStr, 10, 64)
 	if err != nil {
-		// if username is not numeric, we won't fetch fees
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid enrollment number"})
 		return
 	}
 
-	// 2. Registration Fees
+	// --- registration fees ---
 	var regFees []models.RegistrationFee
-	db.Where("enrollment_number = ?", enrollmentNum).Find(&regFees)
+	db.Where("enrollment_number = ?", enrollmentNum).
+		Find(&regFees)
 
-	// 3. Examination Fees
+	// --- examination fees ---
 	var examFees []models.ExaminationFee
-	db.Where("enrollment_number = ?", enrollmentNum).Find(&examFees)
+	db.Where("enrollment_number = ?", enrollmentNum).
+		Find(&examFees)
 
-	// 4. Expected Fees
+	// --- expected fees ---
 	var expFee models.ExpectedFee
-	db.Where("enrollment_number = ?", enrollmentNum).First(&expFee)
+	db.Where("enrollment_number = ?", enrollmentNum).
+		First(&expFee)
 
 	c.JSON(http.StatusOK, gin.H{
 		"registration_fees": regFees,
@@ -74,7 +78,6 @@ func GetStudentFees(c *gin.Context) {
 
 // ---------------- PAY FEE -------------------
 
-// PayFeeRequest JSON
 type PayFeeRequest struct {
 	FeeDueID      int     `json:"fee_due_id" binding:"required"`
 	Amount        float64 `json:"amount" binding:"required,gt=0"`
@@ -82,14 +85,15 @@ type PayFeeRequest struct {
 	PaymentNote   string  `json:"payment_note"`
 }
 
-// PayFee - POST /students/fees/pay
 func PayFee(c *gin.Context) {
-	// get authenticated user id
+	db := config.DB
+
 	uidVal, ok := c.Get("user_id")
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
+
 	var userID int64
 	switch v := uidVal.(type) {
 	case int64:
@@ -105,29 +109,27 @@ func PayFee(c *gin.Context) {
 
 	var req PayFeeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload", "details": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	db := config.DB
 	tx := db.Begin()
 	if tx.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db transaction start failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "transaction failed"})
 		return
 	}
 
-	// Lock/select the fee due
 	var feeDue models.FeeDue
-	if err := tx.Where("fee_due_id = ?", req.FeeDueID).First(&feeDue).Error; err != nil {
+	if err := tx.Where("fee_due_id = ?", req.FeeDueID).
+		First(&feeDue).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusNotFound, gin.H{"error": "fee due not found"})
 		return
 	}
 
-	// ensure the fee belongs to the logged-in student
 	if feeDue.StudentID != int(userID) {
 		tx.Rollback()
-		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this fee"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized"})
 		return
 	}
 
@@ -154,7 +156,7 @@ func PayFee(c *gin.Context) {
 
 	if err := tx.Create(&payment).Error; err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record payment"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "payment failed"})
 		return
 	}
 
@@ -167,21 +169,16 @@ func PayFee(c *gin.Context) {
 
 	if err := tx.Save(&feeDue).Error; err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update fee due"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
 		return
 	}
 
-	if err := tx.Commit().Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
-		return
-	}
+	tx.Commit()
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":         "payment recorded",
-		"fee_due_id":      feeDue.FeeDueID,
-		"paid_amount":     payAmt,
-		"new_amount_paid": feeDue.AmountPaid,
-		"new_status":      feeDue.Status,
-		"payment_id":      payment.PaymentID,
+		"message":     "payment successful",
+		"payment_id":  payment.PaymentID,
+		"paid_amount": payAmt,
+		"status":      feeDue.Status,
 	})
 }
