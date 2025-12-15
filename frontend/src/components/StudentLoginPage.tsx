@@ -149,12 +149,27 @@ export default function StudentLoginPage(): JSX.Element {
                 {loading ? "Signing in…" : "Log In"}
               </button>
 
-              <p className="text-sm text-rose-100 mt-6 text-center">
+              <div className="space-y-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => navigate("/forgot-password")}
+                  className="block w-full text-center text-rose-100 underline font-medium"
+                >
+                  Forgot Password?
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate("/register")}
+                  className="block w-full text-center text-rose-100 underline font-medium"
+                >
+                  New Student? Register Here
+                </button>
+              </div>
+
+              <p className="text-xs text-rose-100 mt-6 text-center opacity-75">
                 First time login? Use Enrollment No. & DOB (ddmmyyyy) as password.
               </p>
-              <a href="#" className="block text-center text-rose-100 underline mt-3 font-medium">
-                Forgot Password?
-              </a>
             </form>
 
             <div className="mt-auto pt-10 flex justify-between text-sm opacity-90">

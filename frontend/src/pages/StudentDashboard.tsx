@@ -45,6 +45,25 @@ type AttendanceItem = {
   attended_classes?: number;
 };
 
+type SubjectItem = {
+  subject_id?: number;
+  subject_code?: string;
+  subject_name?: string;
+  subject_type?: string;
+  credits?: number;
+  semester?: number;
+};
+
+type MarkItem = {
+  mark_id?: number;
+  subject_code?: string;
+  subject_name?: string;
+  total_marks?: number;
+  percentage?: number;
+  grade?: string;
+  status?: string;
+};
+
 export default function StudentDashboard(): JSX.Element {
   const { authFetch, logout } = useAuth();
   const navigate = useNavigate();
@@ -52,9 +71,13 @@ export default function StudentDashboard(): JSX.Element {
   const [profile, setProfile] = useState<ProfileShape | null>(null);
   const [fees, setFees] = useState<FeeItem[]>([]);
   const [attendance, setAttendance] = useState<AttendanceItem[]>([]);
+  const [subjects, setSubjects] = useState<SubjectItem[]>([]);
+  const [marks, setMarks] = useState<MarkItem[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingFees, setLoadingFees] = useState(true);
   const [loadingAttendance, setLoadingAttendance] = useState(true);
+  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [loadingMarks, setLoadingMarks] = useState(true);
   const [active, setActive] = useState<"profile" | "fees" | "subjects" | "marks" | "attendance">("profile");
 
   // Payment modal state
@@ -70,6 +93,8 @@ export default function StudentDashboard(): JSX.Element {
     loadProfile();
     loadFees();
     loadAttendance();
+    loadSubjects();
+    loadMarks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -100,7 +125,21 @@ export default function StudentDashboard(): JSX.Element {
         return;
       }
       const data = await res.json();
-      const list: FeeItem[] = data.fees || data.registration_fees || data || [];
+
+      // Safely extract the fee array, fallback to empty array if nothing matches
+      let list: FeeItem[] = [];
+      if (data && typeof data === 'object') {
+        if (Array.isArray(data.fees)) {
+          list = data.fees;
+        } else if (Array.isArray(data.registration_fees)) {
+          list = data.registration_fees;
+        } else if (Array.isArray(data)) {
+          list = data;  // in case API returns direct array
+        }
+        // Optionally handle other known keys here
+      }
+      // If data is not an object/array, or no matching key → empty array
+
       setFees(list);
     } catch (e) {
       console.error(e);
@@ -125,6 +164,42 @@ export default function StudentDashboard(): JSX.Element {
       setAttendance([]);
     } finally {
       setLoadingAttendance(false);
+    }
+  }
+
+  async function loadSubjects() {
+    setLoadingSubjects(true);
+    try {
+      const res = await authFetch(`${apiBase}/student/subjects/current`);
+      if (!res.ok) {
+        setSubjects([]);
+        return;
+      }
+      const data = await res.json();
+      setSubjects(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      setSubjects([]);
+    } finally {
+      setLoadingSubjects(false);
+    }
+  }
+
+  async function loadMarks() {
+    setLoadingMarks(true);
+    try {
+      const res = await authFetch(`${apiBase}/student/marks/current`);
+      if (!res.ok) {
+        setMarks([]);
+        return;
+      }
+      const data = await res.json();
+      setMarks(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      setMarks([]);
+    } finally {
+      setLoadingMarks(false);
     }
   }
 
@@ -338,16 +413,84 @@ export default function StudentDashboard(): JSX.Element {
         {/* SUBJECTS */}
         {active === "subjects" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-4" style={{ color: theme }}>Subjects</h2>
-            <p className="text-gray-600">Subjects information will be displayed here.</p>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Subjects</h2>
+
+            {loadingSubjects ? (
+              <div>Loading subjects...</div>
+            ) : subjects.length === 0 ? (
+              <div className="text-center text-gray-600 py-14">No subjects found for current semester</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border px-4 py-3 text-left font-semibold">Subject Code</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Subject Name</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Type</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Credits</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subjects.map((sub, idx) => (
+                      <tr key={sub.subject_id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="border px-4 py-3">{sub.subject_code || "-"}</td>
+                        <td className="border px-4 py-3 font-medium">{sub.subject_name || "-"}</td>
+                        <td className="border px-4 py-3">{sub.subject_type || "-"}</td>
+                        <td className="border px-4 py-3 text-center">{sub.credits ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
         {/* MARKS */}
         {active === "marks" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-4" style={{ color: theme }}>Marks</h2>
-            <p className="text-gray-600">Marks information will be displayed here.</p>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Marks</h2>
+
+            {loadingMarks ? (
+              <div>Loading marks...</div>
+            ) : marks.length === 0 ? (
+              <div className="text-center text-gray-600 py-14">No marks available for current semester</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border px-4 py-3 text-left font-semibold">Subject Code</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Subject Name</th>
+                      <th className="border px-4 py-3 text-center font-semibold">Total Marks</th>
+                      <th className="border px-4 py-3 text-center font-semibold">Percentage</th>
+                      <th className="border px-4 py-3 text-center font-semibold">Grade</th>
+                      <th className="border px-4 py-3 text-center font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marks.map((mark, idx) => (
+                      <tr key={mark.mark_id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="border px-4 py-3">{mark.subject_code || "-"}</td>
+                        <td className="border px-4 py-3 font-medium">{mark.subject_name || "-"}</td>
+                        <td className="border px-4 py-3 text-center">{mark.total_marks ?? "-"}</td>
+                        <td className="border px-4 py-3 text-center">{mark.percentage ? mark.percentage.toFixed(2) + "%" : "-"}</td>
+                        <td className="border px-4 py-3 text-center font-semibold">{mark.grade || "-"}</td>
+                        <td className="border px-4 py-3 text-center">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            mark.status === "pass" ? "bg-green-100 text-green-800" :
+                            mark.status === "fail" ? "bg-red-100 text-red-800" :
+                            "bg-gray-100 text-gray-800"
+                          }`}>
+                            {mark.status || "-"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
