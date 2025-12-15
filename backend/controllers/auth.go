@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"strconv"
 	"time"
@@ -80,8 +82,8 @@ func Register(c *gin.Context) {
 		PasswordHash:   hashed,
 		FullName:       fullName,
 		RoleID:         5, // student
-		Status:         "active",
-		IsTempPassword: true, // force password change
+		Status:         "pending", // pending admin approval
+		IsTempPassword: true,
 	}
 
 	if err := db.Create(&user).Error; err != nil {
@@ -90,7 +92,7 @@ func Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message":  "registration successful",
+		"message":  "registration successful, awaiting admin approval",
 		"username": user.Username,
 		"user_id":  user.UserID,
 	})
@@ -128,6 +130,16 @@ func Login(c *gin.Context) {
 
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+		return
+	}
+
+	// Check if user is active
+	if user.Status == "pending" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "account pending admin approval"})
+		return
+	}
+	if user.Status == "inactive" || user.Status == "blocked" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "account is inactive"})
 		return
 	}
 
@@ -208,4 +220,122 @@ func ChangePassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
+}
+
+// ---------------- Forgot Password ----------------
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+func ForgotPassword(c *gin.Context) {
+	var req ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	db := config.DB
+	var user models.User
+	if err := db.Where("email = ? AND status = ?", req.Email, "active").First(&user).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "if email exists, reset link will be sent"})
+		return
+	}
+
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate token"})
+		return
+	}
+	token := hex.EncodeToString(tokenBytes)
+
+	expiresAt := time.Now().Add(1 * time.Hour)
+
+	if err := db.Exec("UPDATE password_reset_tokens SET used = TRUE WHERE user_id = ? AND used = FALSE", user.UserID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	resetToken := map[string]interface{}{
+		"user_id":    user.UserID,
+		"email":      req.Email,
+		"token":      token,
+		"expires_at": expiresAt,
+		"used":       false,
+	}
+
+	if err := db.Table("password_reset_tokens").Create(resetToken).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create reset token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "if email exists, reset link will be sent",
+		"token":   token,
+	})
+}
+
+// ---------------- Reset Password ----------------
+type ResetPasswordRequest struct {
+	Token       string `json:"token" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=6"`
+}
+
+func ResetPassword(c *gin.Context) {
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	db := config.DB
+	var resetToken struct {
+		ID        int       `gorm:"column:id"`
+		UserID    int64     `gorm:"column:user_id"`
+		Token     string    `gorm:"column:token"`
+		ExpiresAt time.Time `gorm:"column:expires_at"`
+		Used      bool      `gorm:"column:used"`
+	}
+
+	if err := db.Table("password_reset_tokens").
+		Where("token = ? AND used = FALSE", req.Token).
+		First(&resetToken).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
+		return
+	}
+
+	if time.Now().After(resetToken.ExpiresAt) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "token expired"})
+		return
+	}
+
+	hashed, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		return
+	}
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "transaction failed"})
+		return
+	}
+
+	if err := tx.Model(&models.User{}).Where("user_id = ?", resetToken.UserID).Updates(map[string]interface{}{
+		"password_hash":    hashed,
+		"is_temp_password": false,
+	}).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		return
+	}
+
+	if err := tx.Table("password_reset_tokens").Where("id = ?", resetToken.ID).Update("used", true).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to mark token as used"})
+		return
+	}
+
+	tx.Commit()
+
+	c.JSON(http.StatusOK, gin.H{"message": "password reset successfully"})
 }

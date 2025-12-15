@@ -196,3 +196,48 @@ func GetCurrentSemesterMarks(c *gin.Context) {
 
 	c.JSON(http.StatusOK, marks)
 }
+
+// ---- Attendance ----
+func GetStudentAttendance(c *gin.Context) {
+	db := config.DB
+	enrollment, err := getStudentEnrollment(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid enrollment"})
+		return
+	}
+
+	var sem models.SemesterResult
+	if err := db.Where("enrollment_number = ?", enrollment).
+		Order("semester desc").
+		First(&sem).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"attendance": []interface{}{}})
+		return
+	}
+
+	type AttendanceRecord struct {
+		SubjectName     string `gorm:"column:subject_name"`
+		TotalClasses    int    `gorm:"column:total_classes"`
+		AttendedClasses int    `gorm:"column:attended_classes"`
+	}
+
+	var attendance []AttendanceRecord
+	query := `
+		SELECT
+			sm.subject_name,
+			COALESCE(COUNT(a.class_date), 0) as total_classes,
+			COALESCE(SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END), 0) as attended_classes
+		FROM subjects_master sm
+		LEFT JOIN attendance a ON sm.subject_code = a.subject_code
+			AND a.enrollment_number = ?
+			AND a.semester = ?
+		WHERE sm.semester = ?
+		GROUP BY sm.subject_name
+	`
+
+	if err := db.Raw(query, enrollment, sem.Semester, sem.Semester).Scan(&attendance).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"attendance": []interface{}{}})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"attendance": attendance})
+}

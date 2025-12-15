@@ -1,11 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./auth/AuthProvider"; // ✅ import useAuth
+import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import LandingPage from "./components/LandingPage";
 import StudentLoginPage from "./components/StudentLoginPage";
+import StudentRegistrationPage from "./components/StudentRegistrationPage";
 import AdminLoginPage from "./components/AdminLoginPage";
 import StudentDashboard from "./pages/StudentDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 function Protected({ children, allowedRole }: { children: JSX.Element; allowedRole: number }) {
   const { token, roleId } = useAuth(); // ✅ useAuth now works
@@ -22,8 +25,11 @@ export default function App() {
           {/* Main Landing Page */}
           <Route path="/" element={<LandingPage />} />
 
-          {/* Login Pages */}
+          {/* Public Auth Pages */}
           <Route path="/login" element={<StudentLoginPage />} />
+          <Route path="/register" element={<StudentRegistrationPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
 
           {/* Protected Routes */}

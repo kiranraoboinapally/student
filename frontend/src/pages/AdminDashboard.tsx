@@ -1,266 +1,187 @@
 import React, { useState, useEffect } from "react";
 import { useAuth, apiBase } from "../auth/AuthProvider";
+import { useNavigate } from "react-router-dom";
 
-interface Student {
-  student_id: number;
-  student_name: string;
-  father_name?: string | null;
-  student_email_id?: string | null;
-  enrollment_number?: number | null;
-  temp_password?: string; // optional to display after activation
+interface PendingUser {
+  user_id: number;
+  username: string;
+  email: string;
+  full_name: string;
+  created_at: string;
 }
 
 export default function AdminDashboard(): JSX.Element {
-  const { authFetch } = useAuth();
+  const { authFetch, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const [students, setStudents] = useState<Student[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
   const [loading, setLoading] = useState(false);
-  const [newStudent, setNewStudent] = useState({
-    student_name: "",
-    father_name: "",
-    student_email_id: "",
-  });
-  const [dobInputs, setDobInputs] = useState<{ [key: number]: string }>({});
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(25);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
 
-  // Fetch students (paginated)
-  const loadStudents = async () => {
+  useEffect(() => {
+    loadPendingRegistrations();
+  }, []);
+
+  async function loadPendingRegistrations() {
     setLoading(true);
     try {
-      // Explicit pagination params - backend returns { data: [...], meta: {...} }
-      const res = await authFetch(`${apiBase}/admin/students?page=${page}&page_size=${pageSize}`);
-      
-      // handle non-OK responses first to avoid JSON parse errors
+      const res = await authFetch(`${apiBase}/admin/pending-registrations`);
       if (!res.ok) {
-        const text = await res.text().catch(() => "<no-body>");
-        console.error("Failed to load students:", res.status, res.statusText, text);
-        // Optionally show a UI error here
-        setStudents([]);
+        console.error("Failed to load pending registrations");
         setLoading(false);
         return;
       }
 
-      // Parse JSON safely
-      const data = await res.json().catch((err) => {
-        console.error("Failed parsing students JSON:", err);
-        return null;
-      });
-      if (!data) {
-        setStudents([]);
-        return;
-      }
-
-      // Backend returns { data: [...], meta: {...} }
-      if (Array.isArray(data.data)) {
-        setStudents(data.data as Student[]);
-      } else if (Array.isArray(data)) {
-        // fallback if API returns raw array
-        setStudents(data as Student[]);
-      } else {
-        console.warn("Unexpected students payload shape:", data);
-        setStudents([]);
-      }
+      const data = await res.json().catch(() => ({}));
+      setPendingUsers(data.pending_registrations || []);
     } catch (err) {
-      console.error("Network/load error while fetching students:", err);
-      setStudents([]);
+      console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  useEffect(() => {
-    loadStudents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]); // reload when page changes
-
-  // Add new student
-  const addStudent = async () => {
+  async function handleAction(userId: number, action: "approve" | "reject") {
+    setActionLoading(userId);
     try {
-      const res = await authFetch(`${apiBase}/admin/students/add`, {
+      const res = await authFetch(`${apiBase}/admin/approve-registration`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newStudent),
+        body: JSON.stringify({ user_id: userId, action }),
       });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "<no-body>");
-        console.error("Add student failed:", res.status, text);
-        alert("Failed to add student. See console for details.");
-        return;
-      }
-      setNewStudent({ student_name: "", father_name: "", student_email_id: "" });
-      // reload first page after add
-      setPage(1);
-      loadStudents();
-    } catch (err) {
-      console.error(err);
-      alert("Network error while adding student");
-    }
-  };
-
-  // GENERATE ENROLLMENT: removed/disabled because you said enrollment already exists.
-  // If you later want to enable, implement backend route and call it here.
-  const generateEnrollment = async (_id: number) => {
-    alert("Enrollment generation disabled (not required).");
-    // TODO: call /admin/students/generate-enrollment/:id if you re-enable on server
-  };
-
-  // Activate login using DOB (ddmmyyyy -> YYYY-MM-DD)
-  const activateLogin = async (id: number) => {
-    let dob = dobInputs[id];
-    if (!dob) return alert("Enter DOB in ddmmyyyy format");
-
-    // Convert ddmmyyyy -> YYYY-MM-DD
-    if (dob.length === 8) {
-      const dd = dob.slice(0, 2);
-      const mm = dob.slice(2, 4);
-      const yyyy = dob.slice(4, 8);
-      dob = `${yyyy}-${mm}-${dd}`;
-    } else {
-      return alert("Invalid DOB format, use ddmmyyyy");
-    }
-
-    try {
-      const res = await authFetch(
-        `${apiBase}/admin/students/activate-login/${id}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dob }),
-        }
-      );
 
       if (!res.ok) {
-        const text = await res.text().catch(() => "<no-body>");
-        console.error("Activate login failed:", res.status, text);
-        alert("Failed to activate login. See console for details.");
+        alert("Failed to " + action + " registration");
+        setActionLoading(null);
         return;
       }
 
-      const data = await res.json().catch((e) => {
-        console.error("Failed parsing activate-login response:", e);
-        return null;
-      });
-      if (!data) {
-        alert("Unexpected response from server");
-        return;
-      }
-
-      alert(`Login activated!\nEnrollment: ${data.enrollment}\nTemp Password: ${data.temp_password}`);
-
-      // Update temp password in state to display in table
-      setStudents(prev =>
-        prev.map(s => (s.student_id === id ? { ...s, temp_password: data.temp_password } : s))
-      );
-
-      setDobInputs(prev => ({ ...prev, [id]: "" }));
-      // reload list (keeps page)
-      loadStudents();
+      alert("Registration " + action + "d successfully!");
+      await loadPendingRegistrations();
     } catch (err) {
       console.error(err);
-      alert("Network error while activating login");
+      alert("Network error");
+    } finally {
+      setActionLoading(null);
     }
-  };
+  }
+
+  function handleSignOut() {
+    logout();
+    navigate("/admin/login");
+  }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
-
-      {/* Add Student Form */}
-      <div className="mb-6 p-4 border rounded-md">
-        <h2 className="font-semibold mb-2">Add New Student</h2>
-        <input
-          type="text"
-          placeholder="Student Name"
-          value={newStudent.student_name}
-          onChange={(e) => setNewStudent({ ...newStudent, student_name: e.target.value })}
-          className="border p-2 mr-2 rounded-md"
-        />
-        <input
-          type="text"
-          placeholder="Father Name"
-          value={newStudent.father_name}
-          onChange={(e) => setNewStudent({ ...newStudent, father_name: e.target.value })}
-          className="border p-2 mr-2 rounded-md"
-        />
-        <input
-          type="email"
-          placeholder="Email"
-          value={newStudent.student_email_id}
-          onChange={(e) => setNewStudent({ ...newStudent, student_email_id: e.target.value })}
-          className="border p-2 mr-2 rounded-md"
-        />
-        <button
-          onClick={addStudent}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-        >
-          Add
-        </button>
-      </div>
-
-      {/* Students Table */}
-      <table className="w-full border-collapse border">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border px-2 py-1">ID</th>
-            <th className="border px-2 py-1">Name</th>
-            <th className="border px-2 py-1">Enrollment</th>
-            <th className="border px-2 py-1">Temp Password</th>
-            <th className="border px-2 py-1">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {students.length === 0 && !loading ? (
-            <tr><td colSpan={5} className="text-center p-4">No students found</td></tr>
-          ) : (
-            students.map((s) => (
-              <tr key={s.student_id} className="odd:bg-gray-50">
-                <td className="border px-2 py-1">{s.student_id}</td>
-                <td className="border px-2 py-1">{s.student_name}</td>
-                <td className="border px-2 py-1">{s.enrollment_number ?? "0"}</td>
-                <td className="border px-2 py-1">{s.temp_password ?? "-"}</td>
-                <td className="border px-2 py-1 space-x-2">
-                  {s.enrollment_number === 0 && (
-                    <button
-                      onClick={() => generateEnrollment(s.student_id)}
-                      className="bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
-                    >
-                      Generate Enrollment
-                    </button>
-                  )}
-                  {s.enrollment_number && s.enrollment_number > 0 && !s.temp_password && (
-                    <>
-                      <input
-                        type="text"
-                        placeholder="DOB ddmmyyyy"
-                        value={dobInputs[s.student_id] || ""}
-                        onChange={(e) =>
-                          setDobInputs(prev => ({ ...prev, [s.student_id]: e.target.value }))
-                        }
-                        className="border px-1 py-0.5 rounded w-32"
-                      />
-                      <button
-                        onClick={() => activateLogin(s.student_id)}
-                        className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                      >
-                        Activate Login
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-
-      <div className="mt-4 flex items-center justify-between">
-        <div>
-          <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="mr-2 px-3 py-1 border rounded">Prev</button>
-          <button onClick={() => setPage(p => p + 1)} className="px-3 py-1 border rounded">Next</button>
+    <div className="min-h-screen bg-gray-100">
+      <header className="bg-[#650C08] text-white p-6 shadow-lg">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+            <p className="text-rose-100 mt-1">ABCD University ERP</p>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="bg-white text-[#650C08] px-6 py-2 rounded-lg font-semibold hover:bg-rose-100 transition"
+          >
+            Sign Out
+          </button>
         </div>
-        {loading && <p className="mt-2 text-gray-500">Loading...</p>}
-      </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-6">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-800">Pending Student Registrations</h2>
+            <button
+              onClick={loadPendingRegistrations}
+              disabled={loading}
+              className="bg-[#650C08] text-white px-4 py-2 rounded-lg hover:bg-[#7a1d16] transition disabled:opacity-50"
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+
+          {loading && pendingUsers.length === 0 ? (
+            <div className="text-center py-12 text-gray-600">Loading...</div>
+          ) : pendingUsers.length === 0 ? (
+            <div className="text-center py-12 text-gray-600 bg-gray-50 rounded-lg">
+              <p className="text-lg">No pending registrations</p>
+              <p className="text-sm mt-2">All registrations have been processed</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Enrollment No</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Full Name</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Email</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Requested On</th>
+                    <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingUsers.map((user, idx) => (
+                    <tr
+                      key={user.user_id}
+                      className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                    >
+                      <td className="px-6 py-4 text-sm text-gray-800 font-medium">
+                        {user.username}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-800">
+                        {user.full_name || "-"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {user.email}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex justify-center gap-3">
+                          <button
+                            onClick={() => handleAction(user.user_id, "approve")}
+                            disabled={actionLoading === user.user_id}
+                            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition disabled:opacity-50 text-sm font-semibold"
+                          >
+                            {actionLoading === user.user_id ? "..." : "Approve"}
+                          </button>
+                          <button
+                            onClick={() => handleAction(user.user_id, "reject")}
+                            disabled={actionLoading === user.user_id}
+                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 text-sm font-semibold"
+                          >
+                            {actionLoading === user.user_id ? "..." : "Reject"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-xl font-bold text-gray-800 mb-4">Admin Instructions</h3>
+          <div className="space-y-2 text-sm text-gray-700">
+            <p>1. Review pending student registrations above</p>
+            <p>2. Verify enrollment numbers against master student records</p>
+            <p>3. Approve legitimate registrations to grant portal access</p>
+            <p>4. Reject suspicious or invalid registrations</p>
+            <p className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-600 text-blue-900">
+              <strong>Note:</strong> Students can only login after admin approval. They will see "account pending admin approval" message until approved.
+            </p>
+          </div>
+        </div>
+      </main>
+
+      <footer className="mt-12 py-6 text-center text-sm text-gray-600">
+        <p>ERP System • Powered by SlashCurate Technologies Pvt Ltd</p>
+        <p className="mt-1">© 2025 ABCD University</p>
+      </footer>
     </div>
   );
 }

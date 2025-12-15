@@ -33,6 +33,8 @@ func main() {
 	{
 		auth.POST("/register", controllers.Register)
 		auth.POST("/login", controllers.Login)
+		auth.POST("/forgot-password", controllers.ForgotPassword)
+		auth.POST("/reset-password", controllers.ResetPassword)
 		auth.POST(
 			"/change-password",
 			middleware.AuthRoleMiddleware(5),
@@ -44,11 +46,9 @@ func main() {
 	admin := api.Group("/admin")
 	admin.Use(middleware.AuthRoleMiddleware(1)) // Admin role
 	{
-		//admin.POST("/students/add", controllers.AddStudent)
-		//admin.POST("/students/activate-login/:id", controllers.ActivateStudentLogin)
-		//admin.GET("/students", controllers.ListStudents)
-
 		admin.POST("/create-user", controllers.CreateUserByAdmin)
+		admin.GET("/pending-registrations", controllers.GetPendingRegistrations)
+		admin.POST("/approve-registration", controllers.ApproveRegistration)
 	}
 
 	// ================= STUDENT ROUTES (CLEAN) =================
@@ -68,6 +68,7 @@ func main() {
 		student.GET("/semester/current", controllers.GetCurrentSemester)
 		student.GET("/subjects/current", controllers.GetCurrentSemesterSubjects)
 		student.GET("/marks/current", controllers.GetCurrentSemesterMarks)
+		student.GET("/attendance", controllers.GetStudentAttendance)
 	}
 
 	// ================= PROFILE (COMMON) =================
