@@ -2,7 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import LandingPage from "./components/LandingPage";
 import StudentLoginPage from "./components/StudentLoginPage";
+
 import StudentRegistrationPage from "../src/components/StudentRegistartionpage";
+
 import AdminLoginPage from "./components/AdminLoginPage";
 import StudentDashboard from "./pages/StudentDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
