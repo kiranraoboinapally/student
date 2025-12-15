@@ -15,18 +15,20 @@ type ProfileShape = {
   user?: any;
   master_student?: any;
   act_student?: {
-    Candidate_Name?: string;
-    Enrollment_Number?: string;
-    Course_Name?: string;
-    Stream_Name?: string;
-    Year_Sem?: string;
+    CandidateName?: string;
+    EnrollmentNumber?: string;
+    CourseName?: string;
+    StreamName?: string;
+    YearSem?: string;
     center_name?: string;
-    candidate_address?: string;  // <- Add this
+    candidate_address?: string;
     mother_name?: string;
     father_name?: string;
+    ContactNumber?: string;
+    EmailID?: string;
+    // add other act_student fields if needed
   };
 };
-
 
 type FeeItem = {
   fee_due_id?: number;
@@ -126,7 +128,7 @@ export default function StudentDashboard(): JSX.Element {
       }
       const data = await res.json();
 
-      // Safely extract the fee array, fallback to empty array if nothing matches
+      // Safely extract the fee array
       let list: FeeItem[] = [];
       if (data && typeof data === 'object') {
         if (Array.isArray(data.fees)) {
@@ -134,12 +136,9 @@ export default function StudentDashboard(): JSX.Element {
         } else if (Array.isArray(data.registration_fees)) {
           list = data.registration_fees;
         } else if (Array.isArray(data)) {
-          list = data;  // in case API returns direct array
+          list = data;
         }
-        // Optionally handle other known keys here
       }
-      // If data is not an object/array, or no matching key → empty array
-
       setFees(list);
     } catch (e) {
       console.error(e);
@@ -267,7 +266,7 @@ export default function StudentDashboard(): JSX.Element {
     { key: "fees", label: "Fee Due Details" },
     { key: "subjects", label: "Subjects" },
     { key: "marks", label: "Marks" },
-    { key: "attendance", label: "Attendance" }, // New Tab
+    { key: "attendance", label: "Attendance" },
   ];
 
   return (
@@ -280,17 +279,23 @@ export default function StudentDashboard(): JSX.Element {
           </div>
           <div className="ml-3">
             <div className="text-sm opacity-90">Welcome</div>
-            <div className="font-semibold">{user.full_name || master.student_name || act.Candidate_Name || "Student"}</div>
+            <div className="font-semibold">
+              {act.CandidateName || user.full_name || master.student_name || master.StudentName || "Student"}
+            </div>
           </div>
         </div>
 
         <div className="text-sm mb-6 leading-relaxed">
           <div className="opacity-90">Enrollment</div>
-          <div className="font-semibold mb-2">{user.username || master.enrollment_number || act.Enrollment_Number || "-"}</div>
+          <div className="font-semibold mb-2">
+            {act.EnrollmentNumber || user.username || master.enrollment_number || master.EnrollmentNumber || "-"}
+          </div>
           <div className="opacity-90">Program</div>
-          <div className="font-semibold">{(master.course_name || act.Course_Name) ?? "-"}</div>
+          <div className="font-semibold">
+            {act.CourseName || master.course_name || master.CourseName || "-"}
+          </div>
           <div className="opacity-90 mt-3">Semester</div>
-          <div className="font-semibold">{act.Year_Sem ?? "-"}</div>
+          <div className="font-semibold">{act.YearSem ?? "-"}</div>
         </div>
 
         <nav className="flex flex-col gap-1.5">
@@ -315,7 +320,7 @@ export default function StudentDashboard(): JSX.Element {
         </nav>
 
         <div className="mt-0.5 text-xs opacity-80 pt-3">
-          <div>User: {user.full_name || "-"}</div>
+          <div>User: {user.full_name || act.CandidateName || "-"}</div>
           <div className="mt-0.5">ERP by SlashCurate Technologies</div>
         </div>
       </aside>
@@ -327,17 +332,17 @@ export default function StudentDashboard(): JSX.Element {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Student Profile</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-              <Field label="Student Name" value={master.student_name || act.Candidate_Name || user.full_name} />
-              <Field label="Enrollment Number" value={master.enrollment_number || act.Enrollment_Number || user.username} />
-              <Field label="Course" value={master.course_name || act.Course_Name} />
-              <Field label="Branch / Stream" value={act.Stream_Name} />
-              <Field label="Academic Year / Batch / Semester" value={`${master.session ?? "-"} / ${master.batch ?? "-"} / ${act.Year_Sem ?? "-"}`} />
-              <Field label="Institution" value={master.institute_name || act.center_name} />
-              <Field label="DOB / Gender" value={`${(act as any).DOB ?? "-"} / ${ (master as any).gender ?? "-" }`} />
-              <Field label="Aadhar Number" value={(act as any).Aadhar_Number || "-" } />
-              <Field label="Father / Mother" value={`${master.father_name || act.father_name || "-"} / ${act.mother_name || "-"}`} />
-              <Field label="Student Contact / Email" value={`${master.student_phone_number || "-" } / ${master.student_email_id || user.email || "-"}`} />
-              <Field label="Admitted Date" value={(master as any).created_at ? new Date(master.created_at).toLocaleDateString() : "-"} />
+              <Field label="Student Name" value={act.CandidateName || master.student_name || master.StudentName || user.full_name} />
+              <Field label="Enrollment Number" value={act.EnrollmentNumber || master.enrollment_number || master.EnrollmentNumber || user.username} />
+              <Field label="Course" value={act.CourseName || master.course_name || master.CourseName} />
+              <Field label="Branch / Stream" value={act.StreamName} />
+              <Field label="Academic Year / Batch / Semester" value={`${master.session ?? master.Session ?? "-"} / ${master.batch ?? master.Batch ?? "-"} / ${act.YearSem ?? "-"}`} />
+              <Field label="Institution" value={master.institute_name || master.InstituteName || act.center_name} />
+              <Field label="DOB / Gender" value={`${(act as any).DOB ?? "-"} / ${(master as any).gender ?? "-"}`} />
+              <Field label="Aadhar Number" value={(act as any).Aadhar_Number || (act as any).AadharNumber || "-"} />
+              <Field label="Father / Mother" value={`${master.father_name || master.FatherName || act.father_name || "-"} / ${act.mother_name || "-"}`} />
+              <Field label="Student Contact / Email" value={`${act.ContactNumber || master.student_phone_number || master.StudentPhoneNumber || user.Mobile || "-"} / ${act.EmailID || master.student_email_id || master.StudentEmailID || user.email || "-"}`} />
+              <Field label="Admitted Date" value={(master as any).created_at || (master as any).CreatedAt ? new Date((master as any).created_at || (master as any).CreatedAt).toLocaleDateString() : "-"} />
               <Field label="Parent Contact" value={(master as any).parent_contact || "-"} />
               <Field label="Community / Nationality" value={`${(act as any).Community || "-"} / ${(act as any).Nationality || "-"}`} />
               <Field label="Residential Address" value={(act as any).candidate_address || "-"} />
