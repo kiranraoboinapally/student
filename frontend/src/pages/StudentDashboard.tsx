@@ -114,32 +114,60 @@ export default function StudentDashboard(): JSX.Element {
       setLoadingProfile(false);
     }
   }
-
-  async function loadFees() {
-    setLoadingFees(true);
-    try {
-      const res = await authFetch(`${apiBase}/student/fees/summary`);
-      if (!res.ok) {
-        setFees([]);
-        return;
-      }
-      const data = await res.json();
-
-      let list: FeeItem[] = [];
-      if (data && typeof data === "object") {
-        if (Array.isArray(data.fees)) {
-          list = data.fees;
-        } else if (Array.isArray(data.registration_fees)) {
-          list = data.registration_fees;
-        } else if (Array.isArray(data)) {
-          list = data;
-        }
-      }
-      setFees(list);
-    } finally {
-      setLoadingFees(false);
+async function loadFees() {
+  setLoadingFees(true);
+  try {
+    const res = await authFetch(`${apiBase}/student/fees/summary`);
+    if (!res.ok) {
+      setFees([]);
+      return;
     }
+    const data = await res.json();
+
+    let list: FeeItem[] = [];
+
+    if (data) {
+      // If API returns array directly
+      if (Array.isArray(data)) {
+        list = data.map(mapApiFeeToFeeItem);
+      }
+      // If API returns object with fees or registration_fees array
+      else if (Array.isArray(data.fees)) {
+        list = data.fees.map(mapApiFeeToFeeItem);
+      } else if (Array.isArray(data.registration_fees)) {
+        list = data.registration_fees.map(mapApiFeeToFeeItem);
+      }
+      // If API returns a single object (wrap it in array)
+      else if (typeof data === "object") {
+        list = [mapApiFeeToFeeItem(data)];
+      }
+    }
+
+    setFees(list);
+  } finally {
+    setLoadingFees(false);
   }
+}
+
+// Helper to map API fields to your FeeItem structure
+function mapApiFeeToFeeItem(apiFee: any): FeeItem {
+  const examFee = apiFee.ExpectedExamFee ?? 0;
+  const regFee = apiFee.ExpectedRegFee ?? 0;
+  const examPaid = apiFee.ExamFeePaid ?? 0;
+  const regPaid = apiFee.RegistrationFeePaid ?? 0;
+
+  return {
+    fee_due_id: apiFee.ExpectedFeeID,
+    fee_type: "Exam & Registration",
+    fee_head: "Total Fee",
+    original_amount: examFee + regFee,
+    amount_paid: examPaid + regPaid,
+    balance: examFee + regFee - (examPaid + regPaid),
+    status: (apiFee.OverallStatus ?? "Pending").toLowerCase(),
+    due_date: apiFee.DueDate ?? undefined,
+  };
+}
+
 
   async function loadAttendance() {
     setLoadingAttendance(true);
