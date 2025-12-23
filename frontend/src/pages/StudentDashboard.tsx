@@ -26,7 +26,6 @@ type ProfileShape = {
     father_name?: string;
     ContactNumber?: string;
     EmailID?: string;
-    // add other act_student fields if needed
   };
 };
 
@@ -111,8 +110,6 @@ export default function StudentDashboard(): JSX.Element {
       }
       const data = await res.json();
       setProfile(data);
-    } catch (e) {
-      console.error(e);
     } finally {
       setLoadingProfile(false);
     }
@@ -128,9 +125,8 @@ export default function StudentDashboard(): JSX.Element {
       }
       const data = await res.json();
 
-      // Safely extract the fee array
       let list: FeeItem[] = [];
-      if (data && typeof data === 'object') {
+      if (data && typeof data === "object") {
         if (Array.isArray(data.fees)) {
           list = data.fees;
         } else if (Array.isArray(data.registration_fees)) {
@@ -140,9 +136,6 @@ export default function StudentDashboard(): JSX.Element {
         }
       }
       setFees(list);
-    } catch (e) {
-      console.error(e);
-      setFees([]);
     } finally {
       setLoadingFees(false);
     }
@@ -158,9 +151,6 @@ export default function StudentDashboard(): JSX.Element {
       }
       const data = await res.json();
       setAttendance(data.attendance || []);
-    } catch (err) {
-      console.error(err);
-      setAttendance([]);
     } finally {
       setLoadingAttendance(false);
     }
@@ -176,9 +166,6 @@ export default function StudentDashboard(): JSX.Element {
       }
       const data = await res.json();
       setSubjects(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error(err);
-      setSubjects([]);
     } finally {
       setLoadingSubjects(false);
     }
@@ -193,10 +180,21 @@ export default function StudentDashboard(): JSX.Element {
         return;
       }
       const data = await res.json();
-      setMarks(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error(err);
-      setMarks([]);
+
+      // Map API fields (PascalCase) to frontend fields
+      const mapped: MarkItem[] = Array.isArray(data)
+        ? data.map((m: any) => ({
+            mark_id: m.MarkID,
+            subject_code: m.SubjectCode,
+            subject_name: m.SubjectName,
+            total_marks: m.TotalMarks,
+            percentage: m.Percentage,
+            grade: m.Grade,
+            status: m.Status?.toLowerCase(),
+          }))
+        : [];
+
+      setMarks(mapped);
     } finally {
       setLoadingMarks(false);
     }
@@ -241,8 +239,6 @@ export default function StudentDashboard(): JSX.Element {
       setSelectedFee(null);
       setPayAmount("");
       await loadFees();
-    } catch (err) {
-      setPayError("Network error");
     } finally {
       setPayLoading(false);
     }
@@ -291,9 +287,7 @@ export default function StudentDashboard(): JSX.Element {
             {act.EnrollmentNumber || user.username || master.enrollment_number || master.EnrollmentNumber || "-"}
           </div>
           <div className="opacity-90">Program</div>
-          <div className="font-semibold">
-            {act.CourseName || master.course_name || master.CourseName || "-"}
-          </div>
+          <div className="font-semibold">{act.CourseName || master.course_name || master.CourseName || "-"}</div>
           <div className="opacity-90 mt-3">Semester</div>
           <div className="font-semibold">{act.YearSem ?? "-"}</div>
         </div>
@@ -330,19 +324,30 @@ export default function StudentDashboard(): JSX.Element {
         {/* PROFILE */}
         {active === "profile" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Student Profile</h2>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>
+              Student Profile
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
               <Field label="Student Name" value={act.CandidateName || master.student_name || master.StudentName || user.full_name} />
               <Field label="Enrollment Number" value={act.EnrollmentNumber || master.enrollment_number || master.EnrollmentNumber || user.username} />
               <Field label="Course" value={act.CourseName || master.course_name || master.CourseName} />
               <Field label="Branch / Stream" value={act.StreamName} />
-              <Field label="Academic Year / Batch / Semester" value={`${master.session ?? master.Session ?? "-"} / ${master.batch ?? master.Batch ?? "-"} / ${act.YearSem ?? "-"}`} />
+              <Field
+                label="Academic Year / Batch / Semester"
+                value={`${master.session ?? master.Session ?? "-"} / ${master.batch ?? master.Batch ?? "-"} / ${act.YearSem ?? "-"}`}
+              />
               <Field label="Institution" value={master.institute_name || master.InstituteName || act.center_name} />
               <Field label="DOB / Gender" value={`${(act as any).DOB ?? "-"} / ${(master as any).gender ?? "-"}`} />
               <Field label="Aadhar Number" value={(act as any).Aadhar_Number || (act as any).AadharNumber || "-"} />
               <Field label="Father / Mother" value={`${master.father_name || master.FatherName || act.father_name || "-"} / ${act.mother_name || "-"}`} />
-              <Field label="Student Contact / Email" value={`${act.ContactNumber || master.student_phone_number || master.StudentPhoneNumber || user.Mobile || "-"} / ${act.EmailID || master.student_email_id || master.StudentEmailID || user.email || "-"}`} />
-              <Field label="Admitted Date" value={(master as any).created_at || (master as any).CreatedAt ? new Date((master as any).created_at || (master as any).CreatedAt).toLocaleDateString() : "-"} />
+              <Field
+                label="Student Contact / Email"
+                value={`${act.ContactNumber || master.student_phone_number || master.StudentPhoneNumber || user.Mobile || "-"} / ${act.EmailID || master.student_email_id || master.StudentEmailID || user.email || "-"}`}
+              />
+              <Field
+                label="Admitted Date"
+                value={(master as any).created_at || (master as any).CreatedAt ? new Date((master as any).created_at || (master as any).CreatedAt).toLocaleDateString() : "-"}
+              />
               <Field label="Parent Contact" value={(master as any).parent_contact || "-"} />
               <Field label="Community / Nationality" value={`${(act as any).Community || "-"} / ${(act as any).Nationality || "-"}`} />
               <Field label="Residential Address" value={(act as any).candidate_address || "-"} />
@@ -355,7 +360,9 @@ export default function StudentDashboard(): JSX.Element {
         {active === "fees" && (
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold" style={{ color: theme }}>Fee Due Details</h2>
+              <h2 className="text-2xl font-bold" style={{ color: theme }}>
+                Fee Due Details
+              </h2>
               <div className="flex items-center gap-3">
                 <div className="text-sm">Payment Type:</div>
                 <div className="flex gap-3">
@@ -380,20 +387,21 @@ export default function StudentDashboard(): JSX.Element {
                 {fees.map((f) => (
                   <div key={String(f.fee_due_id ?? Math.random())} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-lg">
                     <div className="flex-1">
-                      <div className="font-semibold text-lg" style={{ color: theme }}>{f.fee_head ?? f.fee_type}</div>
+                      <div className="font-semibold text-lg" style={{ color: theme }}>
+                        {f.fee_head ?? f.fee_type}
+                      </div>
                       <div className="text-sm text-gray-600 mt-1">Fee Type: {f.fee_type ?? "-"}</div>
                       <div className="text-sm text-gray-600 mt-1">Due Date: {fmtDate(f.due_date)}</div>
                     </div>
 
                     <div className="w-48 text-right">
                       <div className="text-sm text-gray-500">Due Amount</div>
-                      <div className="font-bold text-xl">₹ {fmtMoney(f.balance ?? ((f.original_amount ?? 0) - (f.amount_paid ?? 0)))}</div>
+                      <div className="font-bold text-xl">
+                        ₹ {fmtMoney(f.balance ?? ((f.original_amount ?? 0) - (f.amount_paid ?? 0)))}
+                      </div>
                       {(f.status ?? "").toLowerCase() !== "paid" && (
                         <div className="mt-3">
-                          <button
-                            onClick={() => openPayModal(f)}
-                            className="bg-[#650C08] text-white px-4 py-2 rounded-md"
-                          >
+                          <button onClick={() => openPayModal(f)} className="bg-[#650C08] text-white px-4 py-2 rounded-md">
                             Pay
                           </button>
                         </div>
@@ -418,7 +426,9 @@ export default function StudentDashboard(): JSX.Element {
         {/* SUBJECTS */}
         {active === "subjects" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Subjects</h2>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>
+              Current Semester Subjects
+            </h2>
 
             {loadingSubjects ? (
               <div>Loading subjects...</div>
@@ -454,12 +464,14 @@ export default function StudentDashboard(): JSX.Element {
         {/* MARKS */}
         {active === "marks" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Marks</h2>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>
+              Marks
+            </h2>
 
             {loadingMarks ? (
               <div>Loading marks...</div>
             ) : marks.length === 0 ? (
-              <div className="text-center text-gray-600 py-14">No marks available for current semester</div>
+              <div className="text-center text-gray-600 py-14">No marks found for current semester</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full border">
@@ -467,28 +479,26 @@ export default function StudentDashboard(): JSX.Element {
                     <tr>
                       <th className="border px-4 py-3 text-left font-semibold">Subject Code</th>
                       <th className="border px-4 py-3 text-left font-semibold">Subject Name</th>
-                      <th className="border px-4 py-3 text-center font-semibold">Total Marks</th>
-                      <th className="border px-4 py-3 text-center font-semibold">Percentage</th>
-                      <th className="border px-4 py-3 text-center font-semibold">Grade</th>
-                      <th className="border px-4 py-3 text-center font-semibold">Status</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Total Marks</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Percentage</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Grade</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {marks.map((mark, idx) => (
-                      <tr key={mark.mark_id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                        <td className="border px-4 py-3">{mark.subject_code || "-"}</td>
-                        <td className="border px-4 py-3 font-medium">{mark.subject_name || "-"}</td>
-                        <td className="border px-4 py-3 text-center">{mark.total_marks ?? "-"}</td>
-                        <td className="border px-4 py-3 text-center">{mark.percentage ? mark.percentage.toFixed(2) + "%" : "-"}</td>
-                        <td className="border px-4 py-3 text-center font-semibold">{mark.grade || "-"}</td>
-                        <td className="border px-4 py-3 text-center">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                            mark.status === "pass" ? "bg-green-100 text-green-800" :
-                            mark.status === "fail" ? "bg-red-100 text-red-800" :
-                            "bg-gray-100 text-gray-800"
-                          }`}>
-                            {mark.status || "-"}
-                          </span>
+                    {marks.map((m, idx) => (
+                      <tr key={m.mark_id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="border px-4 py-3">{m.subject_code || "-"}</td>
+                        <td className="border px-4 py-3 font-medium">{m.subject_name || "-"}</td>
+                        <td className="border px-4 py-3 text-center">{m.total_marks ?? "-"}</td>
+                        <td className="border px-4 py-3 text-center">{m.percentage ?? "-"}</td>
+                        <td className="border px-4 py-3 text-center">{m.grade || "-"}</td>
+                        <td
+                          className={`border px-4 py-3 text-center font-semibold ${
+                            m.status === "pass" ? "text-green-600" : m.status === "fail" ? "text-red-600" : "text-gray-600"
+                          }`}
+                        >
+                          {m.status?.toUpperCase() ?? "-"}
                         </td>
                       </tr>
                     ))}
@@ -502,96 +512,89 @@ export default function StudentDashboard(): JSX.Element {
         {/* ATTENDANCE */}
         {active === "attendance" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-4" style={{ color: theme }}>Attendance</h2>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>
+              Attendance
+            </h2>
 
             {loadingAttendance ? (
               <div>Loading attendance...</div>
             ) : attendance.length === 0 ? (
               <div className="text-center text-gray-600 py-14">No attendance records found</div>
             ) : (
-              <table className="min-w-full border">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="border px-4 py-2 text-left">Subject</th>
-                    <th className="border px-4 py-2 text-left">Total Classes</th>
-                    <th className="border px-4 py-2 text-left">Attended</th>
-                    <th className="border px-4 py-2 text-left">Percentage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attendance.map((a, idx) => (
-                    <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                      <td className="border px-4 py-2">{a.subject_name || "-"}</td>
-                      <td className="border px-4 py-2">{a.total_classes ?? 0}</td>
-                      <td className="border px-4 py-2">{a.attended_classes ?? 0}</td>
-                      <td className="border px-4 py-2">
-                        {a.total_classes
-                          ? ((a.attended_classes / a.total_classes) * 100).toFixed(2) + "%"
-                          : "-"}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="min-w-full border">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border px-4 py-3 text-left font-semibold">Subject Name</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Total Classes</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Attended</th>
+                      <th className="border px-4 py-3 text-left font-semibold">Percentage</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {attendance.map((a, idx) => (
+                      <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="border px-4 py-3 font-medium">{a.subject_name ?? "-"}</td>
+                        <td className="border px-4 py-3 text-center">{a.total_classes ?? "-"}</td>
+                        <td className="border px-4 py-3 text-center">{a.attended_classes ?? "-"}</td>
+                        <td className="border px-4 py-3 text-center">
+                          {a.total_classes && a.attended_classes
+                            ? Math.round((a.attended_classes / a.total_classes) * 100)
+                            : "-"}
+                          %
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
-      </main>
 
-      {/* Payment Modal */}
-      {payModalOpen && selectedFee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl bg-white rounded-xl shadow-lg p-6">
-            <h3 className="text-xl font-bold mb-4">Pay Fee</h3>
-
-            <div className="mb-3">
-              <div className="text-sm text-gray-600">Fee</div>
-              <div className="font-semibold text-lg">{selectedFee.fee_head ?? selectedFee.fee_type}</div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 mb-3">
-              <div>
-                <div className="text-sm text-gray-600">Due Amount</div>
-                <div className="font-semibold">₹ {fmtMoney(selectedFee.balance ?? ((selectedFee.original_amount ?? 0) - (selectedFee.amount_paid ?? 0)))}</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-600">Amount to Pay</div>
+        {/* Payment Modal */}
+        {payModalOpen && selectedFee && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+            <div className="bg-white rounded-lg w-96 p-6">
+              <h2 className="text-lg font-bold mb-4">Pay Fee: {selectedFee.fee_head ?? selectedFee.fee_type}</h2>
+              <div className="mb-4">
+                <label className="block mb-1 font-semibold">Amount</label>
                 <input
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value === "" ? "" : Number(e.target.value))}
                   type="number"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(Number(e.target.value))}
+                  className="w-full border px-3 py-2 rounded"
                   min={0}
-                  step="0.01"
-                  className="w-full border rounded px-3 py-2"
+                  max={selectedFee.balance ?? 0}
                 />
               </div>
-            </div>
-
-            {payError && <div className="text-sm text-red-600 mb-2">{payError}</div>}
-
-            <div className="flex justify-end gap-3 mt-4">
-              <button onClick={() => setPayModalOpen(false)} className="px-4 py-2 rounded border">Cancel</button>
-              <button
-                onClick={submitPayment}
-                className="px-4 py-2 rounded bg-[#650C08] text-white"
-                disabled={payLoading}
-              >
-                {payLoading ? "Processing..." : "Pay Now"}
-              </button>
+              {payError && <div className="text-red-600 mb-3">{payError}</div>}
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setPayModalOpen(false)} className="px-4 py-2 rounded border">
+                  Cancel
+                </button>
+                <button
+                  onClick={submitPayment}
+                  disabled={payLoading}
+                  className="px-4 py-2 rounded bg-[#650C08] text-white"
+                >
+                  {payLoading ? "Processing..." : "Pay Now"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
     </div>
   );
 }
 
-// Utility Components & Functions
-function Field({ label, value }: { label: string; value: string | number | undefined }) {
+// Helper components
+function Field({ label, value }: { label: string; value?: any }) {
   return (
     <div>
       <div className="text-gray-500 text-sm">{label}</div>
-      <div className="font-semibold">{value ?? "-"}</div>
+      <div className="font-medium">{value ?? "-"}</div>
     </div>
   );
 }
@@ -600,11 +603,8 @@ function fmtMoney(val: number) {
   return val.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function fmtDate(date?: string | null) {
-  if (!date) return "-";
-  try {
-    return new Date(date).toLocaleDateString();
-  } catch {
-    return date;
-  }
+function fmtDate(val?: string) {
+  if (!val) return "-";
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? "-" : d.toLocaleDateString();
 }
