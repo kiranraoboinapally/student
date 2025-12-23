@@ -44,20 +44,21 @@ func main() {
 
 	// ================= ADMIN ROUTES =================
 	admin := api.Group("/admin")
-	admin.Use(middleware.AuthRoleMiddleware(1)) // Admin role
+	admin.Use(middleware.AuthRoleMiddleware(1)) // Admin role (assuming RoleID 1)
 	{
-		// --- User Management (Existing) ---
+		// User & Registration Management
 		admin.POST("/create-user", controllers.CreateUserByAdmin)
 		admin.GET("/pending-registrations", controllers.GetPendingRegistrations)
 		admin.POST("/approve-registration", controllers.ApproveRegistration)
 
-		// --- Data Creation (NEW) ---
-		admin.POST("/fees/create", controllers.CreateFee) // For Registration or Examination fee
-		admin.POST("/attendance/record", controllers.RecordAttendance)
+		// NEW: Fee Payment History
+		admin.GET("/fees/payments", controllers.GetAllFeePaymentHistory)
+
+		// NEW: Marks Upload
 		admin.POST("/marks/upload", controllers.UploadStudentMarks)
 	}
 
-	// ================= STUDENT ROUTES (CLEAN) =================
+	// ================= STUDENT ROUTES =================
 	student := api.Group("/student")
 	student.Use(middleware.AuthRoleMiddleware(5)) // Student role
 	{
@@ -65,7 +66,7 @@ func main() {
 		student.GET("/profile", controllers.GetStudentProfile)
 		student.GET("/dashboard", controllers.GetStudentDashboard)
 
-		// ---- Fees (NO DUPLICATES) ----
+		// ---- Fees ----
 		student.GET("/fees/summary", controllers.GetStudentFeeSummary)
 		student.GET("/fees/registration", controllers.GetStudentRegistrationFees)
 		student.GET("/fees/examination", controllers.GetStudentExaminationFees)

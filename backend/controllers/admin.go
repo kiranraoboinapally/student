@@ -2,8 +2,12 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm/clause"
+
 	"github.com/kiranraoboinapally/student/backend/config"
 	"github.com/kiranraoboinapally/student/backend/models"
 	"github.com/kiranraoboinapally/student/backend/utils"
@@ -120,5 +124,91 @@ func ApproveRegistration(c *gin.Context) {
 		"message": "registration " + req.Action + "d successfully",
 		"user_id": user.UserID,
 		"status":  newStatus,
+	})
+}
+
+// ---------------- GET ALL FEE PAYMENT HISTORY ----------------
+func GetAllFeePaymentHistory(c *gin.Context) {
+	db := config.DB
+	enrollment := c.Query("enrollment_number")
+
+	var payments []models.FeePaymentDetail
+	query := db.Order("paid_at desc, payment_id desc")
+
+	if enrollment != "" {
+		enNum, err := strconv.ParseInt(enrollment, 10, 64)
+		if err == nil {
+			query = query.Where("enrollment_no = ?", enNum)
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid enrollment number format"})
+			return
+		}
+	}
+
+	if err := query.Find(&payments).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch payment history"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_records": len(payments),
+		"payments":      payments,
+	})
+}
+
+// ---------------- UPLOAD STUDENT MARKS ----------------
+type UploadMarksRequest struct {
+	Marks []struct {
+		EnrollmentNumber int64   `json:"enrollment_number" binding:"required"`
+		SubjectCode      string  `json:"subject_code" binding:"required"`
+		Semester         int     `json:"semester" binding:"required"`
+		MarksObtained    float64 `json:"marks_obtained" binding:"required"`
+		Grade            *string `json:"grade"`
+		MarksType        string  `json:"marks_type" binding:"required"`
+	} `json:"marks" binding:"required,dive"`
+}
+
+func UploadStudentMarks(c *gin.Context) {
+	var req UploadMarksRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	db := config.DB
+
+	var records []models.StudentMark
+	for _, m := range req.Marks {
+		// The Grade field in models.StudentMark is likely a *string.
+		// m.Grade is already a *string in this request, so we can pass it directly.
+
+		record := models.StudentMark{
+			EnrollmentNumber: m.EnrollmentNumber,
+			Semester:         m.Semester,
+			SubjectCode:      m.SubjectCode,
+			TotalMarks:       m.MarksObtained,
+			Grade:            m.Grade, // Correctly passes a *string
+			Status:           m.MarksType,
+			CreatedAt:        time.Now(),
+		}
+		records = append(records, record)
+	}
+
+	// Bulk insert or update (UPSERT)
+	err := db.Clauses(clause.OnConflict{
+		// Unique keys to identify a conflict: Enrollment, Semester, SubjectCode
+		Columns: []clause.Column{{Name: "enrollment_number"}, {Name: "semester"}, {Name: "subject_code"}},
+		// Columns to update when a conflict occurs (MUST be database column names)
+		DoUpdates: clause.AssignmentColumns([]string{"total_marks_obtained", "grade", "status"}),
+	}).Create(&records).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload marks: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":       "Marks uploaded successfully",
+		"total_records": len(records),
 	})
 }
