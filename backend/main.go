@@ -46,9 +46,15 @@ func main() {
 	admin := api.Group("/admin")
 	admin.Use(middleware.AuthRoleMiddleware(1)) // Admin role
 	{
+		// --- User Management (Existing) ---
 		admin.POST("/create-user", controllers.CreateUserByAdmin)
 		admin.GET("/pending-registrations", controllers.GetPendingRegistrations)
 		admin.POST("/approve-registration", controllers.ApproveRegistration)
+
+		// --- Data Creation (NEW) ---
+		admin.POST("/fees/create", controllers.CreateFee) // For Registration or Examination fee
+		admin.POST("/attendance/record", controllers.RecordAttendance)
+		admin.POST("/marks/upload", controllers.UploadStudentMarks)
 	}
 
 	// ================= STUDENT ROUTES (CLEAN) =================

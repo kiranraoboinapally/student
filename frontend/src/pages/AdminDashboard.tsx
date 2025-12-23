@@ -89,6 +89,26 @@ export default function AdminDashboard(): JSX.Element {
       </header>
 
       <main className="max-w-7xl mx-auto p-6">
+        {/* --- NEW FUNCTIONALITY CARDS --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <DashboardCard 
+            title="Create Fees" 
+            description="Set up new Registration or Exam Fee Dues for students."
+            onClick={() => navigate("/admin/create-fees")}
+          />
+          <DashboardCard 
+            title="Record Attendance" 
+            description="Mark students as present or absent for a specific class/date."
+            onClick={() => navigate("/admin/record-attendance")}
+          />
+          <DashboardCard 
+            title="Upload Marks" 
+            description="Enter subject marks and grades for students."
+            onClick={() => navigate("/admin/upload-marks")}
+          />
+        </div>
+
+        {/* --- Pending Registrations Section --- */}
         <div className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-800">Pending Student Registrations</h2>
@@ -182,6 +202,19 @@ export default function AdminDashboard(): JSX.Element {
         <p>ERP System • Powered by SlashCurate Technologies Pvt Ltd</p>
         <p className="mt-1">© 2025 ABCD University</p>
       </footer>
+    </div>
+  );
+}
+
+// Utility component for admin functionality cards
+function DashboardCard({ title, description, onClick }: { title: string, description: string, onClick: () => void }) {
+  return (
+    <div 
+      onClick={onClick}
+      className="bg-[#650C08] text-white p-6 rounded-xl shadow-lg cursor-pointer transform hover:scale-[1.02] transition-all duration-300 hover:shadow-xl"
+    >
+      <h3 className="text-xl font-bold mb-2">{title}</h3>
+      <p className="text-sm opacity-80">{description}</p>
     </div>
   );
 }
