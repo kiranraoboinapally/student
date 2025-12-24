@@ -280,7 +280,7 @@ func VerifyPaymentAndRecord(c *gin.Context) {
 		Amount            float64 `json:"amount" binding:"required"`
 		FeeHead           string  `json:"fee_head" binding:"required"`
 		FeeType           string  `json:"fee_type" binding:"required"`
-		Enrollment        int64   `json:"enrollment" binding:"required"`
+		Enrollment        int64   `json:"enrollment"` // 🔥 FIXED
 	}
 
 	if err := c.ShouldBindJSON(&payload); err != nil {

@@ -319,10 +319,7 @@ export default function StudentDashboard(): JSX.Element {
 
     const enrollmentNumber = getEnrollmentNumber(profile);
     // Ensure fee_due_id and balance are present and valid
-    if (!fee.fee_due_id) {
-        alert('Cannot initiate payment: Fee ID is missing.');
-        return;
-    }
+
 
     const amountToPay = fee.balance;
 
@@ -353,7 +350,7 @@ export default function StudentDashboard(): JSX.Element {
         
         // STEP 2: Configure and Open Razorpay Checkout Modal
         const options: RazorpayOptions = {
-            key: orderData.key,
+            key: orderData.key_id,
             amount: amountToPay * 100, // Razorpay expects amount in paise
             currency: 'INR',
             name: orderData.name,
@@ -375,7 +372,7 @@ export default function StudentDashboard(): JSX.Element {
                             amount: amountToPay,
                             fee_head: fee.fee_head,
                             fee_type: fee.fee_type,
-                            enrollment_number: enrollmentNumber,
+                            enrollment: Number(enrollmentNumber),
                         }),
                     });
 
