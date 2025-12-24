@@ -1,4 +1,4 @@
-// controllers/student_controller.go - FINAL VERSION (NO DUPLICATE)
+// controllers/student_controller.go - FINAL VERSION (CLEANED/OPTIMIZED)
 
 package controllers
 
@@ -15,7 +15,7 @@ import (
 HELPER: Resolve Current Semester (SAFE)
 ====================================
 */
-func resolveCurrentSemester(enrollment int64) int {
+func resolveCurrentSemester(enrollment int64) interface{} {
 	db := config.DB
 
 	// 1️⃣ Try semester_results
@@ -54,6 +54,7 @@ func GetStudentProfile(c *gin.Context) {
 		return
 	}
 
+	// Uses the unexported helper from fees.go
 	enrollment, err := getStudentEnrollment(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid session"})
@@ -86,12 +87,11 @@ STUDENT DASHBOARD
 ====================================
 */
 func GetStudentDashboard(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
 	db := config.DB
 
 	var expected models.ExpectedFee
@@ -120,13 +120,13 @@ FEES
 */
 
 func GetStudentFeeSummary(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
 	db := config.DB
+
 	var expected models.ExpectedFee
 	db.Where("enrollment_number = ?", enrollment).First(&expected)
 
@@ -134,13 +134,13 @@ func GetStudentFeeSummary(c *gin.Context) {
 }
 
 func GetStudentRegistrationFees(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
 	db := config.DB
+
 	var fees []models.RegistrationFee
 	db.Where("enrollment_number = ?", enrollment).
 		Order("transaction_date desc").
@@ -150,13 +150,13 @@ func GetStudentRegistrationFees(c *gin.Context) {
 }
 
 func GetStudentExaminationFees(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
 	db := config.DB
+
 	var fees []models.ExaminationFee
 	db.Where("enrollment_number = ?", enrollment).
 		Order("transaction_date desc").
@@ -172,7 +172,7 @@ ACADEMICS
 */
 
 func GetCurrentSemester(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -183,15 +183,15 @@ func GetCurrentSemester(c *gin.Context) {
 }
 
 func GetCurrentSemesterSubjects(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
 	db := config.DB
+
 	semester := resolveCurrentSemester(enrollment)
-	if semester == 0 {
+	if semester == nil || semester == 0 {
 		c.JSON(http.StatusOK, []models.SubjectMaster{})
 		return
 	}
@@ -203,15 +203,15 @@ func GetCurrentSemesterSubjects(c *gin.Context) {
 }
 
 func GetCurrentSemesterMarks(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
 	db := config.DB
+
 	semester := resolveCurrentSemester(enrollment)
-	if semester == 0 {
+	if semester == nil || semester == 0 {
 		c.JSON(http.StatusOK, []models.StudentMark{})
 		return
 	}
@@ -227,17 +227,22 @@ func GetCurrentSemesterMarks(c *gin.Context) {
 }
 
 func GetStudentAttendance(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
 	db := config.DB
+
 	semester := resolveCurrentSemester(enrollment)
-	if semester == 0 {
+	if semester == nil || semester == 0 {
 		c.JSON(http.StatusOK, gin.H{"attendance": []interface{}{}})
 		return
+	}
+
+	semInt, ok := semester.(int)
+	if !ok {
+		semInt = 0
 	}
 
 	type AttendanceRecord struct {
@@ -261,7 +266,7 @@ func GetStudentAttendance(c *gin.Context) {
 		GROUP BY sm.subject_name
 	`
 
-	if err := db.Raw(query, enrollment, semester, semester).
+	if err := db.Raw(query, enrollment, semInt, semInt).
 		Scan(&attendance).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"attendance": []interface{}{}})
 		return

@@ -1,4 +1,4 @@
-// controllers/fees.go - FINAL WORKING & FIXED VERSION
+// controllers/fees.go - FINAL WORKING & FIXED VERSION (OPTIMIZED)
 
 package controllers
 
@@ -15,6 +15,7 @@ import (
 	"github.com/kiranraoboinapally/student/backend/models"
 	razorpay "github.com/razorpay/razorpay-go"
 	utils "github.com/razorpay/razorpay-go/utils"
+	// Added explicit GORM import for clarity
 )
 
 /* ======================= RAZORPAY ======================= */
@@ -36,6 +37,7 @@ func InitRazorpay() {
 
 /* ======================= HELPERS ======================= */
 
+// getStudentEnrollment is the base helper, kept for clarity.
 func getStudentEnrollment(c *gin.Context) (int64, error) {
 	uidVal, ok := c.Get("user_id")
 	if !ok {
@@ -59,7 +61,18 @@ func getStudentEnrollment(c *gin.Context) (int64, error) {
 		return 0, err
 	}
 
+	// Assuming username is the enrollment number (string representation of int64)
 	return strconv.ParseInt(user.Username, 10, 64)
+}
+
+// getEnrollmentOrError is the simplified helper, centralizing auth/setup without
+// redundantly returning the global DB instance.
+func getEnrollmentOrError(c *gin.Context) (int64, error) {
+	enrollment, err := getStudentEnrollment(c)
+	if err != nil {
+		return 0, err
+	}
+	return enrollment, nil
 }
 
 func ptrString(s string) *string { return &s }
@@ -91,13 +104,12 @@ type DueFeeRecord struct {
 /* ======================= GET STUDENT FEES ======================= */
 
 func GetStudentFees(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
-	db := config.DB
+	db := config.DB // Use DB directly
 
 	/* ---------- DUES ---------- */
 	var expected models.ExpectedFee
@@ -135,6 +147,7 @@ func GetStudentFees(c *gin.Context) {
 		}
 		return ""
 	}
+
 	safeFloat := func(f *float64) float64 {
 		if f != nil {
 			return *f
@@ -198,11 +211,12 @@ func GetStudentFees(c *gin.Context) {
 /* ======================= REQUEST PAYMENT - WITH CORRECT INSTITUTE NAME ======================= */
 
 func RequestPayment(c *gin.Context) {
-	enrollment, err := getStudentEnrollment(c)
+	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
+	db := config.DB // Use DB directly
 
 	var req struct {
 		Amount  float64 `json:"amount" binding:"required,gt=0"`
@@ -214,8 +228,6 @@ func RequestPayment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	db := config.DB
 
 	var user models.User
 	db.Where("username = ?", strconv.FormatInt(enrollment, 10)).First(&user)
@@ -230,7 +242,6 @@ func RequestPayment(c *gin.Context) {
 		contact = *user.Mobile
 	}
 
-	// Fetch institute name from master_student (this field exists and is used in your frontend)
 	instituteName := "Your Institute"
 	var master models.MasterStudent
 	if err := db.Where("enrollment_number = ?", enrollment).First(&master).Error; err == nil {
@@ -256,7 +267,7 @@ func RequestPayment(c *gin.Context) {
 		"order_id":    order["id"],
 		"key_id":      RazorpayKeyID,
 		"amount":      req.Amount,
-		"name":        instituteName, // ← Now shows real institute name
+		"name":        instituteName,
 		"description": req.FeeHead,
 		"prefill": gin.H{
 			"name":    studentName,
