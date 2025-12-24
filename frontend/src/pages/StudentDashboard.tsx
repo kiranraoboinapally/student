@@ -4,15 +4,11 @@ import { useNavigate } from "react-router-dom";
 
 /**
  * StudentDashboard.tsx
- * - Fully updated with Razorpay Integration
+ * - Fully updated with Razorpay Integration + Custom Amount Input
  * - Tailwind + TypeScript
  * - Theme color: #650C08
- *
- * Place in: src/pages/StudentDashboard.tsx
  */
 
-// ======================== RAZORPAY TYPES ========================
-// 1. Declare Razorpay global window object
 declare global {
   interface Window {
     Razorpay: new (options: any) => RazorpayInstance;
@@ -25,12 +21,12 @@ interface RazorpayInstance {
 }
 
 interface RazorpayOptions {
-  key: string; 
+  key: string;
   amount: number; // In paise
   currency: 'INR';
   name: string;
   description: string;
-  order_id: string; 
+  order_id: string;
   handler: (response: any) => void;
   prefill: {
     name?: string;
@@ -46,7 +42,6 @@ interface RazorpayOptions {
     color: string;
   };
 }
-// ================================================================
 
 type ProfileShape = {
   user?: {
@@ -54,7 +49,6 @@ type ProfileShape = {
     username?: string;
     email?: string;
     Mobile?: string;
-    // ... other fields
   };
   master_student?: {
     enrollment_number?: string;
@@ -64,7 +58,6 @@ type ProfileShape = {
     CourseName?: string;
     session?: string;
     batch?: string;
-    // ... other fields
   };
   act_student?: {
     CandidateName?: string;
@@ -82,7 +75,7 @@ type ProfileShape = {
 };
 
 type FeeItem = {
-  fee_due_id: number; // Must be non-optional for payment
+  fee_due_id: number;
   fee_type: string;
   fee_head: string;
   due_date: string;
@@ -90,7 +83,7 @@ type FeeItem = {
   amount_paid: number;
   status: string;
   balance: number;
-  transaction_number?: string; // For history display
+  transaction_number?: string;
 };
 
 type AttendanceItem = {
@@ -118,14 +111,12 @@ type MarkItem = {
   status?: string;
 };
 
-// ------------------------- HELPER: Get Enrollment -------------------------
 function getEnrollmentNumber(profile: ProfileShape | null): string {
-    if (!profile) return "";
-    const masterEnr = profile.master_student?.enrollment_number || profile.master_student?.EnrollmentNumber;
-    const actEnr = profile.act_student?.EnrollmentNumber;
-    const userEnr = profile.user?.username;
-    // Prioritize in the order most likely to be correct
-    return (masterEnr || actEnr || userEnr || "").toString(); 
+  if (!profile) return "";
+  const masterEnr = profile.master_student?.enrollment_number || profile.master_student?.EnrollmentNumber;
+  const actEnr = profile.act_student?.EnrollmentNumber;
+  const userEnr = profile.user?.username;
+  return (masterEnr || actEnr || userEnr || "").toString();
 }
 
 export default function StudentDashboard(): JSX.Element {
@@ -144,11 +135,14 @@ export default function StudentDashboard(): JSX.Element {
   const [loadingMarks, setLoadingMarks] = useState(true);
   const [active, setActive] = useState<"profile" | "fees" | "subjects" | "marks" | "attendance">("profile");
 
-  // Removed legacy payment modal states: payModalOpen, selectedFee, etc.
+  // New states for custom amount modal
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedFeeForPayment, setSelectedFeeForPayment] = useState<FeeItem | null>(null);
+  const [customAmount, setCustomAmount] = useState<number>(0);
 
   const theme = "#650C08";
 
-  // ------------------------- RAZORPAY SCRIPT LOADER -------------------------
+  // Load Razorpay script
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -156,7 +150,6 @@ export default function StudentDashboard(): JSX.Element {
     document.body.appendChild(script);
 
     return () => {
-      // Cleanup script on component unmount
       document.body.removeChild(script);
     };
   }, []);
@@ -167,10 +160,8 @@ export default function StudentDashboard(): JSX.Element {
     loadAttendance();
     loadSubjects();
     loadMarks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ------------------------- API LOADERS (Kept for context, assuming they exist) -------------------------
   async function loadProfile() {
     setLoadingProfile(true);
     try {
@@ -187,12 +178,10 @@ export default function StudentDashboard(): JSX.Element {
     }
   }
 
-  // UPDATED loadFees – essential for showing updated status after payment
   const loadFees = useCallback(async () => {
     setLoadingFees(true);
     try {
-      // Endpoint is /student/fees/summary
-      const res = await authFetch(`${apiBase}/student/fees/summary`); 
+      const res = await authFetch(`${apiBase}/student/fees/summary`);
       if (!res.ok) {
         setFees([]);
         return;
@@ -201,22 +190,19 @@ export default function StudentDashboard(): JSX.Element {
 
       let list: FeeItem[] = [];
 
-      // 1. Add DUE items first
       if (data && Array.isArray(data.dues)) {
         list.push(...data.dues.map(mapApiFeeToFeeItem));
       }
 
-      // 2. Add PAID HISTORY items
       if (data && Array.isArray(data.history)) {
         list.push(...data.history.map(mapApiFeeToFeeItem));
       }
-      
+
       setFees(list);
     } finally {
       setLoadingFees(false);
     }
-  }, [authFetch, apiBase]);
-
+  }, [authFetch]);
 
   async function loadAttendance() {
     setLoadingAttendance(true);
@@ -276,27 +262,24 @@ export default function StudentDashboard(): JSX.Element {
     }
   }
 
-  // ------------------------- HELPER: mapApiFeeToFeeItem -------------------------
   function mapApiFeeToFeeItem(apiFee: any): FeeItem {
     const originalAmount = apiFee.original_amount ?? 0;
     const amountPaid = apiFee.amount_paid ?? 0;
-    
-    // Case 1: Paid History Record
+
     if (apiFee.transaction_number || apiFee.TransactionNo) {
       return {
-        fee_due_id: apiFee.id || Date.now(), // Assign a temp ID if missing
-        fee_type: apiFee.fee_type || apiFee.Type || 'N/A', 
+        fee_due_id: apiFee.id || Date.now(),
+        fee_type: apiFee.fee_type || apiFee.Type || 'N/A',
         fee_head: apiFee.fee_head || apiFee.Head,
-        due_date: apiFee.transaction_date, 
+        due_date: apiFee.transaction_date,
         original_amount: originalAmount,
         amount_paid: amountPaid,
         balance: 0,
-        status: apiFee.payment_status || "Paid", 
+        status: apiFee.payment_status || "Paid",
         transaction_number: apiFee.transaction_number || apiFee.TransactionNo,
       };
     }
 
-    // Case 2: Pending/Partial Due Record
     return {
       fee_due_id: apiFee.fee_due_id,
       fee_type: apiFee.fee_type ?? 'Total Fee',
@@ -307,119 +290,129 @@ export default function StudentDashboard(): JSX.Element {
       balance: Math.max(0, originalAmount - amountPaid),
       status: apiFee.status?.toLowerCase() ?? 'pending',
       transaction_number: undefined,
-    } as FeeItem; // Asserting as FeeItem since fee_due_id should be present for dues
+    } as FeeItem;
   }
 
-  // ------------------------- RAZORPAY PAYMENT LOGIC -------------------------
-  const handlePayment = useCallback(async (fee: FeeItem) => {
+  // Updated handlePayment to accept custom amount
+  const handlePayment = useCallback(async (fee: FeeItem, amountToPay: number = fee.balance) => {
     if (typeof window.Razorpay === 'undefined') {
-        alert('Razorpay SDK not loaded. Please wait a moment or refresh the page.');
-        return;
+      alert('Razorpay SDK not loaded. Please wait or refresh.');
+      return;
     }
 
     const enrollmentNumber = getEnrollmentNumber(profile);
-    // Ensure fee_due_id and balance are present and valid
-
-
-    const amountToPay = fee.balance;
 
     if (!amountToPay || amountToPay <= 0) {
-        alert("This fee is already paid or the amount is invalid.");
-        return;
+      alert("Please enter a valid amount.");
+      return;
     }
-    
+
+    if (amountToPay > fee.balance) {
+      alert("Amount cannot exceed the balance due.");
+      return;
+    }
+
     try {
-        // STEP 1: Call Backend to Create Order
-        const orderResponse = await authFetch(`${apiBase}/student/fees/request-payment`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+      const orderResponse = await authFetch(`${apiBase}/student/fees/request-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fee_due_id: fee.fee_due_id,
+          amount: amountToPay,
+          fee_head: fee.fee_head,
+          fee_type: fee.fee_type,
+        }),
+      });
+
+      if (!orderResponse.ok) {
+        const errorBody = await orderResponse.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorBody.error || `Failed to create order: ${orderResponse.statusText}`);
+      }
+
+      const orderData = await orderResponse.json();
+
+      const options: RazorpayOptions = {
+        key: orderData.key_id,
+        amount: amountToPay * 100,
+        currency: 'INR',
+        name: orderData.name,
+        description: orderData.description,
+        order_id: orderData.order_id,
+        handler: async (response: any) => {
+          try {
+            const verificationResponse = await authFetch(`${apiBase}/student/fees/verify-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
                 fee_due_id: fee.fee_due_id,
-                amount: amountToPay, // Amount in Rupees
+                amount: amountToPay,
                 fee_head: fee.fee_head,
                 fee_type: fee.fee_type,
-            }),
-        });
+                enrollment: Number(enrollmentNumber),
+              }),
+            });
 
-        if (!orderResponse.ok) {
-            const errorBody = await orderResponse.json().catch(() => ({ error: 'Unknown error' }));
-            throw new Error(errorBody.error || `Failed to create order: ${orderResponse.statusText}`);
-        }
+            if (!verificationResponse.ok) {
+              const errorBody = await verificationResponse.json().catch(() => ({ error: 'Unknown server error' }));
+              throw new Error(errorBody.error || "Payment successful, but server verification failed.");
+            }
 
-        const orderData = await orderResponse.json();
-        
-        // STEP 2: Configure and Open Razorpay Checkout Modal
-        const options: RazorpayOptions = {
-            key: orderData.key_id,
-            amount: amountToPay * 100, // Razorpay expects amount in paise
-            currency: 'INR',
-            name: orderData.name,
-            description: orderData.description,
-            order_id: orderData.order_id,
-            
-            // This handler is executed by Razorpay on successful payment
-            handler: async (response: any) => {
-                // STEP 3: Call Backend to Verify Payment and Record in DB
-                try {
-                    const verificationResponse = await authFetch(`${apiBase}/student/fees/verify-payment`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            razorpay_order_id: response.razorpay_order_id,
-                            razorpay_payment_id: response.razorpay_payment_id,
-                            razorpay_signature: response.razorpay_signature,
-                            fee_due_id: fee.fee_due_id,
-                            amount: amountToPay,
-                            fee_head: fee.fee_head,
-                            fee_type: fee.fee_type,
-                            enrollment: Number(enrollmentNumber),
-                        }),
-                    });
+            alert('Payment successful! Payment ID: ' + response.razorpay_payment_id);
+            loadFees();
+          } catch (error) {
+            console.error('Verification Error:', error);
+            alert('Payment recorded by Razorpay, but server update failed. Contact admin. Error: ' + (error as Error).message);
+          }
+        },
+        prefill: {
+          name: orderData.prefill.name || profile?.act_student?.CandidateName || profile?.user?.full_name,
+          email: orderData.prefill.email || profile?.act_student?.EmailID || profile?.user?.email,
+          contact: orderData.prefill.contact || profile?.act_student?.ContactNumber || profile?.user?.Mobile,
+        },
+        notes: {
+          enrollment_number: enrollmentNumber,
+          fee_due_id: fee.fee_due_id,
+          fee_head: fee.fee_head
+        },
+        theme: {
+          color: theme,
+        },
+      };
 
-                    if (!verificationResponse.ok) {
-                        const errorBody = await verificationResponse.json().catch(() => ({ error: 'Unknown server error' }));
-                        throw new Error(errorBody.error || "Payment successful, but server verification failed.");
-                    }
-                    
-                    alert('Payment successful and recorded! Payment ID: ' + response.razorpay_payment_id);
-                    // Refresh fees data to show the payment update
-                    loadFees(); 
-
-                } catch (error) {
-                    console.error('Verification Error:', error);
-                    alert('Payment recorded successfully by Razorpay, but failed to update fees on server. Contact administration. Error: ' + (error as Error).message);
-                }
-            },
-            prefill: {
-                name: orderData.prefill.name || profile?.act_student?.CandidateName || profile?.user?.full_name,
-                email: orderData.prefill.email || profile?.act_student?.EmailID || profile?.user?.email,
-                contact: orderData.prefill.contact || profile?.act_student?.ContactNumber || profile?.user?.Mobile, 
-            },
-            notes: {
-                enrollment_number: enrollmentNumber,
-                fee_due_id: fee.fee_due_id,
-                fee_head: fee.fee_head
-            },
-            theme: {
-                color: theme,
-            },
-        };
-
-        const rzp = new window.Razorpay(options);
-        
-        rzp.on('payment.failed', function (response: any) {
-            console.error('Payment failed:', response.error);
-            alert(`Payment failed. Reason: ${response.error.description || 'Transaction declined.'}`);
-        });
-
-        rzp.open();
-        
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        alert(`Payment failed. Reason: ${response.error.description || 'Transaction declined.'}`);
+      });
+      rzp.open();
 
     } catch (error) {
-        console.error('Order Creation Error:', error);
-        alert('Failed to initiate payment: ' + (error as Error).message);
+      console.error('Order Creation Error:', error);
+      alert('Failed to initiate payment: ' + (error as Error).message);
     }
-  }, [authFetch, profile, loadFees, theme]); 
+  }, [authFetch, profile, loadFees, theme]);
+
+  // Modal handlers
+  const openPaymentModal = (fee: FeeItem) => {
+    setSelectedFeeForPayment(fee);
+    setCustomAmount(fee.balance);
+    setPaymentModalOpen(true);
+  };
+
+  const closePaymentModal = () => {
+    setPaymentModalOpen(false);
+    setSelectedFeeForPayment(null);
+    setCustomAmount(0);
+  };
+
+  const proceedWithPayment = () => {
+    if (selectedFeeForPayment && customAmount > 0 && customAmount <= selectedFeeForPayment.balance) {
+      handlePayment(selectedFeeForPayment, customAmount);
+      closePaymentModal();
+    }
+  };
 
   function handleSignOut() {
     logout();
@@ -442,7 +435,6 @@ export default function StudentDashboard(): JSX.Element {
     { key: "attendance", label: "Attendance" },
   ];
 
-  // ------------------------- RENDER -------------------------
   return (
     <div className="min-h-screen flex bg-gray-100">
       {/* Sidebar */}
@@ -483,8 +475,8 @@ export default function StudentDashboard(): JSX.Element {
               {tab.label}
             </button>
           ))}
-          <button 
-            onClick={handleSignOut} 
+          <button
+            onClick={handleSignOut}
             className="mt-40 text-left px-3 py-2 rounded-md font-semibold bg-red-600 hover:bg-red-700"
           >
             Sign Out
@@ -501,9 +493,7 @@ export default function StudentDashboard(): JSX.Element {
         {/* PROFILE */}
         {active === "profile" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>
-              Student Profile
-            </h2>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Student Profile</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
               <Field label="Student Name" value={act.CandidateName || master.student_name || master.StudentName || user.full_name} />
               <Field label="Enrollment Number" value={act.EnrollmentNumber || master.enrollment_number || master.EnrollmentNumber || user.username} />
@@ -527,244 +517,274 @@ export default function StudentDashboard(): JSX.Element {
         {/* FEE DETAILS */}
         {active === "fees" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>
-              Fee Details
-            </h2>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Fee Details</h2>
             {loadingFees ? (
               <div className="text-center py-8 text-gray-500">Loading fee details...</div>
             ) : (
               <>
-                {/* Pending Dues Section */}
-                <h3 className="text-xl font-semibold mb-4" style={{ color: theme }}>
-                  Pending Dues
-                </h3>
+                {/* Pending Dues */}
+                <h3 className="text-xl font-semibold mb-4" style={{ color: theme }}>Pending Dues</h3>
                 <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8 border border-red-200">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-red-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fee Head</th>
-                            
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Original Amount (₹)</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Paid (₹)</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-red-700 uppercase tracking-wider font-bold">Balance Due (₹)</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {fees.filter(f => f.balance > 0).length > 0 ? (
-                          fees.filter(f => f.balance > 0).map((fee) => (
-                            <tr key={fee.fee_due_id} className="hover:bg-red-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_head}</td>
-
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.due_date}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{fmtMoney(fee.original_amount)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{fmtMoney(fee.amount_paid)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-right text-red-700">{fmtMoney(fee.balance)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    {/* Updated to call Razorpay function directly */}
-                                    <button
-                                      onClick={() => handlePayment(fee)}
-                                      className="text-white bg-green-600 hover:bg-green-700 text-xs font-semibold py-1.5 px-3 rounded shadow-md transition duration-150"
-                                    >
-                                      Pay Now
-                                    </button>
-                                </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={7} className="px-6 py-8 text-center text-md text-gray-600 bg-gray-50">
-                                <div className="text-lg mb-1">🎉 No Pending Dues!</div> 
-                                <div className="text-sm">All your fees are up to date.</div>
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-red-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fee Head</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Original Amount (₹)</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Paid (₹)</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-red-700 uppercase tracking-wider font-bold">Balance Due (₹)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {fees.filter(f => f.balance > 0).length > 0 ? (
+                        fees.filter(f => f.balance > 0).map((fee) => (
+                          <tr key={fee.fee_due_id} className="hover:bg-red-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_head}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.due_date}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{fmtMoney(fee.original_amount)}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{fmtMoney(fee.amount_paid)}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-right text-red-700">{fmtMoney(fee.balance)}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button
+                                onClick={() => openPaymentModal(fee)}
+                                className="text-white bg-green-600 hover:bg-green-700 text-xs font-semibold py-1.5 px-3 rounded shadow-md transition duration-150"
+                              >
+                                Pay Now
+                              </button>
                             </td>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-8 text-center text-md text-gray-600 bg-gray-50">
+                            <div className="text-lg mb-1">No Pending Dues!</div>
+                            <div className="text-sm">All your fees are up to date.</div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
 
-                {/* Payment History Section */}
-                <h3 className="text-xl font-semibold mb-4 mt-8" style={{ color: theme }}>
-                  Payment History
-                </h3>
+                {/* Payment History */}
+                <h3 className="text-xl font-semibold mb-4 mt-8" style={{ color: theme }}>Payment History</h3>
                 <div className="bg-white shadow overflow-hidden sm:rounded-lg border border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fee Head</th>
-
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Paid (₹)</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction Date</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction No.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {fees.filter(f => f.balance === 0 && f.transaction_number).length > 0 ? (
-                          fees.filter(f => f.balance === 0 && f.transaction_number).map((fee) => (
-                            <tr key={fee.transaction_number} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_head}</td>
-
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700">{fmtMoney(fee.amount_paid)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.due_date}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.transaction_number}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                              No payment history found.
-                            </td>
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fee Head</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Paid (₹)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction No.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {fees.filter(f => f.balance === 0 && f.transaction_number).length > 0 ? (
+                        fees.filter(f => f.balance === 0 && f.transaction_number).map((fee) => (
+                          <tr key={fee.transaction_number} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_head}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700">{fmtMoney(fee.amount_paid)}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.due_date}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.transaction_number}</td>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
+                            No payment history found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </>
+            )}
+
+            {/* Custom Amount Payment Modal */}
+            {paymentModalOpen && selectedFeeForPayment && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                  <h3 className="text-xl font-bold mb-4" style={{ color: theme }}>
+                    Pay for: {selectedFeeForPayment.fee_head}
+                  </h3>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600">
+                      Balance Due: <span className="font-bold text-red-700">₹{fmtMoney(selectedFeeForPayment.balance)}</span>
+                    </p>
+                  </div>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount to Pay (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedFeeForPayment.balance}
+                      step="1"
+                      value={customAmount}
+                      onChange={(e) => setCustomAmount(Math.max(0, Number(e.target.value)))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#650C08]"
+                      placeholder="Enter amount"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Min: ₹1 | Max: ₹{fmtMoney(selectedFeeForPayment.balance)}
+                    </p>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={closePaymentModal}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={proceedWithPayment}
+                      disabled={customAmount <= 0 || customAmount > selectedFeeForPayment.balance}
+                      className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      Proceed to Pay
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         )}
 
-        {/* SUBJECTS */}
+        {/* Other tabs (subjects, marks, attendance) remain unchanged */}
         {active === "subjects" && (
-            <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}> Current Semester Subjects </h2>
-                {loadingSubjects ? (
-                    <div className="text-center py-8 text-gray-500">Loading subjects...</div>
-                ) : (
-                    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Credits</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Semester</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {subjects.length > 0 ? subjects.map((sub) => (
-                                    <tr key={sub.subject_code} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{sub.subject_code}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.subject_name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.subject_type}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{sub.credits}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{sub.semester}</td>
-                                    </tr>
-                                )) : (
-                                    <tr>
-                                        <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No subjects found for current semester.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Subjects</h2>
+            {loadingSubjects ? (
+              <div className="text-center py-8 text-gray-500">Loading subjects...</div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Credits</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Semester</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {subjects.length > 0 ? subjects.map((sub) => (
+                      <tr key={sub.subject_code} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{sub.subject_code}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.subject_name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.subject_type}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{sub.credits}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{sub.semester}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No subjects found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* MARKS */}
         {active === "marks" && (
-            <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}> Current Semester Marks </h2>
-                {loadingMarks ? (
-                    <div className="text-center py-8 text-gray-500">Loading marks...</div>
-                ) : (
-                    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Marks</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Percentage (%)</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {marks.length > 0 ? marks.map((m) => (
-                                    <tr key={m.mark_id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{m.subject_code}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{m.subject_name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{m.total_marks?.toFixed(2) ?? '-'}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{m.percentage?.toFixed(2) ?? '-'}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-900">{m.grade ?? '-'}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${m.status === 'pass' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                                {m.status ?? '-'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                )) : (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">No marks recorded for current semester.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Marks</h2>
+            {loadingMarks ? (
+              <div className="text-center py-8 text-gray-500">Loading marks...</div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Marks</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Percentage (%)</th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {marks.length > 0 ? marks.map((m) => (
+                      <tr key={m.mark_id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{m.subject_code}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{m.subject_name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{m.total_marks?.toFixed(2) ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{m.percentage?.toFixed(2) ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-900">{m.grade ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${m.status === 'pass' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {m.status ?? '-'}
+                          </span>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">No marks recorded.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* ATTENDANCE */}
         {active === "attendance" && (
-            <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}> Current Semester Attendance </h2>
-                {loadingAttendance ? (
-                    <div className="text-center py-8 text-gray-500">Loading attendance...</div>
-                ) : (
-                    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Classes Attended</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Classes</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Attendance (%)</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {attendance.length > 0 ? attendance.map((item, index) => {
-                                    const total = item.total_classes || 0;
-                                    const attended = item.attended_classes || 0;
-                                    const percentage = total > 0 ? (attended / total) * 100 : 0;
-                                    const percentageColor = percentage >= 75 ? 'text-green-700 font-semibold' : percentage >= 60 ? 'text-yellow-700' : 'text-red-700 font-semibold';
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Attendance</h2>
+            {loadingAttendance ? (
+              <div className="text-center py-8 text-gray-500">Loading attendance...</div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Classes Attended</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Classes</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Attendance (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {attendance.length > 0 ? attendance.map((item, index) => {
+                      const total = item.total_classes || 0;
+                      const attended = item.attended_classes || 0;
+                      const percentage = total > 0 ? (attended / total) * 100 : 0;
+                      const percentageColor = percentage >= 75 ? 'text-green-700 font-semibold' : percentage >= 60 ? 'text-yellow-700' : 'text-red-700 font-semibold';
 
-                                    return (
-                                        <tr key={index} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.subject_name}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{attended}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{total}</td>
-                                            <td className={`px-6 py-4 whitespace-nowrap text-sm text-right ${percentageColor}`}>
-                                                {percentage.toFixed(2)}%
-                                            </td>
-                                        </tr>
-                                    );
-                                }) : (
-                                    <tr>
-                                        <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">No attendance records found.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+                      return (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.subject_name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{attended}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{total}</td>
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm text-right ${percentageColor}`}>
+                            {percentage.toFixed(2)}%
+                          </td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">No attendance records found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
-
       </main>
-      
-      {/* Removed the legacy payment modal JSX */}
-
     </div>
   );
 }
 
-// ------------------------- UTILITY COMPONENTS -------------------------
-// Helper for rendering profile fields
 function Field({ label, value }: { label: string; value?: any }) {
   return (
     <div className="flex flex-col">
@@ -774,7 +794,6 @@ function Field({ label, value }: { label: string; value?: any }) {
   );
 }
 
-// Helper for money formatting
 function fmtMoney(num?: number) {
   if (num === undefined || num === null) return "0.00";
   return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
