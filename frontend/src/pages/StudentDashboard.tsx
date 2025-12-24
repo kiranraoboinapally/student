@@ -38,6 +38,7 @@ type FeeItem = {
   amount_paid?: number;
   status?: string;
   balance?: number;
+  transaction_number?: string; // For history display
 };
 
 type AttendanceItem = {
@@ -99,6 +100,7 @@ export default function StudentDashboard(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ------------------------- API LOADERS -------------------------
   async function loadProfile() {
     setLoadingProfile(true);
     try {
@@ -114,60 +116,35 @@ export default function StudentDashboard(): JSX.Element {
       setLoadingProfile(false);
     }
   }
-async function loadFees() {
-  setLoadingFees(true);
-  try {
-    const res = await authFetch(`${apiBase}/student/fees/summary`);
-    if (!res.ok) {
-      setFees([]);
-      return;
+
+  // UPDATED loadFees – combines dues and history from the new API structure
+  async function loadFees() {
+    setLoadingFees(true);
+    try {
+      const res = await authFetch(`${apiBase}/student/fees/summary`);
+      if (!res.ok) {
+        setFees([]);
+        return;
+      }
+      const data = await res.json();
+
+      let list: FeeItem[] = [];
+
+      // 1. Add DUE items first (so they appear at the top)
+      if (data && Array.isArray(data.dues)) {
+        list.push(...data.dues.map(mapApiFeeToFeeItem));
+      }
+
+      // 2. Add PAID HISTORY items
+      if (data && Array.isArray(data.history)) {
+        list.push(...data.history.map(mapApiFeeToFeeItem));
+      }
+      
+      setFees(list);
+    } finally {
+      setLoadingFees(false);
     }
-    const data = await res.json();
-
-    let list: FeeItem[] = [];
-
-    if (data) {
-      // If API returns array directly
-      if (Array.isArray(data)) {
-        list = data.map(mapApiFeeToFeeItem);
-      }
-      // If API returns object with fees or registration_fees array
-      else if (Array.isArray(data.fees)) {
-        list = data.fees.map(mapApiFeeToFeeItem);
-      } else if (Array.isArray(data.registration_fees)) {
-        list = data.registration_fees.map(mapApiFeeToFeeItem);
-      }
-      // If API returns a single object (wrap it in array)
-      else if (typeof data === "object") {
-        list = [mapApiFeeToFeeItem(data)];
-      }
-    }
-
-    setFees(list);
-  } finally {
-    setLoadingFees(false);
   }
-}
-
-// Helper to map API fields to your FeeItem structure
-function mapApiFeeToFeeItem(apiFee: any): FeeItem {
-  const examFee = apiFee.ExpectedExamFee ?? 0;
-  const regFee = apiFee.ExpectedRegFee ?? 0;
-  const examPaid = apiFee.ExamFeePaid ?? 0;
-  const regPaid = apiFee.RegistrationFeePaid ?? 0;
-
-  return {
-    fee_due_id: apiFee.ExpectedFeeID,
-    fee_type: "Exam & Registration",
-    fee_head: "Total Fee",
-    original_amount: examFee + regFee,
-    amount_paid: examPaid + regPaid,
-    balance: examFee + regFee - (examPaid + regPaid),
-    status: (apiFee.OverallStatus ?? "Pending").toLowerCase(),
-    due_date: apiFee.DueDate ?? undefined,
-  };
-}
-
 
   async function loadAttendance() {
     setLoadingAttendance(true);
@@ -209,7 +186,6 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
       }
       const data = await res.json();
 
-      // Map API fields (PascalCase) to frontend fields
       const mapped: MarkItem[] = Array.isArray(data)
         ? data.map((m: any) => ({
             mark_id: m.MarkID,
@@ -227,6 +203,42 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
       setLoadingMarks(false);
     }
   }
+
+  // ------------------------- HELPERS -------------------------
+  // UPDATED mapApiFeeToFeeItem – simplified to handle both dues and history
+  function mapApiFeeToFeeItem(apiFee: any): FeeItem {
+    const originalAmount = apiFee.original_amount ?? 0;
+    const amountPaid = apiFee.amount_paid ?? 0;
+    
+    // Case 1: Paid History Record (has a transaction number/no balance)
+    if (apiFee.transaction_number || apiFee.TransactionNo) {
+      return {
+        fee_due_id: apiFee.id, 
+        fee_type: apiFee.fee_type || apiFee.Type || 'N/A', 
+        fee_head: apiFee.fee_head || apiFee.Head,
+        due_date: apiFee.transaction_date, // Using transaction_date for history
+        original_amount: originalAmount,
+        amount_paid: amountPaid,
+        balance: 0, // For history records, balance is 0
+        status: apiFee.payment_status || "Paid", 
+        transaction_number: apiFee.transaction_number || apiFee.TransactionNo,
+      };
+    }
+
+    // Case 2: Pending/Partial Due Record (from the 'dues' array)
+    return {
+      fee_due_id: apiFee.fee_due_id,
+      fee_type: apiFee.fee_type ?? 'Total Fee',
+      fee_head: apiFee.fee_head ?? 'Total Due',
+      due_date: apiFee.due_date,
+      original_amount: originalAmount,
+      amount_paid: amountPaid,
+      balance: Math.max(0, originalAmount - amountPaid),
+      status: apiFee.status?.toLowerCase() ?? 'pending',
+      transaction_number: undefined,
+    };
+  }
+  // ------------------------- END OF HELPERS -------------------------
 
   function openPayModal(fee: FeeItem) {
     setSelectedFee(fee);
@@ -287,12 +299,13 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
 
   const tabs: { key: "profile" | "fees" | "subjects" | "marks" | "attendance"; label: string }[] = [
     { key: "profile", label: "Personal Details" },
-    { key: "fees", label: "Fee Due Details" },
+    { key: "fees", label: "Fee Details" },
     { key: "subjects", label: "Subjects" },
     { key: "marks", label: "Marks" },
     { key: "attendance", label: "Attendance" },
   ];
 
+  // ------------------------- RENDER -------------------------
   return (
     <div className="min-h-screen flex bg-gray-100">
       {/* Sidebar */}
@@ -326,7 +339,7 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
               key={tab.key}
               onClick={() => setActive(tab.key)}
               className={`text-left px-3 py-2 rounded-md font-semibold ${
-                active === tab.key ? "bg-white text-[650C08]" : "bg-[rgba(255,255,255,0.06)]"
+                active === tab.key ? "bg-white text-[#650C08]" : "bg-[rgba(255,255,255,0.06)]"
               }`}
               style={active === tab.key ? { color: theme } : undefined}
             >
@@ -384,70 +397,130 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
           </div>
         )}
 
-        {/* FEES */}
+        {/* FEE DETAILS */}
         {active === "fees" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold" style={{ color: theme }}>
-                Fee Due Details
-              </h2>
-              <div className="flex items-center gap-3">
-                <div className="text-sm">Payment Type:</div>
-                <div className="flex gap-3">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="radio" name="paytype" defaultChecked className="form-radio" />
-                    Full Payment
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="radio" name="paytype" className="form-radio" />
-                    Partial Payment
-                  </label>
-                </div>
-              </div>
-            </div>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>
+              Fee Details
+            </h2>
 
             {loadingFees ? (
-              <div>Loading fees...</div>
-            ) : fees.length === 0 ? (
-              <div className="text-center text-gray-600 py-14">No fee dues found</div>
+              <div className="text-center py-8 text-gray-500">Loading fee details...</div>
             ) : (
-              <div className="space-y-4">
-                {fees.map((f) => (
-                  <div key={String(f.fee_due_id ?? Math.random())} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="font-semibold text-lg" style={{ color: theme }}>
-                        {f.fee_head ?? f.fee_type}
-                      </div>
-                      <div className="text-sm text-gray-600 mt-1">Fee Type: {f.fee_type ?? "-"}</div>
-                      <div className="text-sm text-gray-600 mt-1">Due Date: {fmtDate(f.due_date)}</div>
-                    </div>
-
-                    <div className="w-48 text-right">
-                      <div className="text-sm text-gray-500">Due Amount</div>
-                      <div className="font-bold text-xl">
-                        ₹ {fmtMoney(f.balance ?? ((f.original_amount ?? 0) - (f.amount_paid ?? 0)))}
-                      </div>
-                      {(f.status ?? "").toLowerCase() !== "paid" && (
-                        <div className="mt-3">
-                          <button onClick={() => openPayModal(f)} className="bg-[#650C08] text-white px-4 py-2 rounded-md">
-                            Pay
-                          </button>
-                        </div>
-                      )}
-                    </div>
+              <>
+                {/* Pending Dues Section */}
+                <h3 className="text-xl font-semibold mb-4" style={{ color: theme }}>
+                  Pending Dues
+                </h3>
+                {fees.filter(f => (f.balance ?? 0) > 0).length === 0 ? (
+                  <div className="text-center py-8 text-gray-600 bg-gray-50 rounded-lg">
+                    <div className="text-lg mb-2">No pending dues</div>
+                    <div className="text-sm">All your fees are up to date.</div>
                   </div>
-                ))}
-              </div>
-            )}
+                ) : (
+                  <div className="space-y-4 mb-8">
+                    {fees
+                      .filter(f => (f.balance ?? 0) > 0)
+                      .sort((a, b) => new Date(a.due_date || "").getTime() - new Date(b.due_date || "").getTime())
+                      .map((f) => (
+                        <div key={String(f.fee_due_id ?? Math.random())} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-lg">
+                          <div className="flex-1">
+                            <div className="font-semibold text-lg" style={{ color: theme }}>
+                              {f.fee_head ?? f.fee_type}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">Fee Type: {f.fee_type ?? "-"}</div>
+                            <div className="text-sm text-gray-600 mt-1">Due Date: {fmtDate(f.due_date)}</div>
+                          </div>
 
-            <div className="mt-6 p-4 bg-[#fff7f5] border rounded text-sm text-gray-700">
-              <strong>NOTE:</strong>
-              <ol className="list-decimal ml-5 mt-2">
-                <li>You must clear earlier dues before paying certain fees.</li>
-                <li>Ensure your details are correct before payment.</li>
-                <li>After payment, allow a few minutes for confirmation.</li>
-              </ol>
-            </div>
+                          <div className="w-48 text-right">
+                            <div className="text-sm text-gray-500">Due Amount</div>
+                            <div className="font-bold text-xl text-red-600">
+                              ₹ {fmtMoney(f.balance ?? ((f.original_amount ?? 0) - (f.amount_paid ?? 0)))}
+                            </div>
+                            <div className="mt-3">
+                              <button onClick={() => openPayModal(f)} className="bg-[#650C08] text-white px-4 py-2 rounded-md hover:bg-[#4e0806]">
+                                Pay Now
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {/* Payment History Section */}
+                <h3 className="text-xl font-semibold mb-4 mt-8" style={{ color: theme }}>
+                  Payment History
+                </h3>
+                {fees.filter(f => (f.balance ?? 0) === 0).length === 0 ? (
+                  <div className="text-center py-8 text-gray-600 bg-gray-50 rounded-lg">
+                    <div className="text-lg mb-2">No payment records</div>
+                    <div className="text-sm">Your payment history will appear here once payments are made.</div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Date
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Fee Type
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Amount Paid
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Transaction ID / Mode
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {fees
+                          .filter(f => (f.balance ?? 0) === 0)
+                          .sort((a, b) => new Date(b.due_date || "").getTime() - new Date(a.due_date || "").getTime())
+                          .map((f) => (
+                            <tr key={f.fee_due_id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {fmtDate(f.due_date)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" style={{ color: theme }}>
+                                {f.fee_head || f.fee_type || "-"}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                ₹ {fmtMoney(f.amount_paid || f.original_amount)}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600 font-mono text-xs break-all">
+                                {f.transaction_number || "-"}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                  {(f.status || "").toLowerCase().includes("success") || (f.status || "").toLowerCase() === "paid"
+                                    ? "Paid"
+                                    : f.status || "Paid"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="mt-6 p-4 bg-[#fff7f5] border rounded text-sm text-gray-700">
+                  <strong>NOTE:</strong>
+                  <ol className="list-decimal ml-5 mt-2">
+                    <li>You must clear earlier dues before paying certain fees.</li>
+                    <li>Ensure your details are correct before payment.</li>
+                    <li>After payment, allow a few minutes for confirmation.</li>
+                  </ol>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -467,19 +540,21 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
                 <table className="min-w-full border">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border px-4 py-3 text-left font-semibold">Subject Code</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Subject Name</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Type</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Credits</th>
+                      <th className="border px-4 py-2">Code</th>
+                      <th className="border px-4 py-2">Subject Name</th>
+                      <th className="border px-4 py-2">Type</th>
+                      <th className="border px-4 py-2">Credits</th>
+                      <th className="border px-4 py-2">Semester</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {subjects.map((sub, idx) => (
-                      <tr key={sub.subject_id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                        <td className="border px-4 py-3">{sub.subject_code || "-"}</td>
-                        <td className="border px-4 py-3 font-medium">{sub.subject_name || "-"}</td>
-                        <td className="border px-4 py-3">{sub.subject_type || "-"}</td>
-                        <td className="border px-4 py-3 text-center">{sub.credits ?? "-"}</td>
+                    {subjects.map((sub) => (
+                      <tr key={sub.subject_id}>
+                        <td className="border px-4 py-2">{sub.subject_code}</td>
+                        <td className="border px-4 py-2">{sub.subject_name}</td>
+                        <td className="border px-4 py-2">{sub.subject_type}</td>
+                        <td className="border px-4 py-2">{sub.credits}</td>
+                        <td className="border px-4 py-2">{sub.semester}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -499,35 +574,29 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
             {loadingMarks ? (
               <div>Loading marks...</div>
             ) : marks.length === 0 ? (
-              <div className="text-center text-gray-600 py-14">No marks found for current semester</div>
+              <div className="text-center text-gray-600 py-14">No marks found</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full border">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border px-4 py-3 text-left font-semibold">Subject Code</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Subject Name</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Total Marks</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Percentage</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Grade</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Status</th>
+                      <th className="border px-4 py-2">Subject Code</th>
+                      <th className="border px-4 py-2">Subject Name</th>
+                      <th className="border px-4 py-2">Total Marks</th>
+                      <th className="border px-4 py-2">Percentage</th>
+                      <th className="border px-4 py-2">Grade</th>
+                      <th className="border px-4 py-2">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {marks.map((m, idx) => (
-                      <tr key={m.mark_id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                        <td className="border px-4 py-3">{m.subject_code || "-"}</td>
-                        <td className="border px-4 py-3 font-medium">{m.subject_name || "-"}</td>
-                        <td className="border px-4 py-3 text-center">{m.total_marks ?? "-"}</td>
-                        <td className="border px-4 py-3 text-center">{m.percentage ?? "-"}</td>
-                        <td className="border px-4 py-3 text-center">{m.grade || "-"}</td>
-                        <td
-                          className={`border px-4 py-3 text-center font-semibold ${
-                            m.status === "pass" ? "text-green-600" : m.status === "fail" ? "text-red-600" : "text-gray-600"
-                          }`}
-                        >
-                          {m.status?.toUpperCase() ?? "-"}
-                        </td>
+                    {marks.map((m) => (
+                      <tr key={m.mark_id}>
+                        <td className="border px-4 py-2">{m.subject_code}</td>
+                        <td className="border px-4 py-2">{m.subject_name}</td>
+                        <td className="border px-4 py-2">{m.total_marks}</td>
+                        <td className="border px-4 py-2">{m.percentage}</td>
+                        <td className="border px-4 py-2">{m.grade}</td>
+                        <td className="border px-4 py-2">{m.status}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -553,23 +622,22 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
                 <table className="min-w-full border">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border px-4 py-3 text-left font-semibold">Subject Name</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Total Classes</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Attended</th>
-                      <th className="border px-4 py-3 text-left font-semibold">Percentage</th>
+                      <th className="border px-4 py-2">Subject Name</th>
+                      <th className="border px-4 py-2">Total Classes</th>
+                      <th className="border px-4 py-2">Attended Classes</th>
+                      <th className="border px-4 py-2">Attendance %</th>
                     </tr>
                   </thead>
                   <tbody>
                     {attendance.map((a, idx) => (
-                      <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                        <td className="border px-4 py-3 font-medium">{a.subject_name ?? "-"}</td>
-                        <td className="border px-4 py-3 text-center">{a.total_classes ?? "-"}</td>
-                        <td className="border px-4 py-3 text-center">{a.attended_classes ?? "-"}</td>
-                        <td className="border px-4 py-3 text-center">
+                      <tr key={idx}>
+                        <td className="border px-4 py-2">{a.subject_name}</td>
+                        <td className="border px-4 py-2">{a.total_classes}</td>
+                        <td className="border px-4 py-2">{a.attended_classes}</td>
+                        <td className="border px-4 py-2">
                           {a.total_classes && a.attended_classes
-                            ? Math.round((a.attended_classes / a.total_classes) * 100)
+                            ? ((a.attended_classes / a.total_classes) * 100).toFixed(2) + "%"
                             : "-"}
-                          %
                         </td>
                       </tr>
                     ))}
@@ -579,60 +647,65 @@ function mapApiFeeToFeeItem(apiFee: any): FeeItem {
             )}
           </div>
         )}
+      </main>
 
-        {/* Payment Modal */}
-        {payModalOpen && selectedFee && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-            <div className="bg-white rounded-lg w-96 p-6">
-              <h2 className="text-lg font-bold mb-4">Pay Fee: {selectedFee.fee_head ?? selectedFee.fee_type}</h2>
-              <div className="mb-4">
-                <label className="block mb-1 font-semibold">Amount</label>
-                <input
-                  type="number"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(Number(e.target.value))}
-                  className="w-full border px-3 py-2 rounded"
-                  min={0}
-                  max={selectedFee.balance ?? 0}
-                />
-              </div>
-              {payError && <div className="text-red-600 mb-3">{payError}</div>}
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setPayModalOpen(false)} className="px-4 py-2 rounded border">
-                  Cancel
-                </button>
-                <button
-                  onClick={submitPayment}
-                  disabled={payLoading}
-                  className="px-4 py-2 rounded bg-[#650C08] text-white"
-                >
-                  {payLoading ? "Processing..." : "Pay Now"}
-                </button>
-              </div>
+      {/* PAYMENT MODAL */}
+      {payModalOpen && selectedFee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 w-96 relative">
+            <h3 className="text-lg font-bold mb-4" style={{ color: theme }}>
+              Pay Fee: {selectedFee.fee_head}
+            </h3>
+            <div className="mb-4">
+              <label className="block mb-1">Amount</label>
+              <input
+                type="number"
+                value={payAmount}
+                onChange={(e) => setPayAmount(Number(e.target.value))}
+                className="w-full border px-3 py-2 rounded"
+              />
+            </div>
+            {payError && <div className="text-red-600 mb-2">{payError}</div>}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setPayModalOpen(false)}
+                className="px-4 py-2 border rounded hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitPayment}
+                className="px-4 py-2 bg-[#650C08] text-white rounded hover:bg-[#4e0806]"
+                disabled={payLoading}
+              >
+                {payLoading ? "Processing..." : "Pay Now"}
+              </button>
             </div>
           </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }
 
-// Helper components
+// ------------------------- UTILITY COMPONENTS -------------------------
 function Field({ label, value }: { label: string; value?: any }) {
   return (
-    <div>
+    <div className="flex flex-col">
       <div className="text-gray-500 text-sm">{label}</div>
-      <div className="font-medium">{value ?? "-"}</div>
+      <div className="font-semibold">{value ?? "-"}</div>
     </div>
   );
 }
 
-function fmtMoney(val: number) {
-  return val.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmtMoney(num?: number) {
+  if (num === undefined || num === null) return "0.00";
+  return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function fmtDate(val?: string) {
-  if (!val) return "-";
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? "-" : d.toLocaleDateString();
+function fmtDate(date?: string | null) {
+  if (!date) return "-";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-IN");
 }

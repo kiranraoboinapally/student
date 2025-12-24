@@ -57,7 +57,8 @@ type FeeDue struct {
 	FeeDueID       int       `gorm:"column:fee_due_id;primaryKey"`
 	StudentID      int       `gorm:"column:student_id"`
 	FeeTypeID      int       `gorm:"column:fee_type_id"`
-	FeeHead        string    `gorm:"column:fee_head"`
+	FeeHead        string    `gorm:"column:fee_head"` // <--- ADD THIS
+	FeeType        string    `gorm:"column:fee_type"`
 	DueDate        time.Time `gorm:"column:due_date"`
 	OriginalAmount float64   `gorm:"column:original_amount"`
 	AmountPaid     float64   `gorm:"column:amount_paid"`

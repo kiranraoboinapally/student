@@ -37,28 +37,31 @@ func main() {
 		auth.POST("/reset-password", controllers.ResetPassword)
 		auth.POST(
 			"/change-password",
-			middleware.AuthRoleMiddleware(5),
+			middleware.AuthRoleMiddleware(),
 			controllers.ChangePassword,
 		)
 	}
 
-	// ================= ADMIN ROUTES =================
+	// ================= ADMIN ROUTES (RESTORED to original structure) =================
 	admin := api.Group("/admin")
-	admin.Use(middleware.AuthRoleMiddleware(1)) // Admin role (assuming RoleID 1)
+	admin.Use(middleware.AuthRoleMiddleware(1)) // Admin role
 	{
-		// User & Registration Management
-		admin.POST("/create-user", controllers.CreateUserByAdmin)
+		// ---- Registration ----
+		admin.POST("/users/create", controllers.CreateUserByAdmin)
 		admin.GET("/pending-registrations", controllers.GetPendingRegistrations)
 		admin.POST("/approve-registration", controllers.ApproveRegistration)
 
-		// NEW: Fee Payment History
+		// NEW: Fee Payment History (Based on your previous setup)
 		admin.GET("/fees/payments", controllers.GetAllFeePaymentHistory)
 
-		// NEW: Marks Upload
+		// NEW: Marks Upload (Based on your previous setup)
 		admin.POST("/marks/upload", controllers.UploadStudentMarks)
+
+		// NOTE: Removed GetAdminDashboard, GetAllStudents, CreateFeeDue, and RecordAttendance
+		// to resolve the 'undefined' errors.
 	}
 
-	// ================= STUDENT ROUTES =================
+	// ================= STUDENT ROUTES (FIXED) =================
 	student := api.Group("/student")
 	student.Use(middleware.AuthRoleMiddleware(5)) // Student role
 	{
@@ -67,7 +70,12 @@ func main() {
 		student.GET("/dashboard", controllers.GetStudentDashboard)
 
 		// ---- Fees ----
-		student.GET("/fees/summary", controllers.GetStudentFeeSummary)
+		// *** THIS LINE IS THE FIX FOR HISTORY ***
+		student.GET("/fees/summary", controllers.GetStudentFees)
+		// *** THIS LINE IS THE FIX FOR PAYMENT ***
+		student.POST("/fees/pay", controllers.PayFee)
+
+		// Original, non-unified fee endpoints (keep for compatibility if needed)
 		student.GET("/fees/registration", controllers.GetStudentRegistrationFees)
 		student.GET("/fees/examination", controllers.GetStudentExaminationFees)
 
@@ -85,6 +93,5 @@ func main() {
 		profile.GET("/me", controllers.GetMyProfile)
 	}
 
-	// ================= START SERVER =================
-	r.Run(":" + config.ServerPort)
+	r.Run()
 }
