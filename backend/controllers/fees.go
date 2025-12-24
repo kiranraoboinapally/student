@@ -1,4 +1,4 @@
-// controllers/fees.go - FINAL VERSION
+// controllers/fees.go - FINAL WORKING & FIXED VERSION
 
 package controllers
 
@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -33,9 +34,8 @@ func InitRazorpay() {
 	rzpClient = razorpay.NewClient(RazorpayKeyID, RazorpaySecret)
 }
 
-/* ======================= SHARED HELPER ======================= */
+/* ======================= HELPERS ======================= */
 
-// Shared across fees.go and student_controller.go
 func getStudentEnrollment(c *gin.Context) (int64, error) {
 	uidVal, ok := c.Get("user_id")
 	if !ok {
@@ -46,9 +46,9 @@ func getStudentEnrollment(c *gin.Context) (int64, error) {
 	switch v := uidVal.(type) {
 	case int64:
 		userID = v
-	case float64:
-		userID = int64(v)
 	case int:
+		userID = int64(v)
+	case float64:
 		userID = int64(v)
 	default:
 		return 0, fmt.Errorf("invalid user id")
@@ -88,7 +88,7 @@ type DueFeeRecord struct {
 	Status         string  `json:"status"`
 }
 
-/* ======================= GET STUDENT FEES SUMMARY ======================= */
+/* ======================= GET STUDENT FEES ======================= */
 
 func GetStudentFees(c *gin.Context) {
 	enrollment, err := getStudentEnrollment(c)
@@ -99,119 +99,103 @@ func GetStudentFees(c *gin.Context) {
 
 	db := config.DB
 
-	// Pending Dues
+	/* ---------- DUES ---------- */
 	var expected models.ExpectedFee
-	dueItems := []DueFeeRecord{}
+	dues := []DueFeeRecord{}
 
 	if err := db.Where("enrollment_number = ?", enrollment).First(&expected).Error; err == nil {
-		addDue := func(feeType, feeHead string, expectedAmt, paidAmt float64) {
-			balance := expectedAmt - paidAmt
-			if balance > 0 {
-				dueItems = append(dueItems, DueFeeRecord{
-					FeeDueID:       0,
-					FeeType:        feeType,
-					FeeHead:        feeHead,
-					OriginalAmount: expectedAmt,
-					AmountPaid:     paidAmt,
-					DueDate:        time.Now().AddDate(0, 3, 0).Format("2006-01-02"),
-					Status:         "Pending",
-				})
-			}
+		if bal := expected.ExpectedRegFee - expected.RegistrationFeePaid; bal > 0 {
+			dues = append(dues, DueFeeRecord{
+				FeeType:        "Registration",
+				FeeHead:        "Registration Fee",
+				OriginalAmount: expected.ExpectedRegFee,
+				AmountPaid:     expected.RegistrationFeePaid,
+				DueDate:        time.Now().AddDate(0, 3, 0).Format("2006-01-02"),
+				Status:         "Pending",
+			})
 		}
-
-		addDue("Registration", "Registration Fee", expected.ExpectedRegFee, expected.RegistrationFeePaid)
-		addDue("Examination", "Examination Fee", expected.ExpectedExamFee, expected.ExamFeePaid)
+		if bal := expected.ExpectedExamFee - expected.ExamFeePaid; bal > 0 {
+			dues = append(dues, DueFeeRecord{
+				FeeType:        "Examination",
+				FeeHead:        "Examination Fee",
+				OriginalAmount: expected.ExpectedExamFee,
+				AmountPaid:     expected.ExamFeePaid,
+				DueDate:        time.Now().AddDate(0, 3, 0).Format("2006-01-02"),
+				Status:         "Pending",
+			})
+		}
 	}
 
-	// Full Payment History
-	var history []UnifiedFeeRecord
+	/* ---------- HISTORY ---------- */
+	history := []UnifiedFeeRecord{}
 
-	safederefString := func(s *string) string {
+	safeStr := func(s *string) string {
 		if s != nil {
 			return *s
 		}
 		return ""
 	}
-	safederefFloat := func(f *float64) float64 {
+	safeFloat := func(f *float64) float64 {
 		if f != nil {
 			return *f
 		}
-		return 0.0
+		return 0
 	}
 
-	// Registration Fees
 	var regFees []models.RegistrationFee
-	db.Where("enrollment_number = ?", enrollment).Order("created_at DESC").Find(&regFees)
+	db.Where("enrollment_number = ?", enrollment).Find(&regFees)
 	for _, f := range regFees {
-		amount := safederefFloat(f.FeeAmount)
-		txnDate := safederefString(f.TransactionDate)
-		if txnDate == "" && f.CreatedAt != nil {
-			txnDate = *f.CreatedAt
-		}
 		history = append(history, UnifiedFeeRecord{
 			ID:              f.RegnFeeID,
-			Type:            safederefString(f.FeeType),
+			Type:            safeStr(f.FeeType),
 			Head:            "Registration Fee",
-			OriginalAmount:  amount,
-			AmountPaid:      amount,
-			TransactionNo:   safederefString(f.TransactionNumber),
-			TransactionDate: txnDate,
-			Status:          safederefString(f.PaymentStatus),
-			CreatedAt:       safederefString(f.CreatedAt),
+			OriginalAmount:  safeFloat(f.FeeAmount),
+			AmountPaid:      safeFloat(f.FeeAmount),
+			TransactionNo:   safeStr(f.TransactionNumber),
+			TransactionDate: safeStr(f.TransactionDate),
+			Status:          safeStr(f.PaymentStatus),
+			CreatedAt:       safeStr(f.CreatedAt),
 		})
 	}
 
-	// Examination Fees
 	var examFees []models.ExaminationFee
-	db.Where("enrollment_number = ?", enrollment).Order("created_at DESC").Find(&examFees)
+	db.Where("enrollment_number = ?", enrollment).Find(&examFees)
 	for _, f := range examFees {
-		amount := safederefFloat(f.FeeAmount)
-		txnDate := safederefString(f.TransactionDate)
-		if txnDate == "" {
-			txnDate = time.Now().Format("2006-01-02")
-		}
 		history = append(history, UnifiedFeeRecord{
 			ID:              f.ExamFeeID,
-			Type:            safederefString(f.FeeType),
+			Type:            safeStr(f.FeeType),
 			Head:            "Examination Fee",
-			OriginalAmount:  amount,
-			AmountPaid:      amount,
-			TransactionNo:   safederefString(f.TransactionNo),
-			TransactionDate: txnDate,
-			Status:          safederefString(f.PaymentStatus),
-			CreatedAt:       txnDate,
+			OriginalAmount:  safeFloat(f.FeeAmount),
+			AmountPaid:      safeFloat(f.FeeAmount),
+			TransactionNo:   safeStr(f.TransactionNo),
+			TransactionDate: safeStr(f.TransactionDate),
+			Status:          safeStr(f.PaymentStatus),
+			CreatedAt:       safeStr(f.CreatedAt),
 		})
 	}
 
-	// Miscellaneous Fees
 	var miscFees []models.MiscellaneousFee
-	db.Where("enrollment_number = ?", enrollment).Order("created_at DESC").Find(&miscFees)
+	db.Where("enrollment_number = ?", enrollment).Find(&miscFees)
 	for _, f := range miscFees {
-		amount := safederefFloat(f.FeeAmount)
-		txnDate := safederefString(f.TransactionDate)
-		if txnDate == "" {
-			txnDate = time.Now().Format("2006-01-02")
-		}
 		history = append(history, UnifiedFeeRecord{
 			ID:              f.MiscFeeID,
-			Type:            safederefString(f.FeeType),
+			Type:            safeStr(f.FeeType),
 			Head:            "Miscellaneous Fee",
-			OriginalAmount:  amount,
-			AmountPaid:      amount,
-			TransactionNo:   safederefString(f.TransactionNo),
-			TransactionDate: txnDate,
-			Status:          safederefString(f.PaymentStatus),
-			CreatedAt:       txnDate,
+			OriginalAmount:  safeFloat(f.FeeAmount),
+			AmountPaid:      safeFloat(f.FeeAmount),
+			TransactionNo:   safeStr(f.TransactionNo),
+			TransactionDate: safeStr(f.TransactionDate),
+			Status:          safeStr(f.PaymentStatus),
 		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"dues":    dueItems,
+		"dues":    dues,
 		"history": history,
 	})
 }
 
-/* ======================= RAZORPAY FLOW ======================= */
+/* ======================= REQUEST PAYMENT - WITH CORRECT INSTITUTE NAME ======================= */
 
 func RequestPayment(c *gin.Context) {
 	enrollment, err := getStudentEnrollment(c)
@@ -231,23 +215,37 @@ func RequestPayment(c *gin.Context) {
 		return
 	}
 
+	db := config.DB
+
 	var user models.User
-	config.DB.Where("username = ?", strconv.FormatInt(enrollment, 10)).First(&user)
-	studentName := "Student " + strconv.FormatInt(enrollment, 10)
-	if user.FullName != "" {
-		studentName = user.FullName
+	db.Where("username = ?", strconv.FormatInt(enrollment, 10)).First(&user)
+
+	studentName := user.FullName
+	if studentName == "" {
+		studentName = "Student " + strconv.FormatInt(enrollment, 10)
 	}
 
+	contact := ""
+	if user.Mobile != nil {
+		contact = *user.Mobile
+	}
+
+	// Fetch institute name from master_student (this field exists and is used in your frontend)
+	instituteName := "Your Institute"
+	var master models.MasterStudent
+	if err := db.Where("enrollment_number = ?", enrollment).First(&master).Error; err == nil {
+		if master.InstituteName != nil && strings.TrimSpace(*master.InstituteName) != "" {
+			instituteName = strings.TrimSpace(*master.InstituteName)
+		}
+	}
+
+	// Create Razorpay order
 	order, err := rzpClient.Order.Create(map[string]interface{}{
 		"amount":   int(req.Amount * 100),
 		"currency": "INR",
 		"receipt":  fmt.Sprintf("fee_%d_%d", enrollment, time.Now().Unix()),
-		"notes": map[string]string{
-			"enrollment": strconv.FormatInt(enrollment, 10),
-			"fee_head":   req.FeeHead,
-			"fee_type":   req.FeeType,
-		},
 	}, nil)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order"})
 		return
@@ -258,29 +256,27 @@ func RequestPayment(c *gin.Context) {
 		"order_id":    order["id"],
 		"key_id":      RazorpayKeyID,
 		"amount":      req.Amount,
-		"name":        "Your Institute Name",
-		"description": fmt.Sprintf("%s - Enrollment %d", req.FeeHead, enrollment),
+		"name":        instituteName, // ← Now shows real institute name
+		"description": req.FeeHead,
 		"prefill": gin.H{
-			"name":  studentName,
-			"email": user.Email,
-		},
-		"notes": gin.H{
-			"enrollment": enrollment,
-			"fee_head":   req.FeeHead,
-			"fee_type":   req.FeeType,
+			"name":    studentName,
+			"email":   user.Email,
+			"contact": contact,
 		},
 	})
 }
+
+/* ======================= VERIFY PAYMENT - SUPPORTS PARTIAL PAYMENTS ======================= */
 
 func VerifyPaymentAndRecord(c *gin.Context) {
 	var payload struct {
 		RazorpayOrderID   string  `json:"razorpay_order_id" binding:"required"`
 		RazorpayPaymentID string  `json:"razorpay_payment_id" binding:"required"`
 		RazorpaySignature string  `json:"razorpay_signature" binding:"required"`
-		Amount            float64 `json:"amount" binding:"required"`
+		Amount            float64 `json:"amount" binding:"required,gt=0"`
 		FeeHead           string  `json:"fee_head" binding:"required"`
 		FeeType           string  `json:"fee_type" binding:"required"`
-		Enrollment        int64   `json:"enrollment"` // 🔥 FIXED
+		Enrollment        int64   `json:"enrollment" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&payload); err != nil {
@@ -292,71 +288,75 @@ func VerifyPaymentAndRecord(c *gin.Context) {
 		"razorpay_order_id":   payload.RazorpayOrderID,
 		"razorpay_payment_id": payload.RazorpayPaymentID,
 	}, payload.RazorpaySignature, RazorpaySecret) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payment signature"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid signature"})
 		return
 	}
 
 	db := config.DB
-	now := time.Now()
-	dateStr := now.Format("2006-01-02")
+	now := time.Now().Format("2006-01-02")
+	status := ptrString("Paid")
 
-	amountPtr := &payload.Amount
-	txnNoPtr := &payload.RazorpayPaymentID
-	datePtr := &dateStr
-	statusPtr := ptrString("Paid")
-
+	// Record payment in respective table
 	switch payload.FeeHead {
 	case "Registration Fee":
 		db.Create(&models.RegistrationFee{
 			EnrollmentNumber:  payload.Enrollment,
 			FeeType:           &payload.FeeType,
-			FeeAmount:         amountPtr,
-			TransactionNumber: txnNoPtr,
-			TransactionDate:   datePtr,
-			PaymentStatus:     statusPtr,
+			FeeAmount:         &payload.Amount,
+			TransactionNumber: &payload.RazorpayPaymentID,
+			TransactionDate:   &now,
+			PaymentStatus:     status,
 		})
 	case "Examination Fee":
 		db.Create(&models.ExaminationFee{
 			EnrollmentNumber: payload.Enrollment,
 			FeeType:          &payload.FeeType,
-			FeeAmount:        amountPtr,
-			TransactionNo:    txnNoPtr,
-			TransactionDate:  datePtr,
-			PaymentStatus:    statusPtr,
+			FeeAmount:        &payload.Amount,
+			TransactionNo:    &payload.RazorpayPaymentID,
+			TransactionDate:  &now,
+			PaymentStatus:    status,
 		})
 	case "Miscellaneous Fee":
 		db.Create(&models.MiscellaneousFee{
 			EnrollmentNumber: payload.Enrollment,
 			FeeType:          &payload.FeeType,
-			FeeAmount:        amountPtr,
-			TransactionNo:    txnNoPtr,
-			TransactionDate:  datePtr,
-			PaymentStatus:    statusPtr,
+			FeeAmount:        &payload.Amount,
+			TransactionNo:    &payload.RazorpayPaymentID,
+			TransactionDate:  &now,
+			PaymentStatus:    status,
 		})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid fee head"})
+		return
 	}
 
+	// UPDATE ExpectedFee FOR PARTIAL PAYMENTS - THIS IS THE KEY FIX
 	var expected models.ExpectedFee
 	if err := db.Where("enrollment_number = ?", payload.Enrollment).First(&expected).Error; err == nil {
 		updates := map[string]interface{}{
 			"total_paid": expected.TotalPaid + payload.Amount,
 		}
-		if payload.FeeHead == "Examination Fee" {
-			updates["exam_fee_paid"] = expected.ExamFeePaid + payload.Amount
-		} else if payload.FeeHead == "Registration Fee" {
+
+		if payload.FeeHead == "Registration Fee" {
 			updates["registration_fee_paid"] = expected.RegistrationFeePaid + payload.Amount
+		} else if payload.FeeHead == "Examination Fee" {
+			updates["exam_fee_paid"] = expected.ExamFeePaid + payload.Amount
 		}
+
 		db.Model(&expected).Updates(updates)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
-		"message":    "Payment recorded successfully",
+		"message":    "Payment verified and recorded",
 		"payment_id": payload.RazorpayPaymentID,
 	})
 }
 
+/* ======================= BLOCK DIRECT PAY ======================= */
+
 func PayFee(c *gin.Context) {
 	c.JSON(http.StatusBadRequest, gin.H{
-		"error": "Use /fees/request-payment and /fees/verify-payment for payments",
+		"error": "Use /fees/request-payment and /fees/verify-payment",
 	})
 }
