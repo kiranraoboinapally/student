@@ -197,7 +197,7 @@ export default function StudentLoginPage(): JSX.Element {
         {/* Demo Credentials */}
         <div className="mt-6 p-4 rounded-lg text-white text-xs" style={{ backgroundColor: "rgba(255,255,255,0.1)" }}>
           <p className="font-semibold mb-2">Demo Credentials:</p>
-          <p>Enrollment: 220155197248</p>
+          <p>Enrollment: 2599901000001 or 220155205701</p>
           <p>Password: ABCD1234</p>
         </div>
       </div>

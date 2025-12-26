@@ -110,7 +110,7 @@ export default function AdminLoginPage(): JSX.Element {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g., admin"
+                placeholder="e.g., admin1"
                 required
                 disabled={loading}
                 className="w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition"
@@ -178,7 +178,7 @@ export default function AdminLoginPage(): JSX.Element {
         {/* Demo Credentials */}
         <div className="mt-6 p-4 rounded-lg text-white text-xs" style={{ backgroundColor: "rgba(255,255,255,0.1)" }}>
           <p className="font-semibold mb-2">Demo Credentials:</p>
-          <p>Username: admin</p>
+          <p>Username: admin1</p>
           <p>Password: admin</p>
         </div>
       </div>
