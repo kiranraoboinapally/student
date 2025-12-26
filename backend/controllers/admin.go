@@ -13,140 +13,145 @@ import (
 	"github.com/kiranraoboinapally/student/backend/utils"
 )
 
-// ---------------- Admin User Creation ----------------
-type AdminCreateUserRequest struct {
-	Username string `json:"username" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
-	FullName string `json:"full_name"`
-	RoleID   int    `json:"role_id" binding:"required"`
-}
+// ADMIN – STUDENT LIST (FROM EXISTING TABLES)
 
-func CreateUserByAdmin(c *gin.Context) {
-	var req AdminCreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+func GetStudents(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset := (page - 1) * limit
 
 	db := config.DB
-	var existing models.User
-	if err := db.Where("email = ?", req.Email).Or("username = ?", req.Username).First(&existing).Error; err == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user with this email or username already exists"})
-		return
-	}
 
-	var roleExists int64
-	_ = db.Table("roles").Where("role_id = ?", req.RoleID).Count(&roleExists).Error
-	if roleExists == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "requested role_id does not exist"})
-		return
-	}
+	var students []models.MasterStudent
+	var total int64
 
-	hashed, _ := utils.HashPassword(req.Password)
-	user := models.User{
-		Username:     req.Username,
-		Email:        req.Email,
-		PasswordHash: hashed,
-		FullName:     req.FullName,
-		RoleID:       req.RoleID,
-		Status:       "active",
-	}
-	db.Create(&user)
+	db.Model(&models.MasterStudent{}).Count(&total)
 
-	c.JSON(http.StatusCreated, gin.H{"message": "user created", "user_id": user.UserID, "role_id": user.RoleID})
-}
-
-// ---------------- Get Pending Registrations ----------------
-func GetPendingRegistrations(c *gin.Context) {
-	db := config.DB
-	var users []models.User
-
-	if err := db.Where("status = ? AND role_id = ?", "pending", 5).
+	db.
 		Order("created_at desc").
-		Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch pending registrations"})
-		return
-	}
-
-	safeUsers := make([]gin.H, len(users))
-	for i, u := range users {
-		safeUsers[i] = gin.H{
-			"user_id":    u.UserID,
-			"username":   u.Username,
-			"email":      u.Email,
-			"full_name":  u.FullName,
-			"role_id":    u.RoleID,
-			"status":     u.Status,
-			"created_at": u.CreatedAt,
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{"pending_registrations": safeUsers})
-}
-
-// ---------------- Approve Registration ----------------
-type ApproveRegistrationRequest struct {
-	UserID int64  `json:"user_id" binding:"required"`
-	Action string `json:"action" binding:"required"`
-}
-
-func ApproveRegistration(c *gin.Context) {
-	var req ApproveRegistrationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if req.Action != "approve" && req.Action != "reject" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "action must be 'approve' or 'reject'"})
-		return
-	}
-
-	db := config.DB
-	var user models.User
-	if err := db.Where("user_id = ? AND status = ?", req.UserID, "pending").First(&user).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "pending registration not found"})
-		return
-	}
-
-	newStatus := "active"
-	if req.Action == "reject" {
-		newStatus = "rejected"
-	}
-
-	if err := db.Model(&user).Update("status", newStatus).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update status"})
-		return
-	}
+		Limit(limit).
+		Offset(offset).
+		Find(&students)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "registration " + req.Action + "d successfully",
-		"user_id": user.UserID,
-		"status":  newStatus,
+		"data": students,
+		"pagination": gin.H{
+			"page":        page,
+			"limit":       limit,
+			"total":       total,
+			"total_pages": (total + int64(limit) - 1) / int64(limit),
+		},
 	})
 }
 
-// ---------------- GET ALL FEE PAYMENT HISTORY ----------------
+// ADMIN – CREATE LOGIN ACCOUNT FOR STUDENT
+
+type AdminCreateStudentUserRequest struct {
+	EnrollmentNumber string `json:"enrollment_number" binding:"required"`
+	Email            string `json:"email" binding:"required,email"`
+	TempPassword     string `json:"temp_password" binding:"required,min=6"`
+}
+
+func CreateUserByAdmin(c *gin.Context) {
+	var req AdminCreateStudentUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	db := config.DB
+
+	// 1️⃣ Verify student exists
+	var student models.MasterStudent
+	if err := db.Where("enrollment_number = ?", req.EnrollmentNumber).
+		First(&student).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "student not found"})
+		return
+	}
+
+	// 2️⃣ Check if user already exists
+	var existing models.User
+	if err := db.Where("username = ?", req.EnrollmentNumber).
+		First(&existing).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "login already exists"})
+		return
+	}
+
+	// 3️⃣ Create user
+	hashed, _ := utils.HashPassword(req.TempPassword)
+
+	user := models.User{
+		Username:       req.EnrollmentNumber,
+		Email:          req.Email,
+		FullName:       student.StudentName,
+		PasswordHash:   hashed,
+		RoleID:         5, // STUDENT
+		Status:         "active",
+		IsTempPassword: true,
+		CreatedAt:      nil,
+	}
+
+	db.Create(&user)
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "student login created",
+		"user_id":  user.UserID,
+		"username": user.Username,
+	})
+}
+
+// ADMIN – LIST ALL USERS (PAGINATED)
+
+func GetAllUsers(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset := (page - 1) * limit
+
+	db := config.DB
+
+	var users []models.User
+	var total int64
+
+	db.Model(&models.User{}).Count(&total)
+
+	db.
+		Select("user_id, username, email, full_name, role_id, status, created_at").
+		Order("created_at desc").
+		Limit(limit).
+		Offset(offset).
+		Find(&users)
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": users,
+		"pagination": gin.H{
+			"page":        page,
+			"limit":       limit,
+			"total":       total,
+			"total_pages": (total + int64(limit) - 1) / int64(limit),
+		},
+	})
+}
+
+// ADMIN – FEE PAYMENT HISTORY
+
 func GetAllFeePaymentHistory(c *gin.Context) {
 	db := config.DB
 	enrollment := c.Query("enrollment_number")
 
 	var payments []models.FeePaymentDetail
-	query := db.Order("paid_at desc, payment_id desc")
+	query := db.Order("payment_id desc")
 
 	if enrollment != "" {
 		enNum, err := strconv.ParseInt(enrollment, 10, 64)
-		if err == nil {
-			query = query.Where("enrollment_no = ?", enNum)
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid enrollment number format"})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid enrollment number"})
 			return
 		}
+		query = query.Where("enrollment_number = ?", enNum)
 	}
 
 	if err := query.Find(&payments).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch payment history"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
 		return
 	}
 
@@ -156,7 +161,8 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 	})
 }
 
-// ---------------- UPLOAD STUDENT MARKS ----------------
+// ADMIN – UPLOAD / UPDATE STUDENT MARKS (UPSERT)
+
 type UploadMarksRequest struct {
 	Marks []struct {
 		EnrollmentNumber int64   `json:"enrollment_number" binding:"required"`
@@ -164,8 +170,8 @@ type UploadMarksRequest struct {
 		Semester         int     `json:"semester" binding:"required"`
 		MarksObtained    float64 `json:"marks_obtained" binding:"required"`
 		Grade            *string `json:"grade"`
-		MarksType        string  `json:"marks_type" binding:"required"`
-	} `json:"marks" binding:"required,dive"`
+		Status           string  `json:"status" binding:"required"` // internal/external
+	} `json:"marks" binding:"required"`
 }
 
 func UploadStudentMarks(c *gin.Context) {
@@ -176,39 +182,130 @@ func UploadStudentMarks(c *gin.Context) {
 	}
 
 	db := config.DB
-
 	var records []models.StudentMark
-	for _, m := range req.Marks {
-		// The Grade field in models.StudentMark is likely a *string.
-		// m.Grade is already a *string in this request, so we can pass it directly.
 
-		record := models.StudentMark{
+	for _, m := range req.Marks {
+
+		// ✅ DECLARE subject
+		var subject models.SubjectMaster
+
+		// ✅ FETCH subject details
+		if err := db.Where("subject_code = ?", m.SubjectCode).
+			First(&subject).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "subject not found: " + m.SubjectCode,
+			})
+			return
+		}
+
+		records = append(records, models.StudentMark{
 			EnrollmentNumber: m.EnrollmentNumber,
 			Semester:         m.Semester,
 			SubjectCode:      m.SubjectCode,
-			TotalMarks:       m.MarksObtained,
-			Grade:            m.Grade, // Correctly passes a *string
-			Status:           m.MarksType,
+			SubjectName:      subject.SubjectName, // ✅ now defined
+			SubjectType:      subject.SubjectType, // ✅ now defined
+			Grade:            m.Grade,
+			Status:           m.Status,
 			CreatedAt:        time.Now(),
-		}
-		records = append(records, record)
+		})
 	}
 
-	// Bulk insert or update (UPSERT)
 	err := db.Clauses(clause.OnConflict{
-		// Unique keys to identify a conflict: Enrollment, Semester, SubjectCode
-		Columns: []clause.Column{{Name: "enrollment_number"}, {Name: "semester"}, {Name: "subject_code"}},
-		// Columns to update when a conflict occurs (MUST be database column names)
-		DoUpdates: clause.AssignmentColumns([]string{"total_marks_obtained", "grade", "status"}),
+		Columns: []clause.Column{
+			{Name: "enrollment_number"},
+			{Name: "semester"},
+			{Name: "subject_code"},
+		},
+		DoUpdates: clause.AssignmentColumns(
+			[]string{"grade", "status"},
+		),
 	}).Create(&records).Error
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload marks: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":       "Marks uploaded successfully",
+		"message":       "marks uploaded successfully",
 		"total_records": len(records),
+	})
+}
+
+// ================= ADMIN – PENDING REGISTRATIONS =================
+
+// GET /api/admin/pending-registrations
+func GetPendingRegistrations(c *gin.Context) {
+	db := config.DB
+
+	var users []models.User
+
+	if err := db.
+		Where("status = ? AND role_id = ?", "inactive", 5).
+		Order("created_at DESC").
+		Find(&users).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to fetch inactive registrations",
+		})
+		return
+	}
+
+	response := make([]gin.H, 0)
+	for _, u := range users {
+		response = append(response, gin.H{
+			"user_id":    u.UserID,
+			"username":   u.Username,
+			"email":      u.Email,
+			"full_name":  u.FullName,
+			"status":     u.Status,
+			"created_at": u.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"pending_registrations": response,
+	})
+}
+
+// ================= ADMIN – APPROVE / REJECT REGISTRATION =================
+
+// POST /api/admin/approve-registration
+func ApproveRegistration(c *gin.Context) {
+	var req struct {
+		UserID int64  `json:"user_id" binding:"required"`
+		Action string `json:"action" binding:"required"` // approve | reject
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "action must be approve or reject",
+		})
+		return
+	}
+
+	newStatus := "active"
+	if req.Action == "reject" {
+		newStatus = "rejected"
+	}
+
+	db := config.DB
+	if err := db.Model(&models.User{}).
+		Where("user_id = ? AND status = ?", req.UserID, "inactive").
+		Update("status", newStatus).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to update user status",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "registration " + req.Action + "d successfully",
+		"user_id": req.UserID,
+		"status":  newStatus,
 	})
 }

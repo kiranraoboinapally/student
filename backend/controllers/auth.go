@@ -9,12 +9,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/kiranraoboinapally/student/backend/config"
 	"github.com/kiranraoboinapally/student/backend/models"
 	"github.com/kiranraoboinapally/student/backend/utils"
 )
 
-// ---------------- Register ----------------
+// ================= REGISTER =================
+
 type RegisterRequest struct {
 	EnrollmentNumber string `json:"enrollment_number" binding:"required"`
 	Email            string `json:"email" binding:"required,email"`
@@ -31,48 +33,35 @@ func Register(c *gin.Context) {
 
 	db := config.DB
 	var master models.MasterStudent
-	found := false
 
-	// Try numeric enrollment
-	if enNum, err := strconv.ParseInt(req.EnrollmentNumber, 10, 64); err == nil && enNum != 0 {
-		if err := db.Where("enrollment_number = ?", enNum).First(&master).Error; err == nil {
-			found = true
-		}
-	}
-
-	// fallback to act_students
-	if !found {
-		var act models.ActStudent
-		if err := db.Where("Enrollment_Number = ?", req.EnrollmentNumber).
-			First(&act).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "invalid enrollment number",
-			})
-			return
-		}
-
-	}
-
-	if !found {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "student not found for given enrollment/registration number"})
+	// Validate enrollment number
+	enNum, err := strconv.ParseInt(req.EnrollmentNumber, 10, 64)
+	if err != nil || enNum == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid enrollment number"})
 		return
 	}
 
-	// Check existing user
+	if err := db.Where("enrollment_number = ?", enNum).First(&master).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "student not found"})
+		return
+	}
+
+	// Check if user already exists
 	var existing models.User
-	if err := db.Where("email = ?", req.Email).First(&existing).Error; err == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user with this email already exists"})
+	if err := db.Where("username = ? OR email = ?", req.EnrollmentNumber, req.Email).
+		First(&existing).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user already exists"})
 		return
 	}
 
 	hashed, err := utils.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
 		return
 	}
 
 	fullName := req.FullName
-	if fullName == "" && master.StudentName != "" {
+	if fullName == "" {
 		fullName = master.StudentName
 	}
 
@@ -81,9 +70,9 @@ func Register(c *gin.Context) {
 		Email:          req.Email,
 		PasswordHash:   hashed,
 		FullName:       fullName,
-		RoleID:         5,         // student
-		Status:         "pending", // pending admin approval
-		IsTempPassword: true,
+		RoleID:         5,          // student
+		Status:         "inactive", // admin approval required
+		IsTempPassword: false,      // student sets own password
 	}
 
 	if err := db.Create(&user).Error; err != nil {
@@ -92,16 +81,15 @@ func Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message":  "registration successful, awaiting admin approval",
-		"username": user.Username,
-		"user_id":  user.UserID,
+		"message": "registration successful, awaiting admin approval",
 	})
 }
 
-// ---------------- Login ----------------
+// ================= LOGIN =================
+
 type LoginRequest struct {
-	UsernameOrStudentID string `json:"username" binding:"required"` // username or student_id
-	Password            string `json:"password" binding:"required"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 func Login(c *gin.Context) {
@@ -113,43 +101,24 @@ func Login(c *gin.Context) {
 
 	db := config.DB
 	var user models.User
-	var err error
 
-	// 1) Try username as-is
-	err = db.Where("username = ?", req.UsernameOrStudentID).First(&user).Error
-	if err != nil {
-		// 2) fallback: student_id -> enrollment -> username
-		// ONLY enrollment number (username)
-		err = db.Where("username = ?", req.UsernameOrStudentID).First(&user).Error
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid enrollment number or password"})
-			return
-		}
-
-	}
-
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+	if err := db.Where("username = ?", req.Username).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 
-	// Check if user is active
-	if user.Status == "pending" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "account pending admin approval"})
-		return
-	}
-	if user.Status == "inactive" || user.Status == "blocked" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "account is inactive"})
+	if user.Status != "active" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "account pending admin approval",
+		})
 		return
 	}
 
-	// Check password
 	if !utils.CheckPasswordHash(req.Password, user.PasswordHash) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 
-	// Create JWT
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id":  user.UserID,
 		"username": user.Username,
@@ -159,7 +128,7 @@ func Login(c *gin.Context) {
 
 	tokenStr, err := token.SignedString([]byte(config.JwtSecret))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token creation failed"})
 		return
 	}
 
@@ -173,30 +142,20 @@ func Login(c *gin.Context) {
 	})
 }
 
-// ---------------- Change Password ----------------
+// ================= CHANGE PASSWORD =================
+
 type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required,min=6"`
 }
 
 func ChangePassword(c *gin.Context) {
-	val, ok := c.Get("user_id")
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	var userID int64
-	switch v := val.(type) {
-	case int64:
-		userID = v
-	case float64:
-		userID = int64(v)
-	case int:
-		userID = int64(v)
-	default:
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id type"})
-		return
-	}
+	userID := int64(userIDVal.(float64))
 
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -206,23 +165,25 @@ func ChangePassword(c *gin.Context) {
 
 	hashed, err := utils.HashPassword(req.NewPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
 		return
 	}
 
-	db := config.DB
-	if err := db.Model(&models.User{}).Where("user_id = ?", userID).Updates(map[string]interface{}{
-		"password_hash":    hashed,
-		"is_temp_password": false,
-	}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+	if err := config.DB.Model(&models.User{}).
+		Where("user_id = ?", userID).
+		Updates(map[string]interface{}{
+			"password_hash":    hashed,
+			"is_temp_password": false,
+		}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "password update failed"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
 }
 
-// ---------------- Forgot Password ----------------
+// ================= FORGOT PASSWORD =================
+
 type ForgotPasswordRequest struct {
 	Email string `json:"email" binding:"required,email"`
 }
@@ -236,45 +197,38 @@ func ForgotPassword(c *gin.Context) {
 
 	db := config.DB
 	var user models.User
-	if err := db.Where("email = ? AND status = ?", req.Email, "active").First(&user).Error; err != nil {
+
+	if err := db.Where("email = ? AND status = 'active'", req.Email).
+		First(&user).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "if email exists, reset link will be sent"})
 		return
 	}
 
 	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate token"})
-		return
-	}
+	rand.Read(tokenBytes)
 	token := hex.EncodeToString(tokenBytes)
 
 	expiresAt := time.Now().Add(1 * time.Hour)
 
-	if err := db.Exec("UPDATE password_reset_tokens SET used = TRUE WHERE user_id = ? AND used = FALSE", user.UserID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
+	db.Exec("UPDATE password_reset_tokens SET used = TRUE WHERE user_id = ?", user.UserID)
 
-	resetToken := map[string]interface{}{
+	db.Table("password_reset_tokens").Create(map[string]interface{}{
 		"user_id":    user.UserID,
 		"email":      req.Email,
 		"token":      token,
 		"expires_at": expiresAt,
 		"used":       false,
-	}
+	})
 
-	if err := db.Table("password_reset_tokens").Create(resetToken).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create reset token"})
-		return
-	}
-
+	// ⚠️ DEV ONLY – send via email in production
 	c.JSON(http.StatusOK, gin.H{
 		"message": "if email exists, reset link will be sent",
 		"token":   token,
 	})
 }
 
-// ---------------- Reset Password ----------------
+// ================= RESET PASSWORD =================
+
 type ResetPasswordRequest struct {
 	Token       string `json:"token" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=6"`
@@ -288,54 +242,37 @@ func ResetPassword(c *gin.Context) {
 	}
 
 	db := config.DB
-	var resetToken struct {
-		ID        int       `gorm:"column:id"`
-		UserID    int64     `gorm:"column:user_id"`
-		Token     string    `gorm:"column:token"`
-		ExpiresAt time.Time `gorm:"column:expires_at"`
-		Used      bool      `gorm:"column:used"`
+	var reset struct {
+		ID        int
+		UserID    int64
+		ExpiresAt time.Time
+		Used      bool
 	}
 
 	if err := db.Table("password_reset_tokens").
 		Where("token = ? AND used = FALSE", req.Token).
-		First(&resetToken).Error; err != nil {
+		First(&reset).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
 		return
 	}
 
-	if time.Now().After(resetToken.ExpiresAt) {
+	if time.Now().After(reset.ExpiresAt) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "token expired"})
 		return
 	}
 
-	hashed, err := utils.HashPassword(req.NewPassword)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
-		return
-	}
+	hashed, _ := utils.HashPassword(req.NewPassword)
 
 	tx := db.Begin()
-	if tx.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "transaction failed"})
-		return
-	}
+	tx.Model(&models.User{}).
+		Where("user_id = ?", reset.UserID).
+		Update("password_hash", hashed)
 
-	if err := tx.Model(&models.User{}).Where("user_id = ?", resetToken.UserID).Updates(map[string]interface{}{
-		"password_hash":    hashed,
-		"is_temp_password": false,
-	}).Error; err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
-		return
-	}
-
-	if err := tx.Table("password_reset_tokens").Where("id = ?", resetToken.ID).Update("used", true).Error; err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to mark token as used"})
-		return
-	}
+	tx.Table("password_reset_tokens").
+		Where("id = ?", reset.ID).
+		Update("used", true)
 
 	tx.Commit()
 
-	c.JSON(http.StatusOK, gin.H{"message": "password reset successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "password reset successful"})
 }

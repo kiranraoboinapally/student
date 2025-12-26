@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from "./auth/AuthProvider";
 
 import LandingPage from "./components/LandingPage";
 import StudentLoginPage from "./components/StudentLoginPage";
-import StudentRegistrationPage from "./components/StudentRegistartionpage";
+import StudentRegistrationPage from "./components/StudentRegistrationPage";
 import AdminLoginPage from "./components/AdminLoginPage";
 
 import StudentDashboard from "./pages/StudentDashboard";

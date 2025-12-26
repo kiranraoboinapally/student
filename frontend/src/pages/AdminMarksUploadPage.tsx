@@ -1,201 +1,336 @@
-// File: frontend/pages/AdminMarksUploadPage.tsx
-
 import React, { useState } from "react";
 import { useAuth, apiBase } from "../auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
+import { BookOpen, Upload, AlertCircle, CheckCircle, ArrowLeft, Download } from "lucide-react";
 
-// Mock student list for demonstration, in a real app you'd fetch this
-const mockStudents = [
-    { enrollment_number: 20250001, full_name: "Alice Smith", marks: 0, grade: "" },
-    { enrollment_number: 20250002, full_name: "Bob Johnson", marks: 0, grade: "" },
-    { enrollment_number: 20250003, full_name: "Charlie Brown", marks: 0, grade: "" },
-];
-
-interface MarkEntry {
-    enrollment_number: number;
-    full_name: string;
-    marks: number;
-    grade: string;
+interface MarkSubmission {
+  id: string;
+  enrollment: string;
+  subjectCode: string;
+  marks: number;
+  status: 'pending' | 'success' | 'error';
+  message: string;
 }
 
 export default function AdminMarksUploadPage() {
-    const { authFetch } = useAuth();
-    const navigate = useNavigate();
-    const [subjectCode, setSubjectCode] = useState("");
-    const [semester, setSemester] = useState("");
-    const [marksType, setMarksType] = useState("Internal");
-    const [marksList, setMarksList] = useState<MarkEntry[]>(mockStudents);
-    const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const { authFetch } = useAuth();
+  const navigate = useNavigate();
 
-    const handleMarksChange = (en: number, value: number) => {
-        setMarksList(prev => prev.map(entry => 
-            entry.enrollment_number === en ? { ...entry, marks: value } : entry
-        ));
-    };
+  const [enrollment, setEnrollment] = useState("");
+  const [subjectCode, setSubjectCode] = useState("");
+  const [marks, setMarks] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [submissions, setSubmissions] = useState<MarkSubmission[]>([]);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkData, setBulkData] = useState("");
 
-    const handleGradeChange = (en: number, value: string) => {
-        setMarksList(prev => prev.map(entry => 
-            entry.enrollment_number === en ? { ...entry, grade: value.toUpperCase() } : entry
-        ));
-    };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setMessage(null);
-        setLoading(true);
+    const submissionId = `${Date.now()}`;
+    setSubmissions(prev => [...prev, {
+      id: submissionId,
+      enrollment,
+      subjectCode,
+      marks: Number(marks),
+      status: 'pending',
+      message: 'Processing...'
+    }]);
 
-        // Filter out students with no marks entered (optional)
-        const validMarks = marksList.filter(m => m.marks > 0);
+    try {
+      const res = await authFetch(`${apiBase}/admin/marks/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enrollment_number: Number(enrollment),
+          subject_code: subjectCode,
+          marks: Number(marks),
+        }),
+      });
 
-        if (validMarks.length === 0) {
-            setMessage({ type: 'error', text: "No marks entered for upload." });
-            setLoading(false);
-            return;
+      const data = await res.json();
+      
+      setSubmissions(prev => prev.map(s => 
+        s.id === submissionId 
+          ? { ...s, status: res.ok ? 'success' : 'error', message: data.message || data.error || (res.ok ? 'Marks uploaded!' : 'Failed') }
+          : s
+      ));
+
+      if (res.ok) {
+        setEnrollment("");
+        setSubjectCode("");
+        setMarks("");
+      }
+    } catch (err) {
+      setSubmissions(prev => prev.map(s => 
+        s.id === submissionId 
+          ? { ...s, status: 'error', message: 'Network error' }
+          : s
+      ));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkImport = async () => {
+    const lines = bulkData.trim().split('\n');
+    let successCount = 0;
+    
+    for (const line of lines) {
+      const [enr, subCode, mrks] = line.split(',').map(s => s.trim());
+      if (!enr || !subCode || !mrks) continue;
+
+      const submissionId = `bulk-${Date.now()}-${Math.random()}`;
+      setSubmissions(prev => [...prev, {
+        id: submissionId,
+        enrollment: enr,
+        subjectCode: subCode,
+        marks: Number(mrks),
+        status: 'pending',
+        message: 'Processing...'
+      }]);
+
+      try {
+        const res = await authFetch(`${apiBase}/admin/marks/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enrollment_number: Number(enr),
+            subject_code: subCode,
+            marks: Number(mrks),
+          }),
+        });
+
+        if (res.ok) {
+          successCount++;
+          setSubmissions(prev => prev.map(s => 
+            s.id === submissionId ? { ...s, status: 'success', message: 'Uploaded' } : s
+          ));
+        } else {
+          setSubmissions(prev => prev.map(s => 
+            s.id === submissionId ? { ...s, status: 'error', message: 'Failed' } : s
+          ));
         }
+      } catch {
+        setSubmissions(prev => prev.map(s => 
+          s.id === submissionId ? { ...s, status: 'error', message: 'Error' } : s
+        ));
+      }
+    }
 
-        const payload = {
-            subject_code: subjectCode,
-            semester: Number(semester),
-            marks_type: marksType,
-            marks: validMarks.map(m => ({
-                enrollment_number: m.enrollment_number,
-                marks_obtained: m.marks,
-                grade: m.grade
-            }))
-        };
+    alert(`Bulk upload complete! ${successCount} marks uploaded successfully.`);
+    setBulkData("");
+    setBulkMode(false);
+  };
 
-        try {
-            const res = await authFetch(`${apiBase}/admin/marks/upload`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
+  const downloadTemplate = () => {
+    const csv = "enrollment,subject_code,marks\n220155197248,CS101,85\n220155197249,CS101,92";
+    const element = document.createElement("a");
+    element.setAttribute("href", "data:text/csv;charset=utf-8," + encodeURIComponent(csv));
+    element.setAttribute("download", "marks_template.csv");
+    element.style.display = "none";
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
 
-            const data = await res.json();
-            if (!res.ok) {
-                setMessage({ type: 'error', text: data.error || "Failed to upload marks." });
-                return;
-            }
-
-            setMessage({ type: 'success', text: data.message || "Marks uploaded successfully!" });
-
-        } catch (err) {
-            setMessage({ type: 'error', text: "Network error. Could not connect to API." });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-gray-100 p-8">
-            <header className="flex justify-between items-center mb-8">
-                <h1 className="text-3xl font-bold text-[#650C08]">Upload Student Marks</h1>
-                <button
-                    onClick={() => navigate("/admin/dashboard")}
-                    className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition"
-                >
-                    ← Back to Dashboard
-                </button>
-            </header>
-
-            <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-8">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid grid-cols-3 gap-4 border-b pb-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Subject Code</label>
-                            <input
-                                type="text"
-                                required
-                                value={subjectCode}
-                                onChange={(e) => setSubjectCode(e.target.value)}
-                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3"
-                                placeholder="e.g., CS101"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Semester</label>
-                            <input
-                                type="number"
-                                required
-                                min="1"
-                                value={semester}
-                                onChange={(e) => setSemester(e.target.value)}
-                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3"
-                                placeholder="e.g., 5"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Marks Type</label>
-                            <select
-                                required
-                                value={marksType}
-                                onChange={(e) => setMarksType(e.target.value)}
-                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3"
-                            >
-                                <option value="Internal">Internal</option>
-                                <option value="External">External (Final Exam)</option>
-                                <option value="Practical">Practical</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <h3 className="text-xl font-bold pt-4 text-gray-800">Enter Marks (Max Marks: 100 - Adjust as needed)</h3>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enrollment No.</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Marks Obtained</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Grade (Optional)</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {marksList.map((student) => (
-                                    <tr key={student.enrollment_number}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{student.enrollment_number}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.full_name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                max="100" // Set max marks here
-                                                value={student.marks || ""}
-                                                onChange={(e) => handleMarksChange(student.enrollment_number, Number(e.target.value))}
-                                                className="w-full border rounded-md p-2 text-center"
-                                            />
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <input
-                                                type="text"
-                                                value={student.grade}
-                                                onChange={(e) => handleGradeChange(student.enrollment_number, e.target.value)}
-                                                className="w-full border rounded-md p-2 text-center uppercase"
-                                                maxLength={4}
-                                            />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {message && (
-                        <div className={`p-3 rounded-md text-center ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                            {message.text}
-                        </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={loading || !subjectCode || !semester}
-                        className="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#650C08] hover:bg-[#7a1d16] disabled:opacity-50 transition"
-                    >
-                        {loading ? "Uploading Marks..." : "Upload Marks"}
-                    </button>
-                </form>
-            </div>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      {/* Header */}
+      <div className="bg-slate-950/80 backdrop-blur border-b border-slate-700 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
+          <button
+            onClick={() => navigate('/admin/dashboard')}
+            className="p-2 hover:bg-slate-700 rounded-lg transition"
+          >
+            <ArrowLeft className="w-5 h-5 text-white" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Upload Student Marks</h1>
+            <p className="text-sm text-slate-400">Manage academic marks and grades</p>
+          </div>
         </div>
-    );
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Form Section */}
+          <div className="lg:col-span-2">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-xl">
+              {/* Mode Toggle */}
+              <div className="flex gap-2 mb-6">
+                <button
+                  onClick={() => setBulkMode(false)}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                    !bulkMode 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  Single Entry
+                </button>
+                <button
+                  onClick={() => setBulkMode(true)}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition ${
+                    bulkMode 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  Bulk Upload
+                </button>
+              </div>
+
+              {!bulkMode ? (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                      Enrollment Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={enrollment}
+                      onChange={(e) => setEnrollment(e.target.value)}
+                      placeholder="e.g., 220155197248"
+                      required
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                      Subject Code *
+                    </label>
+                    <input
+                      type="text"
+                      value={subjectCode}
+                      onChange={(e) => setSubjectCode(e.target.value.toUpperCase())}
+                      placeholder="e.g., CS101"
+                      required
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                      Marks (0-100) *
+                    </label>
+                    <input
+                      type="number"
+                      value={marks}
+                      onChange={(e) => setMarks(e.target.value)}
+                      placeholder="0-100"
+                      required
+                      min="0"
+                      max="100"
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-6 px-6 py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 disabled:opacity-50 text-white font-bold rounded-lg transition shadow-lg"
+                  >
+                    {loading ? 'Uploading...' : 'Upload Marks'}
+                  </button>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={downloadTemplate}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition text-sm"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download Template
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                      Paste CSV Data (enrollment, subjectCode, marks)
+                    </label>
+                    <textarea
+                      value={bulkData}
+                      onChange={(e) => setBulkData(e.target.value)}
+                      placeholder="220155197248,CS101,85&#10;220155197249,CS101,92"
+                      rows={8}
+                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:outline-none font-mono text-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={handleBulkImport}
+                    disabled={!bulkData.trim()}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 disabled:opacity-50 text-white font-bold rounded-lg transition shadow-lg"
+                  >
+                    Upload Bulk Data
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Grading Scale Info */}
+            <div className="bg-purple-900/30 border border-purple-700 rounded-xl p-4 mt-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-purple-300 font-semibold">A</p>
+                  <p className="text-purple-400">90-100</p>
+                </div>
+                <div>
+                  <p className="text-purple-300 font-semibold">B</p>
+                  <p className="text-purple-400">80-89</p>
+                </div>
+                <div>
+                  <p className="text-purple-300 font-semibold">C</p>
+                  <p className="text-purple-400">70-79</p>
+                </div>
+                <div>
+                  <p className="text-purple-300 font-semibold">D</p>
+                  <p className="text-purple-400">60-69</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Submissions List */}
+          <div className="lg:col-span-1">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-xl sticky top-24">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <BookOpen className="w-5 h-5" />
+                Recent Uploads
+              </h3>
+
+              {submissions.length === 0 ? (
+                <p className="text-slate-400 text-center py-8">No uploads yet</p>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {submissions.slice().reverse().map(sub => (
+                    <div key={sub.id} className={`p-3 rounded-lg border ${
+                      sub.status === 'success' 
+                        ? 'bg-green-900/30 border-green-700'
+                        : sub.status === 'error'
+                        ? 'bg-red-900/30 border-red-700'
+                        : 'bg-slate-700 border-slate-600'
+                    }`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white font-mono text-xs">{sub.enrollment}</p>
+                          <p className="text-slate-300 text-xs">{sub.subjectCode} - {sub.marks}/100</p>
+                        </div>
+                        {sub.status === 'success' && <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />}
+                        {sub.status === 'error' && <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
+                      </div>
+                      <p className="text-slate-400 text-xs mt-1">{sub.message}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

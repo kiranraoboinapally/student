@@ -113,7 +113,7 @@ type MarkItem = {
 
 function getEnrollmentNumber(profile: ProfileShape | null): string {
   if (!profile) return "";
-  const masterEnr = profile.master_student?.enrollment_number || profile.master_student?.EnrollmentNumber;
+  const masterEnr = profile.master_student?.enrollment_number;
   const actEnr = profile.act_student?.EnrollmentNumber;
   const userEnr = profile.user?.username;
   return (masterEnr || actEnr || userEnr || "").toString();
@@ -134,7 +134,6 @@ export default function StudentDashboard(): JSX.Element {
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [loadingMarks, setLoadingMarks] = useState(true);
   const [active, setActive] = useState<"profile" | "fees" | "subjects" | "marks" | "attendance">("profile");
-
   // New states for custom amount modal
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedFeeForPayment, setSelectedFeeForPayment] = useState<FeeItem | null>(null);
@@ -165,7 +164,7 @@ export default function StudentDashboard(): JSX.Element {
   async function loadProfile() {
     setLoadingProfile(true);
     try {
-      const res = await authFetch(`${apiBase}/profile/me`);
+      const res = await authFetch(`${apiBase}/student/profile`);
       if (!res.ok) {
         logout();
         navigate("/login");
@@ -653,7 +652,7 @@ export default function StudentDashboard(): JSX.Element {
           </div>
         )}
 
-        {/* Other tabs (subjects, marks, attendance) remain unchanged */}
+        {/* SUBJECTS */}
         {active === "subjects" && (
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Subjects</h2>
@@ -692,6 +691,7 @@ export default function StudentDashboard(): JSX.Element {
           </div>
         )}
 
+        {/* MARKS */}
         {active === "marks" && (
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Marks</h2>
@@ -736,6 +736,7 @@ export default function StudentDashboard(): JSX.Element {
           </div>
         )}
 
+        {/* ATTENDANCE */}
         {active === "attendance" && (
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Current Semester Attendance</h2>
@@ -758,7 +759,6 @@ export default function StudentDashboard(): JSX.Element {
                       const attended = item.attended_classes || 0;
                       const percentage = total > 0 ? (attended / total) * 100 : 0;
                       const percentageColor = percentage >= 75 ? 'text-green-700 font-semibold' : percentage >= 60 ? 'text-yellow-700' : 'text-red-700 font-semibold';
-
                       return (
                         <tr key={index} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.subject_name}</td>

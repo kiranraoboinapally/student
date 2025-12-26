@@ -53,9 +53,14 @@ func main() {
 
 	// ================= ADMIN ROUTES =================
 	admin := api.Group("/admin")
-	admin.Use(middleware.AuthRoleMiddleware(1)) // Admin only (role ID 1)
+	admin.Use(middleware.AuthRoleMiddleware(1))
 	{
+		admin.GET("/students", controllers.GetStudents)
+
 		admin.POST("/users/create", controllers.CreateUserByAdmin)
+		admin.GET("/users", controllers.GetAllUsers)
+
+		// ✅ MISSING ROUTES (ADD THESE)
 		admin.GET("/pending-registrations", controllers.GetPendingRegistrations)
 		admin.POST("/approve-registration", controllers.ApproveRegistration)
 
