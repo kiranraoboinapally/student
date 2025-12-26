@@ -1,148 +1,185 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, apiBase } from "../auth/AuthProvider";
+import { LogIn, Eye, EyeOff } from "lucide-react";
 
-export default function AdminLoginPage() {
+export default function AdminLoginPage(): JSX.Element {
   const { login } = useAuth();
   const navigate = useNavigate();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const logoSrc = "/Logo.png";
+  const theme = "#650C08";
+
+  const currentDate = useMemo(() => {
+    const d = new Date();
+    return d
+      .toLocaleString("en-GB", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+      .replace(",", "");
+  }, []);
+
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError("");
+    setError(null);
 
     try {
+      const payload = { username, password };
       const res = await fetch(`${apiBase}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        setError(data.error || "Invalid credentials");
+      if (!res.ok || !data.token) {
+        setError("Invalid Username or Password");
         setLoading(false);
         return;
       }
 
-      login(data.token, Number(data.role_id), data.expires_in_hours);
+      login(data.token, data.role_id, data.expires_in_hours);
 
-      if (Number(data.role_id) === 1) {
-        navigate("/admin/dashboard");
+      if (data.force_password_change) {
+        navigate("/change-password");
       } else {
-        setError("Access denied: Insufficient privileges");
+        navigate("/admin/dashboard");
       }
-    } catch (err) {
-      setError("Network error. Please try again.");
+    } catch {
+      setError("Connection error. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const rightPanelStyle: React.CSSProperties = {
-    backgroundColor: "#650C08",
-    backgroundImage: [
-      "radial-gradient(circle at 95% 5%, rgba(255,220,210,0.28) 0%, rgba(255,220,210,0.12) 12%, rgba(255,220,210,0.03) 28%, transparent 45%)",
-      "linear-gradient(135deg, #7a1d16 0%, #650C08 35%, #b77a6f 100%)",
-      "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1.5px, transparent 1.5px, transparent 18px)"
-    ].join(", "),
-    backgroundBlendMode: "overlay, normal, normal",
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-white flex justify-center items-center p-6">
-      <div className="w-full max-w-6xl min-h-[620px] rounded-2xl shadow-2xl flex overflow-hidden flex-col lg:flex-row">
-
-        {/* LEFT PANEL */}
-        <div className="w-full lg:w-[35%] bg-gray-100 flex flex-col items-center justify-center p-10 text-center">
-          <div className="w-36 h-36 rounded-full overflow-hidden shadow-2xl border-8 border-white">
-            <img src="/Logo.png" alt="ABCD University" className="w-full h-full object-contain" />
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{
+        background: `linear-gradient(135deg, ${theme} 0%, #8B1A1A 50%, #1a1a1a 100%)`,
+      }}
+    >
+      <div className="w-full max-w-md">
+        <div
+          className="rounded-2xl shadow-2xl p-8 border"
+          style={{
+            background: "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(10px)",
+            borderColor: theme,
+          }}
+        >
+          {/* Logo */}
+          <div className="text-center mb-8">
+            {logoSrc && <img src={logoSrc} alt="Logo" className="h-16 mx-auto mb-4" />}
+            <h1 className="text-3xl font-bold mb-2" style={{ color: theme }}>
+              Admin Portal
+            </h1>
+            <p className="text-gray-600 text-sm">{currentDate}</p>
           </div>
 
-          <h1 className="mt-8 text-4xl font-bold text-gray-800 tracking-wide">
-            ABCD University
-          </h1>
-          <p className="mt-3 text-lg font-semibold text-gray-700">
-            Diploma • Degree • PG • PhD
-          </p>
-          <p className="text-sm text-gray-600">(Private University)</p>
-          <p className="mt-4 text-sm text-gray-500">Location, State Pincode</p>
+          {/* Error Alert */}
+          {error && (
+            <div
+              className="p-4 rounded-lg mb-6 text-sm font-medium text-white"
+              style={{ backgroundColor: "#D32F2F" }}
+            >
+              {error}
+            </div>
+          )}
 
-          <div className="mt-10 text-gray-600 font-medium text-lg">
-            Faculty / Admin Portal
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: theme }}>
+                Username
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g., admin"
+                required
+                disabled={loading}
+                className="w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition"
+                style={{
+                  borderColor: username ? theme : "#e0e0e0",
+                  backgroundColor: "#f9f9f9",
+                }}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2" style={{ color: theme }}>
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  required
+                  disabled={loading}
+                  className="w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition pr-10"
+                  style={{
+                    borderColor: password ? theme : "#e0e0e0",
+                    backgroundColor: "#f9f9f9",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full px-6 py-3 rounded-lg font-bold text-white flex items-center justify-center gap-2 transition transform hover:scale-105 disabled:opacity-50"
+              style={{ backgroundColor: theme }}
+            >
+              <LogIn className="w-5 h-5" />
+              {loading ? "Logging in..." : "Login"}
+            </button>
+          </form>
+
+          {/* Footer Links */}
+          <div className="mt-6 text-center">
+            <p className="text-gray-600 text-sm">
+              Not an admin?{" "}
+              <a
+                href="/"
+                className="font-semibold hover:underline"
+                style={{ color: theme }}
+              >
+                Go back to home
+              </a>
+            </p>
           </div>
         </div>
 
-        {/* RIGHT PANEL */}
-        <div className="w-full lg:w-[65%] flex flex-col p-12 text-white" style={rightPanelStyle}>
-          <div className="max-w-md mx-auto w-full flex-1 flex flex-col justify-center">
-            <h2 className="text-4xl font-extrabold text-rose-100 text-center mb-10">
-              FACULTY / ADMIN LOGIN
-            </h2>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-lg font-semibold mb-2">Username</label>
-                <input
-                  type="text"
-                  required
-                  disabled={loading}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className={`w-full px-5 py-4 rounded-lg text-black bg-white focus:ring-4 focus:ring-rose-200 outline-none transition ${
-                    error ? "ring-2 ring-red-400" : ""
-                  }`}
-                  placeholder="Enter username"
-                />
-              </div>
-
-              <div>
-                <label className="block text-lg font-semibold mb-2">Password</label>
-                <input
-                  type="password"
-                  required
-                  disabled={loading}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={`w-full px-5 py-4 rounded-lg text-black bg-white focus:ring-4 focus:ring-rose-200 outline-none transition ${
-                    error ? "ring-2 ring-red-400" : ""
-                  }`}
-                  placeholder="Enter password"
-                />
-              </div>
-
-              {error && (
-                <div className="p-4 rounded-lg bg-black/30 text-red-200 text-center font-semibold">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-white text-[#650C08] font-bold text-lg py-4 rounded-lg shadow-xl hover:shadow-2xl transition disabled:opacity-60"
-              >
-                {loading ? "Authenticating…" : "Login as Faculty / Admin"}
-              </button>
-
-              <button
-                onClick={() => navigate("/")}
-                className="w-full mt-6 text-rose-100 underline font-medium text-center"
-              >
-                ← Back to Home
-              </button>
-            </form>
-
-            <div className="mt-auto pt-10 text-center text-sm opacity-90">
-              <p>ERP • Powered by SlashCurate Technologies Pvt Ltd</p>
-              <p className="mt-2">© 2025 ABCD University</p>
-            </div>
-          </div>
+        {/* Demo Credentials */}
+        <div className="mt-6 p-4 rounded-lg text-white text-xs" style={{ backgroundColor: "rgba(255,255,255,0.1)" }}>
+          <p className="font-semibold mb-2">Demo Credentials:</p>
+          <p>Username: admin</p>
+          <p>Password: admin</p>
         </div>
       </div>
     </div>

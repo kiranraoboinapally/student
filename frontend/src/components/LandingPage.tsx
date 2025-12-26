@@ -1,6 +1,4 @@
-// LandingPage.tsx
-import React from "react";
-import { GraduationCap, User, ArrowRight } from "lucide-react";
+import { GraduationCap, User, ArrowRight } from "lucide-react"
 
 export default function LandingPage() {
   const openInNewTab = (path: string) => {

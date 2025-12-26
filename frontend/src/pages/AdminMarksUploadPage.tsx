@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { useAuth, apiBase } from "../auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Upload, AlertCircle, CheckCircle, ArrowLeft, Download } from "lucide-react";
+import { BookOpen, AlertCircle, CheckCircle, ArrowLeft, Download } from "lucide-react";
+
+const theme = "#650C08";
 
 interface MarkSubmission {
   id: string;
@@ -136,28 +138,27 @@ export default function AdminMarksUploadPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Header */}
-      <div className="bg-slate-950/80 backdrop-blur border-b border-slate-700 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => navigate('/admin/dashboard')}
-            className="p-2 hover:bg-slate-700 rounded-lg transition"
-          >
-            <ArrowLeft className="w-5 h-5 text-white" />
-          </button>
+    <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${theme} 0%, #8B1A1A 50%, #1a1a1a 100%)` }}>
+      <nav className="flex justify-between items-center px-6 py-4 bg-white/5 backdrop-blur border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm bg-white">
+            <img src="/Logo.png" alt="Logo" className="w-full h-full object-contain" />
+          </div>
           <div>
             <h1 className="text-2xl font-bold text-white">Upload Student Marks</h1>
-            <p className="text-sm text-slate-400">Manage academic marks and grades</p>
+            <p className="text-sm text-white/80">Manage academic marks and grades</p>
           </div>
         </div>
-      </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/admin/dashboard')} className="px-3 py-2 bg-white/5 text-white rounded">Back</button>
+        </div>
+      </nav>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-8 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Form Section */}
           <div className="lg:col-span-2">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-xl">
+            <div className="bg-white/95 rounded-xl border border-white/10 p-6 shadow-lg">
               {/* Mode Toggle */}
               <div className="flex gap-2 mb-6">
                 <button
@@ -194,7 +195,7 @@ export default function AdminMarksUploadPage() {
                       onChange={(e) => setEnrollment(e.target.value)}
                       placeholder="e.g., 220155197248"
                       required
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:outline-none"
+                      className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-[#650C08] focus:outline-none"
                     />
                   </div>
 
@@ -208,7 +209,7 @@ export default function AdminMarksUploadPage() {
                       onChange={(e) => setSubjectCode(e.target.value.toUpperCase())}
                       placeholder="e.g., CS101"
                       required
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:outline-none"
+                      className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-[#650C08] focus:outline-none"
                     />
                   </div>
 
@@ -224,14 +225,14 @@ export default function AdminMarksUploadPage() {
                       required
                       min="0"
                       max="100"
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-green-500 focus:outline-none"
+                      className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-[#650C08] focus:outline-none"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full mt-6 px-6 py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 disabled:opacity-50 text-white font-bold rounded-lg transition shadow-lg"
+                    className="w-full mt-6 px-6 py-3 bg-[#650C08] hover:bg-[#7a1d16] disabled:opacity-50 text-white font-bold rounded-lg transition shadow"
                   >
                     {loading ? 'Uploading...' : 'Upload Marks'}
                   </button>
@@ -241,7 +242,7 @@ export default function AdminMarksUploadPage() {
                   <div className="flex justify-end">
                     <button
                       onClick={downloadTemplate}
-                      className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition text-sm"
+                      className="flex items-center gap-2 px-4 py-2 bg-white/95 hover:bg-gray-100 text-gray-800 rounded-lg transition text-sm border"
                     >
                       <Download className="w-4 h-4" />
                       Download Template
@@ -272,23 +273,23 @@ export default function AdminMarksUploadPage() {
             </div>
 
             {/* Grading Scale Info */}
-            <div className="bg-purple-900/30 border border-purple-700 rounded-xl p-4 mt-6">
+            <div className="bg-white/95 border border-white/10 rounded-xl p-4 mt-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-purple-300 font-semibold">A</p>
-                  <p className="text-purple-400">90-100</p>
+                  <p className="text-gray-900 font-semibold">A</p>
+                  <p className="text-gray-700">90-100</p>
                 </div>
                 <div>
-                  <p className="text-purple-300 font-semibold">B</p>
-                  <p className="text-purple-400">80-89</p>
+                  <p className="text-gray-900 font-semibold">B</p>
+                  <p className="text-gray-700">80-89</p>
                 </div>
                 <div>
-                  <p className="text-purple-300 font-semibold">C</p>
-                  <p className="text-purple-400">70-79</p>
+                  <p className="text-gray-900 font-semibold">C</p>
+                  <p className="text-gray-700">70-79</p>
                 </div>
                 <div>
-                  <p className="text-purple-300 font-semibold">D</p>
-                  <p className="text-purple-400">60-69</p>
+                  <p className="text-gray-900 font-semibold">D</p>
+                  <p className="text-gray-700">60-69</p>
                 </div>
               </div>
             </div>
@@ -296,33 +297,33 @@ export default function AdminMarksUploadPage() {
 
           {/* Submissions List */}
           <div className="lg:col-span-1">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-xl sticky top-24">
-              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <BookOpen className="w-5 h-5" />
+            <div className="bg-white/95 rounded-xl border border-white/10 p-6 shadow-lg sticky top-24">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-[#650C08]" />
                 Recent Uploads
               </h3>
 
               {submissions.length === 0 ? (
-                <p className="text-slate-400 text-center py-8">No uploads yet</p>
+                <p className="text-gray-600 text-center py-8">No uploads yet</p>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {submissions.slice().reverse().map(sub => (
                     <div key={sub.id} className={`p-3 rounded-lg border ${
                       sub.status === 'success' 
-                        ? 'bg-green-900/30 border-green-700'
+                        ? 'bg-green-100 border-green-200'
                         : sub.status === 'error'
-                        ? 'bg-red-900/30 border-red-700'
-                        : 'bg-slate-700 border-slate-600'
+                        ? 'bg-red-100 border-red-200'
+                        : 'bg-gray-50 border-gray-100'
                     }`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <p className="text-white font-mono text-xs">{sub.enrollment}</p>
-                          <p className="text-slate-300 text-xs">{sub.subjectCode} - {sub.marks}/100</p>
+                          <p className="text-gray-900 font-mono text-xs">{sub.enrollment}</p>
+                          <p className="text-gray-700 text-xs">{sub.subjectCode} - {sub.marks}/100</p>
                         </div>
-                        {sub.status === 'success' && <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />}
-                        {sub.status === 'error' && <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
+                        {sub.status === 'success' && <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />}
+                        {sub.status === 'error' && <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />}
                       </div>
-                      <p className="text-slate-400 text-xs mt-1">{sub.message}</p>
+                      <p className="text-gray-600 text-xs mt-1">{sub.message}</p>
                     </div>
                   ))}
                 </div>
