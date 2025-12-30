@@ -1,21 +1,21 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import { AuthProvider, useAuth } from "./features/auth/AuthProvider";
 
-import LandingPage from "./components/LandingPage";
-import StudentLoginPage from "./components/StudentLoginPage";
-import StudentRegistrationPage from "./components/StudentRegistrationPage";
-import AdminLoginPage from "./components/AdminLoginPage";
+import LandingPage from "./shared/components/LandingPage";
+import StudentLoginPage from "./features/student/components/StudentLoginPage";
+import StudentRegistrationPage from "./features/student/components/StudentRegistrationPage";
+import AdminLoginPage from "./features/admin/components/AdminLoginPage";
 
-import StudentDashboard from "./pages/StudentDashboard";
-import AdminDashboard from "./pages/AdminDashboard";
-import ChangePasswordPage from "./pages/ChangePasswordPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
+import StudentDashboard from "./features/student/components/StudentDashboard";
+import AdminDashboard from "./features/admin/components/AdminDashboard";
+import ChangePasswordPage from "./features/auth/components/ChangePasswordPage";
+import ForgotPasswordPage from "./features/auth/components/ForgotPasswordPage";
+import ResetPasswordPage from "./features/auth/components/ResetPasswordPage";
 
-// NEW ADMIN DATA ENTRY PAGES
-import AdminFeeCreationPage from "./pages/AdminFeeCreationPage";
-import AdminAttendancePage from "./pages/AdminAttendancePage";
-import AdminMarksUploadPage from "./pages/AdminMarksUploadPage";
+// ADMIN DATA ENTRY PAGES
+import AdminFeeCreationPage from "./features/admin/components/AdminFeeCreationPage";
+import AdminAttendancePage from "./features/admin/components/AdminAttendancePage";
+import AdminMarksUploadPage from "./features/admin/components/AdminMarksUploadPage";
 
 function Protected({ children, allowedRole }: { children: JSX.Element; allowedRole: number }) {
   const { token, roleId } = useAuth();
@@ -57,7 +57,7 @@ export default function App() {
             }
           />
 
-          {/* NEW ADMIN DATA ENTRY ROUTES */}
+          {/* ADMIN DATA ENTRY ROUTES */}
           <Route
             path="/admin/create-fees"
             element={
