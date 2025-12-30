@@ -1,4 +1,4 @@
-// controllers/fees.go - FINAL WORKING & FIXED VERSION (OPTIMIZED)
+// controllers/fees.go - FULLY UPDATED & FIXED VERSION (COMPLETED TRUNCATED PART)
 
 package controllers
 
@@ -15,7 +15,6 @@ import (
 	"github.com/kiranraoboinapally/student/backend/models"
 	razorpay "github.com/razorpay/razorpay-go"
 	utils "github.com/razorpay/razorpay-go/utils"
-	// Added explicit GORM import for clarity
 )
 
 /* ======================= RAZORPAY ======================= */
@@ -138,116 +137,133 @@ func GetStudentFees(c *gin.Context) {
 		}
 	}
 
-	/* ---------- HISTORY ---------- */
-	history := []UnifiedFeeRecord{}
+	/* ---------- PAYMENTS ---------- */ // FIXED: Completed truncated part
+	payments := []UnifiedFeeRecord{}
 
-	safeStr := func(s *string) string {
-		if s != nil {
-			return *s
+	var registration []models.RegistrationFee
+	if err := db.Where("enrollment_number = ?", enrollment).Order("transaction_date desc").Find(&registration).Error; err == nil {
+		for _, r := range registration {
+			createdAtStr := ""
+			if r.CreatedAt != nil {
+				createdAtStr = *r.CreatedAt
+			}
+			payments = append(payments, UnifiedFeeRecord{
+				ID:              r.RegnFeeID,
+				Type:            "Registration",
+				Head:            "Registration Fee",
+				OriginalAmount:  safeFloat(r.FeeAmount),
+				AmountPaid:      safeFloat(r.FeeAmount),
+				TransactionNo:   safeString(r.TransactionNumber),
+				TransactionDate: safeString(r.TransactionDate),
+				Status:          safeString(r.PaymentStatus),
+				CreatedAt:       createdAtStr,
+			})
 		}
-		return ""
 	}
 
-	safeFloat := func(f *float64) float64 {
-		if f != nil {
-			return *f
+	var examination []models.ExaminationFee
+	if err := db.Where("enrollment_number = ?", enrollment).Order("transaction_date desc").Find(&examination).Error; err == nil {
+		for _, e := range examination {
+			createdAtStr := ""
+			if e.CreatedAt != nil {
+				createdAtStr = *e.CreatedAt
+			}
+			payments = append(payments, UnifiedFeeRecord{
+				ID:              e.ExamFeeID,
+				Type:            "Examination",
+				Head:            "Examination Fee",
+				OriginalAmount:  safeFloat(e.FeeAmount),
+				AmountPaid:      safeFloat(e.FeeAmount),
+				TransactionNo:   safeString(e.TransactionNo),
+				TransactionDate: safeString(e.TransactionDate),
+				Status:          safeString(e.PaymentStatus),
+				CreatedAt:       createdAtStr,
+			})
 		}
-		return 0
 	}
 
-	var regFees []models.RegistrationFee
-	db.Where("enrollment_number = ?", enrollment).Find(&regFees)
-	for _, f := range regFees {
-		history = append(history, UnifiedFeeRecord{
-			ID:              f.RegnFeeID,
-			Type:            safeStr(f.FeeType),
-			Head:            "Registration Fee",
-			OriginalAmount:  safeFloat(f.FeeAmount),
-			AmountPaid:      safeFloat(f.FeeAmount),
-			TransactionNo:   safeStr(f.TransactionNumber),
-			TransactionDate: safeStr(f.TransactionDate),
-			Status:          safeStr(f.PaymentStatus),
-			CreatedAt:       safeStr(f.CreatedAt),
-		})
-	}
-
-	var examFees []models.ExaminationFee
-	db.Where("enrollment_number = ?", enrollment).Find(&examFees)
-	for _, f := range examFees {
-		history = append(history, UnifiedFeeRecord{
-			ID:              f.ExamFeeID,
-			Type:            safeStr(f.FeeType),
-			Head:            "Examination Fee",
-			OriginalAmount:  safeFloat(f.FeeAmount),
-			AmountPaid:      safeFloat(f.FeeAmount),
-			TransactionNo:   safeStr(f.TransactionNo),
-			TransactionDate: safeStr(f.TransactionDate),
-			Status:          safeStr(f.PaymentStatus),
-			CreatedAt:       safeStr(f.CreatedAt),
-		})
-	}
-
-	var miscFees []models.MiscellaneousFee
-	db.Where("enrollment_number = ?", enrollment).Find(&miscFees)
-	for _, f := range miscFees {
-		history = append(history, UnifiedFeeRecord{
-			ID:              f.MiscFeeID,
-			Type:            safeStr(f.FeeType),
-			Head:            "Miscellaneous Fee",
-			OriginalAmount:  safeFloat(f.FeeAmount),
-			AmountPaid:      safeFloat(f.FeeAmount),
-			TransactionNo:   safeStr(f.TransactionNo),
-			TransactionDate: safeStr(f.TransactionDate),
-			Status:          safeStr(f.PaymentStatus),
-		})
+	var miscellaneous []models.MiscellaneousFee
+	if err := db.Where("enrollment_number = ?", enrollment).Order("transaction_date desc").Find(&miscellaneous).Error; err == nil {
+		for _, m := range miscellaneous {
+			createdAtStr := ""
+			if m.CreatedAt != nil {
+				createdAtStr = *m.CreatedAt
+			}
+			payments = append(payments, UnifiedFeeRecord{
+				ID:              m.MiscFeeID,
+				Type:            "Miscellaneous",
+				Head:            "Miscellaneous Fee",
+				OriginalAmount:  safeFloat(m.FeeAmount),
+				AmountPaid:      safeFloat(m.FeeAmount),
+				TransactionNo:   safeString(m.TransactionNo),
+				TransactionDate: safeString(m.TransactionDate),
+				Status:          safeString(m.PaymentStatus),
+				CreatedAt:       createdAtStr,
+			})
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"dues":    dues,
-		"history": history,
+		"dues":     dues,
+		"payments": payments,
 	})
 }
 
-/* ======================= REQUEST PAYMENT - WITH CORRECT INSTITUTE NAME ======================= */
+// Safe helpers
+func safeString(ptr *string) string {
+	if ptr == nil {
+		return ""
+	}
+	return *ptr
+}
+
+func safeFloat(ptr *float64) float64 {
+	if ptr == nil {
+		return 0
+	}
+	return *ptr
+}
+
+/* ======================= REQUEST PAYMENT ======================= */
+
+type RequestPaymentRequest struct {
+	Amount  float64 `json:"amount" binding:"required,gt=0"`
+	FeeHead string  `json:"fee_head" binding:"required"` // Registration Fee, Examination Fee, etc.
+	FeeType string  `json:"fee_type" binding:"required"` // Regular, Late, etc.
+}
 
 func RequestPayment(c *gin.Context) {
-	enrollment, err := getEnrollmentOrError(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-	db := config.DB // Use DB directly
-
-	var req struct {
-		Amount  float64 `json:"amount" binding:"required,gt=0"`
-		FeeHead string  `json:"fee_head" binding:"required"`
-		FeeType string  `json:"fee_type" binding:"required"`
-	}
-
+	var req RequestPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	enrollment, err := getEnrollmentOrError(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	db := config.DB
 	var user models.User
-	db.Where("username = ?", strconv.FormatInt(enrollment, 10)).First(&user)
-
-	studentName := user.FullName
-	if studentName == "" {
-		studentName = "Student " + strconv.FormatInt(enrollment, 10)
+	if err := db.Where("username = ?", strconv.FormatInt(enrollment, 10)).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
 	}
 
-	contact := ""
-	if user.Mobile != nil {
-		contact = *user.Mobile
-	}
-
-	instituteName := "Your Institute"
 	var master models.MasterStudent
+	instituteName := "Your Institute" // Default
+	studentName := user.FullName
+	contact := ""
 	if err := db.Where("enrollment_number = ?", enrollment).First(&master).Error; err == nil {
 		if master.InstituteName != nil && strings.TrimSpace(*master.InstituteName) != "" {
 			instituteName = strings.TrimSpace(*master.InstituteName)
 		}
+		if master.StudentPhoneNumber != nil {
+			contact = *master.StudentPhoneNumber
+		}
+		studentName = master.StudentName
 	}
 
 	// Create Razorpay order

@@ -1,10 +1,24 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth, apiBase } from "../auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
+import StudentService from "../services/studentService";
+import type {
+  StudentProfile,
+  FeeItem,
+  AttendanceItem,
+  SubjectItem,
+  MarkItem,
+  NoticeItem,
+  LeaveItem,
+  TimetableItem,
+  SemesterResult
+} from "../services/studentService";
+
 
 /**
  * StudentDashboard.tsx
- * - Fully updated with Razorpay Integration + Custom Amount Input
+ * - FULLY ENHANCED with Notices, Timetable, Leaves, All Marks, Semester Results
+ * - Real backend data integration - NO dummy data
  * - Tailwind + TypeScript
  * - Theme color: #650C08
  */
@@ -43,75 +57,7 @@ interface RazorpayOptions {
   };
 }
 
-type ProfileShape = {
-  user?: {
-    full_name?: string;
-    username?: string;
-    email?: string;
-    Mobile?: string;
-  };
-  master_student?: {
-    enrollment_number?: string;
-    student_name?: string;
-    StudentName?: string;
-    course_name?: string;
-    CourseName?: string;
-    session?: string;
-    batch?: string;
-  };
-  act_student?: {
-    CandidateName?: string;
-    EnrollmentNumber?: string;
-    CourseName?: string;
-    StreamName?: string;
-    YearSem?: string;
-    center_name?: string;
-    candidate_address?: string;
-    mother_name?: string;
-    father_name?: string;
-    ContactNumber?: string;
-    EmailID?: string;
-  };
-};
-
-type FeeItem = {
-  fee_due_id: number;
-  fee_type: string;
-  fee_head: string;
-  due_date: string;
-  original_amount: number;
-  amount_paid: number;
-  status: string;
-  balance: number;
-  transaction_number?: string;
-};
-
-type AttendanceItem = {
-  subject_name?: string;
-  total_classes?: number;
-  attended_classes?: number;
-};
-
-type SubjectItem = {
-  subject_id?: number;
-  subject_code?: string;
-  subject_name?: string;
-  subject_type?: string;
-  credits?: number;
-  semester?: number;
-};
-
-type MarkItem = {
-  mark_id?: number;
-  subject_code?: string;
-  subject_name?: string;
-  total_marks?: number;
-  percentage?: number;
-  grade?: string;
-  status?: string;
-};
-
-function getEnrollmentNumber(profile: ProfileShape | null): string {
+function getEnrollmentNumber(profile: StudentProfile | null): string {
   if (!profile) return "";
   const masterEnr = profile.master_student?.enrollment_number;
   const actEnr = profile.act_student?.EnrollmentNumber;
@@ -119,25 +65,42 @@ function getEnrollmentNumber(profile: ProfileShape | null): string {
   return (masterEnr || actEnr || userEnr || "").toString();
 }
 
-export default function StudentDashboard(): JSX.Element {
+export default function StudentDashboard(): React.ReactElement {
   const { authFetch, logout } = useAuth();
   const navigate = useNavigate();
-
-  const [profile, setProfile] = useState<ProfileShape | null>(null);
-  const [fees, setFees] = useState<FeeItem[]>([]);
+  const service = useMemo(() => new StudentService(authFetch), [authFetch]);
+  
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [feeDues, setFeeDues] = useState<FeeItem[]>([]);
+  const [feeHistory, setFeeHistory] = useState<FeeItem[]>([]);
   const [attendance, setAttendance] = useState<AttendanceItem[]>([]);
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [marks, setMarks] = useState<MarkItem[]>([]);
+  const [allMarks, setAllMarks] = useState<MarkItem[]>([]);
+  const [notices, setNotices] = useState<NoticeItem[]>([]);
+  const [leaves, setLeaves] = useState<LeaveItem[]>([]);
+  const [timetable, setTimetable] = useState<TimetableItem[]>([]);
+  const [semesterResults, setSemesterResults] = useState<SemesterResult[]>([]);
+  
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingFees, setLoadingFees] = useState(true);
+  const [loadingFeeHistory, setLoadingFeeHistory] = useState(true);
   const [loadingAttendance, setLoadingAttendance] = useState(true);
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [loadingMarks, setLoadingMarks] = useState(true);
-  const [active, setActive] = useState<"profile" | "fees" | "subjects" | "marks" | "attendance">("profile");
-  // New states for custom amount modal
+  const [loadingNotices, setLoadingNotices] = useState(true);
+  const [loadingLeaves, setLoadingLeaves] = useState(true);
+  const [loadingTimetable, setLoadingTimetable] = useState(true);
+  const [loadingAllMarks, setLoadingAllMarks] = useState(true);
+  const [loadingSemesterResults, setLoadingSemesterResults] = useState(true);
+  
+  const [active, setActive] = useState<"profile" | "fees" | "subjects" | "marks" | "attendance" | "notices" | "leaves" | "timetable" | "all-marks" | "results">("profile");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedFeeForPayment, setSelectedFeeForPayment] = useState<FeeItem | null>(null);
   const [customAmount, setCustomAmount] = useState<number>(0);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [leaveForm, setLeaveForm] = useState({ leave_type: "sick", from_date: "", to_date: "", reason: "" });
+  const [submittingLeave, setSubmittingLeave] = useState(false);
 
   const theme = "#650C08";
 
@@ -153,160 +116,170 @@ export default function StudentDashboard(): JSX.Element {
     };
   }, []);
 
+  const loadProfile = useCallback(async () => {
+    setLoadingProfile(true);
+    try {
+      const data = await service.getProfile();
+      setProfile(data);
+    } catch (err) {
+      console.error(err);
+      logout();
+      navigate("/login");
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [service, logout, navigate]);
+
+  const loadFees = useCallback(async () => {
+    setLoadingFees(true);
+    setLoadingFeeHistory(true);
+    try {
+      const data = await service.getFeeSummary();
+      setFeeDues(data.dues || []);
+      setFeeHistory(data.history || []);
+    } catch (err) {
+      console.error(err);
+      setFeeDues([]);
+      setFeeHistory([]);
+    } finally {
+      setLoadingFees(false);
+      setLoadingFeeHistory(false);
+    }
+  }, [service]);
+
+  const loadAttendance = useCallback(async () => {
+    setLoadingAttendance(true);
+    try {
+      const data = await service.getAttendance();
+      setAttendance(data);
+    } catch (err) {
+      console.error(err);
+      setAttendance([]);
+    } finally {
+      setLoadingAttendance(false);
+    }
+  }, [service]);
+
+  const loadSubjects = useCallback(async () => {
+    setLoadingSubjects(true);
+    try {
+      const data = await service.getCurrentSemesterSubjects();
+      setSubjects(data);
+    } catch (err) {
+      console.error(err);
+      setSubjects([]);
+    } finally {
+      setLoadingSubjects(false);
+    }
+  }, [service]);
+
+  const loadMarks = useCallback(async () => {
+    setLoadingMarks(true);
+    try {
+      const data = await service.getCurrentSemesterMarks();
+      setMarks(data);
+    } catch (err) {
+      console.error(err);
+      setMarks([]);
+    } finally {
+      setLoadingMarks(false);
+    }
+  }, [service]);
+
+  const loadAllMarks = useCallback(async () => {
+    setLoadingAllMarks(true);
+    try {
+      const data = await service.getAllMarks();
+      setAllMarks(data);
+    } catch (err) {
+      console.error(err);
+      setAllMarks([]);
+    } finally {
+      setLoadingAllMarks(false);
+    }
+  }, [service]);
+
+  const loadNotices = useCallback(async () => {
+    setLoadingNotices(true);
+    try {
+      const data = await service.getNotices();
+      setNotices(data);
+    } catch (err) {
+      console.error(err);
+      setNotices([]);
+    } finally {
+      setLoadingNotices(false);
+    }
+  }, [service]);
+
+  const loadLeaves = useCallback(async () => {
+    setLoadingLeaves(true);
+    try {
+      const data = await service.getLeaves();
+      setLeaves(data);
+    } catch (err) {
+      console.error(err);
+      setLeaves([]);
+    } finally {
+      setLoadingLeaves(false);
+    }
+  }, [service]);
+
+  const loadTimetable = useCallback(async () => {
+    setLoadingTimetable(true);
+    try {
+      const data = await service.getTimetable();
+      setTimetable(data);
+    } catch (err) {
+      console.error(err);
+      setTimetable([]);
+    } finally {
+      setLoadingTimetable(false);
+    }
+  }, [service]);
+
+  const loadSemesterResults = useCallback(async () => {
+    setLoadingSemesterResults(true);
+    try {
+      const data = await service.getSemesterResults();
+      setSemesterResults(data);
+    } catch (err) {
+      console.error(err);
+      setSemesterResults([]);
+    } finally {
+      setLoadingSemesterResults(false);
+    }
+  }, [service]);
+
   useEffect(() => {
     loadProfile();
     loadFees();
     loadAttendance();
     loadSubjects();
     loadMarks();
-  }, []);
-
-  async function loadProfile() {
-    setLoadingProfile(true);
-    try {
-      const res = await authFetch(`${apiBase}/student/profile`);
-      if (!res.ok) {
-        logout();
-        navigate("/login");
-        return;
-      }
-      const data = await res.json();
-      setProfile(data);
-    } finally {
-      setLoadingProfile(false);
-    }
-  }
-
-  const loadFees = useCallback(async () => {
-    setLoadingFees(true);
-    try {
-      const res = await authFetch(`${apiBase}/student/fees/summary`);
-      if (!res.ok) {
-        setFees([]);
-        return;
-      }
-      const data = await res.json();
-
-      let list: FeeItem[] = [];
-
-      if (data && Array.isArray(data.dues)) {
-        list.push(...data.dues.map(mapApiFeeToFeeItem));
-      }
-
-      if (data && Array.isArray(data.history)) {
-        list.push(...data.history.map(mapApiFeeToFeeItem));
-      }
-
-      setFees(list);
-    } finally {
-      setLoadingFees(false);
-    }
-  }, [authFetch]);
-
-  async function loadAttendance() {
-    setLoadingAttendance(true);
-    try {
-      const res = await authFetch(`${apiBase}/student/attendance`);
-      if (!res.ok) {
-        setAttendance([]);
-        return;
-      }
-      const data = await res.json();
-      setAttendance(data.attendance || []);
-    } finally {
-      setLoadingAttendance(false);
-    }
-  }
-
-  async function loadSubjects() {
-    setLoadingSubjects(true);
-    try {
-      const res = await authFetch(`${apiBase}/student/subjects/current`);
-      if (!res.ok) {
-        setSubjects([]);
-        return;
-      }
-      const data = await res.json();
-      setSubjects(Array.isArray(data) ? data : []);
-    } finally {
-      setLoadingSubjects(false);
-    }
-  }
-
-  async function loadMarks() {
-    setLoadingMarks(true);
-    try {
-      const res = await authFetch(`${apiBase}/student/marks/current`);
-      if (!res.ok) {
-        setMarks([]);
-        return;
-      }
-      const data = await res.json();
-
-      const mapped: MarkItem[] = Array.isArray(data)
-        ? data.map((m: any) => ({
-            mark_id: m.MarkID,
-            subject_code: m.SubjectCode,
-            subject_name: m.SubjectName,
-            total_marks: m.TotalMarks,
-            percentage: m.Percentage,
-            grade: m.Grade,
-            status: m.Status?.toLowerCase(),
-          }))
-        : [];
-
-      setMarks(mapped);
-    } finally {
-      setLoadingMarks(false);
-    }
-  }
-
-  function mapApiFeeToFeeItem(apiFee: any): FeeItem {
-    const originalAmount = apiFee.original_amount ?? 0;
-    const amountPaid = apiFee.amount_paid ?? 0;
-
-    if (apiFee.transaction_number || apiFee.TransactionNo) {
-      return {
-        fee_due_id: apiFee.id || Date.now(),
-        fee_type: apiFee.fee_type || apiFee.Type || 'N/A',
-        fee_head: apiFee.fee_head || apiFee.Head,
-        due_date: apiFee.transaction_date,
-        original_amount: originalAmount,
-        amount_paid: amountPaid,
-        balance: 0,
-        status: apiFee.payment_status || "Paid",
-        transaction_number: apiFee.transaction_number || apiFee.TransactionNo,
-      };
-    }
-
-    return {
-      fee_due_id: apiFee.fee_due_id,
-      fee_type: apiFee.fee_type ?? 'Total Fee',
-      fee_head: apiFee.fee_head ?? 'Total Due',
-      due_date: apiFee.due_date,
-      original_amount: originalAmount,
-      amount_paid: amountPaid,
-      balance: Math.max(0, originalAmount - amountPaid),
-      status: apiFee.status?.toLowerCase() ?? 'pending',
-      transaction_number: undefined,
-    } as FeeItem;
-  }
+    loadNotices();
+    loadLeaves();
+    loadTimetable();
+    loadAllMarks();
+    loadSemesterResults();
+  }, [loadProfile, loadFees, loadAttendance, loadSubjects, loadMarks, loadNotices, loadLeaves, loadTimetable, loadAllMarks, loadSemesterResults]);
 
   // Updated handlePayment to accept custom amount
-  const handlePayment = useCallback(async (fee: FeeItem, amountToPay: number = fee.balance) => {
+  const handlePayment = useCallback(async (fee: FeeItem, amountToPay: number = fee.balance ?? 0) => {
     if (typeof window.Razorpay === 'undefined') {
       alert('Razorpay SDK not loaded. Please wait or refresh.');
       return;
     }
 
     const enrollmentNumber = getEnrollmentNumber(profile);
+    const balance = fee.balance ?? 0;
 
     if (!amountToPay || amountToPay <= 0) {
       alert("Please enter a valid amount.");
       return;
     }
 
-    if (amountToPay > fee.balance) {
+    if (amountToPay > balance) {
       alert("Amount cannot exceed the balance due.");
       return;
     }
@@ -316,7 +289,7 @@ export default function StudentDashboard(): JSX.Element {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fee_due_id: fee.fee_due_id,
+          fee_due_id: Number(fee.fee_due_id ?? 0),
           amount: amountToPay,
           fee_head: fee.fee_head,
           fee_type: fee.fee_type,
@@ -342,11 +315,11 @@ export default function StudentDashboard(): JSX.Element {
             const verificationResponse = await authFetch(`${apiBase}/student/fees/verify-payment`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
+                body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                fee_due_id: fee.fee_due_id,
+                fee_due_id: Number(fee.fee_due_id ?? 0),
                 amount: amountToPay,
                 fee_head: fee.fee_head,
                 fee_type: fee.fee_type,
@@ -373,7 +346,7 @@ export default function StudentDashboard(): JSX.Element {
         },
         notes: {
           enrollment_number: enrollmentNumber,
-          fee_due_id: fee.fee_due_id,
+          fee_due_id: Number(fee.fee_due_id ?? 0),
           fee_head: fee.fee_head
         },
         theme: {
@@ -396,7 +369,7 @@ export default function StudentDashboard(): JSX.Element {
   // Modal handlers
   const openPaymentModal = (fee: FeeItem) => {
     setSelectedFeeForPayment(fee);
-    setCustomAmount(fee.balance);
+    setCustomAmount(fee.balance ?? 0);
     setPaymentModalOpen(true);
   };
 
@@ -407,7 +380,7 @@ export default function StudentDashboard(): JSX.Element {
   };
 
   const proceedWithPayment = () => {
-    if (selectedFeeForPayment && customAmount > 0 && customAmount <= selectedFeeForPayment.balance) {
+    if (selectedFeeForPayment && customAmount > 0 && customAmount <= (selectedFeeForPayment.balance ?? 0)) {
       handlePayment(selectedFeeForPayment, customAmount);
       closePaymentModal();
     }
@@ -426,12 +399,17 @@ export default function StudentDashboard(): JSX.Element {
   const master = profile?.master_student ?? {};
   const act = profile?.act_student ?? {};
 
-  const tabs: { key: "profile" | "fees" | "subjects" | "marks" | "attendance"; label: string }[] = [
+  const tabs: { key: "profile" | "fees" | "subjects" | "marks" | "attendance" | "notices" | "leaves" | "timetable" | "all-marks" | "results"; label: string }[] = [
     { key: "profile", label: "Personal Details" },
     { key: "fees", label: "Fee Details" },
     { key: "subjects", label: "Subjects" },
-    { key: "marks", label: "Marks" },
+    { key: "marks", label: "Current Marks" },
+    { key: "all-marks", label: "All Marks" },
+    { key: "results", label: "Semester Results" },
     { key: "attendance", label: "Attendance" },
+    { key: "timetable", label: "Timetable" },
+    { key: "notices", label: "Notices" },
+    { key: "leaves", label: "Leaves" },
   ];
 
   return (
@@ -517,7 +495,7 @@ export default function StudentDashboard(): JSX.Element {
         {active === "fees" && (
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Fee Details</h2>
-            {loadingFees ? (
+            {loadingFees || loadingFeeHistory ? (
               <div className="text-center py-8 text-gray-500">Loading fee details...</div>
             ) : (
               <>
@@ -536,9 +514,9 @@ export default function StudentDashboard(): JSX.Element {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {fees.filter(f => f.balance > 0).length > 0 ? (
-                        fees.filter(f => f.balance > 0).map((fee) => (
-                          <tr key={fee.fee_due_id} className="hover:bg-red-50">
+                      {feeDues.length > 0 ? (
+                        feeDues.map((fee, idx) => (
+                          <tr key={idx} className="hover:bg-red-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_head}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.due_date}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{fmtMoney(fee.original_amount)}</td>
@@ -579,12 +557,12 @@ export default function StudentDashboard(): JSX.Element {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {fees.filter(f => f.balance === 0 && f.transaction_number).length > 0 ? (
-                        fees.filter(f => f.balance === 0 && f.transaction_number).map((fee) => (
-                          <tr key={fee.transaction_number} className="hover:bg-gray-50">
+                      {feeHistory.length > 0 ? (
+                        feeHistory.map((fee, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{fee.fee_head}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700">{fmtMoney(fee.amount_paid)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.due_date}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.transaction_date}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fee.transaction_number}</td>
                           </tr>
                         ))
@@ -610,7 +588,7 @@ export default function StudentDashboard(): JSX.Element {
                   </h3>
                   <div className="mb-4">
                     <p className="text-sm text-gray-600">
-                      Balance Due: <span className="font-bold text-red-700">₹{fmtMoney(selectedFeeForPayment.balance)}</span>
+                        Balance Due: <span className="font-bold text-red-700">₹{fmtMoney(selectedFeeForPayment.balance ?? 0)}</span>
                     </p>
                   </div>
                   <div className="mb-6">
@@ -620,7 +598,7 @@ export default function StudentDashboard(): JSX.Element {
                     <input
                       type="number"
                       min="1"
-                      max={selectedFeeForPayment.balance}
+                        max={selectedFeeForPayment.balance ?? 0}
                       step="1"
                       value={customAmount}
                       onChange={(e) => setCustomAmount(Math.max(0, Number(e.target.value)))}
@@ -628,7 +606,7 @@ export default function StudentDashboard(): JSX.Element {
                       placeholder="Enter amount"
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Min: ₹1 | Max: ₹{fmtMoney(selectedFeeForPayment.balance)}
+                        Min: ₹1 | Max: ₹{fmtMoney(selectedFeeForPayment.balance ?? 0)}
                     </p>
                   </div>
                   <div className="flex justify-end gap-3">
@@ -640,7 +618,7 @@ export default function StudentDashboard(): JSX.Element {
                     </button>
                     <button
                       onClick={proceedWithPayment}
-                      disabled={customAmount <= 0 || customAmount > selectedFeeForPayment.balance}
+                        disabled={customAmount <= 0 || customAmount > (selectedFeeForPayment.balance ?? 0)}
                       className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
                       Proceed to Pay
@@ -776,6 +754,305 @@ export default function StudentDashboard(): JSX.Element {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ALL MARKS */}
+        {active === "all-marks" && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>All Marks</h2>
+            {loadingAllMarks ? (
+              <div className="text-center py-8 text-gray-500">Loading marks...</div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Marks</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Percentage (%)</th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {allMarks.length > 0 ? allMarks.map((m) => (
+                      <tr key={m.mark_id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{m.subject_code}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{m.subject_name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{m.total_marks?.toFixed(2) ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{m.percentage?.toFixed(2) ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-900">{m.grade ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${m.status === 'pass' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {m.status ?? '-'}
+                          </span>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">No marks recorded.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SEMESTER RESULTS */}
+        {active === "results" && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Semester Results</h2>
+            {loadingSemesterResults ? (
+              <div className="text-center py-8 text-gray-500">Loading results...</div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semester</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">SGPA</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">CGPA</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Credits</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Earned Credits</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {semesterResults.length > 0 ? semesterResults.map((result) => (
+                      <tr key={result.semester} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Semester {result.semester}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{result.sgpa?.toFixed(2) ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold text-gray-900">{result.cgpa?.toFixed(2) ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{result.total_credits ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{result.earned_credits ?? '-'}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No results available.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TIMETABLE */}
+        {active === "timetable" && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Timetable</h2>
+            {loadingTimetable ? (
+              <div className="text-center py-8 text-gray-500">Loading timetable...</div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Day</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Slot</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Faculty</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Room</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {timetable.length > 0 ? timetable.map((slot, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{slot.day}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{slot.time_slot}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{slot.subject_name || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{slot.faculty_name || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{slot.room_number || '-'}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No timetable available.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* NOTICES */}
+        {active === "notices" && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Notices</h2>
+            {loadingNotices ? (
+              <div className="text-center py-8 text-gray-500">Loading notices...</div>
+            ) : (
+              <div className="space-y-4">
+                {notices.length > 0 ? (
+                  notices.map((notice) => (
+                    <div key={notice.notice_id || notice.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold" style={{ color: theme }}>{notice.title}</h3>
+                          <p className="text-gray-700 mt-2">{notice.description}</p>
+                          <p className="text-xs text-gray-500 mt-3">
+                            Published on: {new Date(notice.created_at).toLocaleDateString("en-IN")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">No notices available.</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* LEAVES */}
+        {active === "leaves" && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold" style={{ color: theme }}>Leave Applications</h2>
+              <button
+                onClick={() => setLeaveModalOpen(true)}
+                className="px-4 py-2 text-white font-semibold rounded shadow"
+                style={{ background: theme }}
+              >
+                + Apply Leave
+              </button>
+            </div>
+
+            {loadingLeaves ? (
+              <div className="text-center py-8 text-gray-500">Loading leaves...</div>
+            ) : (
+              <>
+                <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Leave Type</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">From Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">To Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {leaves.length > 0 ? (
+                        leaves.map((leave) => (
+                          <tr key={leave.leave_id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{leave.leave_type}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{leave.from_date}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{leave.to_date}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500">{leave.reason}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                leave.status?.toLowerCase() === 'approved' ? 'bg-green-100 text-green-800' :
+                                leave.status?.toLowerCase() === 'rejected' ? 'bg-red-100 text-red-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {leave.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No leave applications.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {/* Leave Modal */}
+            {leaveModalOpen && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                  <h3 className="text-xl font-bold mb-4" style={{ color: theme }}>Apply for Leave</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Leave Type</label>
+                      <select
+                        value={leaveForm.leave_type}
+                        onChange={(e) => setLeaveForm({ ...leaveForm, leave_type: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#650C08]"
+                      >
+                        <option value="sick">Sick Leave</option>
+                        <option value="casual">Casual Leave</option>
+                        <option value="earned">Earned Leave</option>
+                        <option value="special">Special Leave</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                      <input
+                        type="date"
+                        value={leaveForm.from_date}
+                        onChange={(e) => setLeaveForm({ ...leaveForm, from_date: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#650C08]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                      <input
+                        type="date"
+                        value={leaveForm.to_date}
+                        onChange={(e) => setLeaveForm({ ...leaveForm, to_date: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#650C08]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                      <textarea
+                        value={leaveForm.reason}
+                        onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#650C08]"
+                        rows={3}
+                        placeholder="Enter reason for leave"
+                      ></textarea>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 mt-6">
+                    <button
+                      onClick={() => setLeaveModalOpen(false)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!leaveForm.from_date || !leaveForm.to_date || !leaveForm.reason) {
+                          alert("Please fill all fields");
+                          return;
+                        }
+                        setSubmittingLeave(true);
+                        try {
+                          await service.applyLeave(leaveForm);
+                          alert("Leave applied successfully");
+                          setLeaveModalOpen(false);
+                          setLeaveForm({ leave_type: "sick", from_date: "", to_date: "", reason: "" });
+                          loadLeaves();
+                        } catch (err) {
+                          console.error(err);
+                          alert("Failed to apply leave");
+                        } finally {
+                          setSubmittingLeave(false);
+                        }
+                      }}
+                      disabled={submittingLeave}
+                      className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {submittingLeave ? "Submitting..." : "Submit"}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

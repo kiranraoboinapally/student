@@ -204,6 +204,7 @@ func UploadStudentMarks(c *gin.Context) {
 			SubjectCode:      m.SubjectCode,
 			SubjectName:      subject.SubjectName, // ✅ now defined
 			SubjectType:      subject.SubjectType, // ✅ now defined
+			MarksObtained:    m.MarksObtained,     // FIXED: Added this
 			Grade:            m.Grade,
 			Status:           m.Status,
 			CreatedAt:        time.Now(),
@@ -217,7 +218,7 @@ func UploadStudentMarks(c *gin.Context) {
 			{Name: "subject_code"},
 		},
 		DoUpdates: clause.AssignmentColumns(
-			[]string{"grade", "status"},
+			[]string{"marks_obtained", "grade", "status"}, // FIXED: Added marks_obtained
 		),
 	}).Create(&records).Error
 

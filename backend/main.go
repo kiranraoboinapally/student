@@ -1,4 +1,4 @@
-// main.go - FINAL UPDATED VERSION
+// main.go - FULLY UPDATED VERSION WITH ALL APIs
 
 package main
 
@@ -20,7 +20,7 @@ func main() {
 	// Initialize database connection and other configs
 	config.Init()
 
-	// === CRITICAL: Initialize Razorpay client with keys from .env ===
+	// CRITICAL: Initialize Razorpay client with keys from .env
 	controllers.InitRazorpay()
 
 	r := gin.Default()
@@ -53,19 +53,48 @@ func main() {
 
 	// ================= ADMIN ROUTES =================
 	admin := api.Group("/admin")
-	admin.Use(middleware.AuthRoleMiddleware(1))
+	admin.Use(middleware.AuthRoleMiddleware(1)) // Admin only (role ID 1)
 	{
 		admin.GET("/students", controllers.GetStudents)
 
 		admin.POST("/users/create", controllers.CreateUserByAdmin)
 		admin.GET("/users", controllers.GetAllUsers)
 
-		// ✅ MISSING ROUTES (ADD THESE)
 		admin.GET("/pending-registrations", controllers.GetPendingRegistrations)
 		admin.POST("/approve-registration", controllers.ApproveRegistration)
 
 		admin.GET("/fees/payments", controllers.GetAllFeePaymentHistory)
 		admin.POST("/marks/upload", controllers.UploadStudentMarks)
+
+		// NEW: Institute Management
+		admin.GET("/institutes", controllers.GetInstitutes)
+		admin.POST("/institutes", controllers.CreateInstitute)
+		admin.PUT("/institutes/:id", controllers.UpdateInstitute)
+		admin.DELETE("/institutes/:id", controllers.DeleteInstitute)
+
+		// NEW: Course Management
+		admin.GET("/courses", controllers.GetCourses)
+		admin.POST("/courses", controllers.CreateCourse)
+		admin.PUT("/courses/:id", controllers.UpdateCourse)
+		admin.DELETE("/courses/:id", controllers.DeleteCourse)
+
+		// NEW: Subject Management
+		admin.GET("/subjects", controllers.GetSubjects)
+		admin.POST("/subjects", controllers.CreateSubject)
+		admin.PUT("/subjects/:id", controllers.UpdateSubject)
+		admin.DELETE("/subjects/:id", controllers.DeleteSubject)
+
+		// NEW: Notice Management
+		admin.GET("/notices", controllers.GetNotices)
+		admin.POST("/notices", controllers.CreateNotice)
+		admin.PUT("/notices/:id", controllers.UpdateNotice)
+		admin.DELETE("/notices/:id", controllers.DeleteNotice)
+
+		// NEW: Faculty Management (assuming faculty role ID 3)
+		admin.GET("/faculty", controllers.GetFaculty)
+		admin.POST("/faculty", controllers.CreateFaculty)
+		admin.PUT("/faculty/:id", controllers.UpdateFaculty)
+		admin.DELETE("/faculty/:id", controllers.DeleteFaculty)
 	}
 
 	// ================= STUDENT ROUTES =================
@@ -77,7 +106,8 @@ func main() {
 		student.GET("/dashboard", controllers.GetStudentDashboard)
 
 		// Fees Management with Razorpay
-		student.GET("/fees/summary", controllers.GetStudentFees)
+		student.GET("/fees/summary", controllers.GetStudentFeeSummary)
+		student.GET("/fees", controllers.GetStudentFees) // Unified dues + payments
 
 		// Razorpay Payment Flow
 		student.POST("/fees/request-payment", controllers.RequestPayment)
@@ -95,6 +125,20 @@ func main() {
 		student.GET("/subjects/current", controllers.GetCurrentSemesterSubjects)
 		student.GET("/marks/current", controllers.GetCurrentSemesterMarks)
 		student.GET("/attendance", controllers.GetStudentAttendance)
+
+		// NEW: All Marks and Results
+		student.GET("/marks/all", controllers.GetAllMarks)
+		student.GET("/results/semester", controllers.GetSemesterResults)
+
+		// NEW: Notices
+		student.GET("/notices", controllers.GetNotices) // Students can view
+
+		// NEW: Leave Application
+		student.POST("/leaves/apply", controllers.ApplyLeave)
+		student.GET("/leaves", controllers.GetStudentLeaves)
+
+		// NEW: Timetable
+		student.GET("/timetable", controllers.GetTimetable)
 	}
 
 	// ================= COMMON PROFILE ROUTE =================
@@ -102,6 +146,7 @@ func main() {
 	profile.Use(middleware.AuthRoleMiddleware()) // Any authenticated user
 	{
 		profile.GET("/me", controllers.GetMyProfile)
+		profile.GET("/:id", controllers.GetStudentByID) // For admins or others to view student by ID
 	}
 
 	// Start the server

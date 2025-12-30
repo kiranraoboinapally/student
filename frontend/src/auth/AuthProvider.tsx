@@ -40,11 +40,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return v ? Number(v) : null;
   });
 
+  const logout = () => {
+    setToken(null);
+    setExpiresAt(null);
+    setRoleId(null);
+    localStorage.removeItem(STORAGE_TOKEN_KEY);
+    localStorage.removeItem(STORAGE_EXP_KEY);
+    localStorage.removeItem(STORAGE_ROLE_KEY);
+  };
+
   useEffect(() => {
     if (expiresAt && Date.now() > expiresAt) {
       logout();
     }
-  }, []);
+  }, [expiresAt]);
 
   const login = (tok: string, rId: number, expiresInHours?: number) => {
     setToken(tok);
@@ -58,15 +67,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setExpiresAt(exp);
       localStorage.setItem(STORAGE_EXP_KEY, String(exp));
     }
-  };
-
-  const logout = () => {
-    setToken(null);
-    setExpiresAt(null);
-    setRoleId(null);
-    localStorage.removeItem(STORAGE_TOKEN_KEY);
-    localStorage.removeItem(STORAGE_EXP_KEY);
-    localStorage.removeItem(STORAGE_ROLE_KEY);
   };
 
   const authFetch = async (input: RequestInfo, init: RequestInit = {}): Promise<Response> => {

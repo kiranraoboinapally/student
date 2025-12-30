@@ -1,4 +1,4 @@
-// controllers/student_controller.go - FINAL VERSION (CLEANED/OPTIMIZED)
+// controllers/student_controller.go - FULLY UPDATED WITH NEW APIs
 
 package controllers
 
@@ -13,7 +13,6 @@ import (
 /*
 ====================================
 HELPER: Resolve Current Semester (SAFE)
-====================================
 */
 func resolveCurrentSemester(enrollment int64) interface{} {
 	db := config.DB
@@ -42,7 +41,6 @@ func resolveCurrentSemester(enrollment int64) interface{} {
 /*
 ====================================
 STUDENT PROFILE (SAFE)
-====================================
 */
 func GetStudentProfile(c *gin.Context) {
 	db := config.DB
@@ -84,7 +82,6 @@ func GetStudentProfile(c *gin.Context) {
 /*
 ====================================
 STUDENT DASHBOARD
-====================================
 */
 func GetStudentDashboard(c *gin.Context) {
 	enrollment, err := getEnrollmentOrError(c)
@@ -273,4 +270,34 @@ func GetStudentAttendance(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"attendance": attendance})
+}
+
+// NEW: Get all marks across semesters
+func GetAllMarks(c *gin.Context) {
+	enrollment, err := getEnrollmentOrError(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	db := config.DB
+
+	var marks []models.StudentMark
+	db.Where("enrollment_number = ?", enrollment).Order("semester asc").Find(&marks)
+
+	c.JSON(http.StatusOK, marks)
+}
+
+// NEW: Get semester results
+func GetSemesterResults(c *gin.Context) {
+	enrollment, err := getEnrollmentOrError(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	db := config.DB
+
+	var results []models.SemesterResult
+	db.Where("enrollment_number = ?", enrollment).Order("semester asc").Find(&results)
+
+	c.JSON(http.StatusOK, results)
 }

@@ -4,3 +4,4 @@ frontend/README.md
 frontend/public/
 README.md
 backend/generate_bcrypt.go
+unwanted/
