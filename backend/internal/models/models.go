@@ -424,3 +424,15 @@ type Timetable struct {
 }
 
 func (Timetable) TableName() string { return "timetables" }
+
+// ================= ATTENDANCE =================
+type Attendance struct {
+	AttendanceID     int64     `gorm:"column:attendance_id;primaryKey"`
+	EnrollmentNumber int64     `gorm:"column:enrollment_number"`
+	Date             time.Time `gorm:"column:date"`
+	Present          bool      `gorm:"column:present"`
+	SubjectCode      *string   `gorm:"column:subject_code"`
+	CreatedAt        time.Time `gorm:"column:created_at"`
+}
+
+func (Attendance) TableName() string { return "attendance" }

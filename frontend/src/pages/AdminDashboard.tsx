@@ -45,6 +45,7 @@ export default function AdminDashboard() {
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [stats, setStats] = useState({ totalStudents: 0, totalUsers: 0, activeUsers: 0 });
+  const [adminStats, setAdminStats] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null);
   const [showActionModal, setShowActionModal] = useState(false);
@@ -79,10 +80,41 @@ export default function AdminDashboard() {
     loadAllData();
   }, []);
 
+  // Real-time admin notifications via WebSocket
+  useEffect(() => {
+    if (!authFetch) return;
+    const token = (window.localStorage.getItem('app_token') as string | null);
+    if (!token) return;
+    const wsUrl = (window.location.protocol === 'https:' ? 'wss' : 'ws') + '://localhost:8080/ws/admin?token=' + encodeURIComponent(token);
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => console.log('Admin websocket connected');
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          console.log('ws msg', msg);
+          if (msg.event === 'marks_uploaded' || msg.event === 'payment_recorded' || msg.event === 'registration_status_changed') {
+            // Basic in-page alert — you can replace with a nicer toast
+            alert(`Admin Notification: ${msg.event} — ${JSON.stringify(msg.payload)}`);
+            // refresh data after notification
+            loadAllData();
+          }
+        } catch (e) {
+          console.error('invalid ws message', e);
+        }
+      };
+      ws.onclose = () => console.log('Admin websocket closed');
+    } catch (e) {
+      console.error('ws error', e);
+    }
+    return () => { if (ws) ws.close(); };
+  }, [authFetch]);
+
   async function loadAllData() {
     try {
       setRefreshing(true);
-      const [pendingData, studentsData, institutesData, coursesData, subjectsData, facultyData, noticesData, feesData] = await Promise.all([
+      const [pendingData, studentsData, institutesData, coursesData, subjectsData, facultyData, noticesData, feesData, adminStatsData] = await Promise.all([
         service.getPendingUsers(),
         service.getStudents(1, 100),
         service.getInstitutes(),
@@ -91,6 +123,7 @@ export default function AdminDashboard() {
         service.getFaculty(),
         service.getNotices(),
         service.getFeePayments(),
+        service.getAdminStats(),
       ]);
 
       setPendingUsers(pendingData);
@@ -101,6 +134,7 @@ export default function AdminDashboard() {
       setFaculty(facultyData);
       setNotices(noticesData);
       setFeePayments(feesData);
+      setAdminStats(adminStatsData || {});
 
       setStats({
         totalStudents: studentsData.total,
@@ -361,6 +395,16 @@ export default function AdminDashboard() {
               <StatCard title="Pending Approvals" value={pendingUsers.length} icon={<AlertCircle className="text-white" />} />
               <StatCard title="Active Students" value={stats.activeUsers} icon={<CheckCircle className="text-white" />} />
             </div>
+
+            {/* Admin aggregated stats */}
+            {adminStats && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <StatCard title="Institutes" value={adminStats.total_institutes || 0} icon={<Building2 className="text-white" />} />
+                <StatCard title="Fees Paid (₹)" value={adminStats.total_fees_paid ? Math.round(adminStats.total_fees_paid) : 0} icon={<DollarSign className="text-white" />} />
+                <StatCard title="Pending Fees (₹)" value={adminStats.total_pending_fees ? Math.round(adminStats.total_pending_fees) : 0} icon={<File className="text-white" />} />
+                <StatCard title="Passed Students" value={adminStats.passed_students_count || 0} icon={<CheckCircle className="text-white" />} />
+              </div>
+            )}
 
             <div className="bg-white/95 rounded-xl shadow p-6">
               <div className="flex items-center justify-between mb-4">

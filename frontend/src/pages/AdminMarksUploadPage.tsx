@@ -41,15 +41,11 @@ export default function AdminMarksUploadPage() {
     }]);
 
     try {
-      const res = await authFetch(`${apiBase}/admin/marks/upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          enrollment_number: Number(enrollment),
-          subject_code: subjectCode,
-          marks: Number(marks),
-        }),
-      });
+        const res = await authFetch(`${apiBase}/admin/marks/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ marks: [{ enrollment_number: Number(enrollment), subject_code: subjectCode, semester: 1, marks_obtained: Number(marks), status: "internal" }] }),
+        });
 
       const data = await res.json();
       
@@ -94,15 +90,11 @@ export default function AdminMarksUploadPage() {
       }]);
 
       try {
-        const res = await authFetch(`${apiBase}/admin/marks/upload`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            enrollment_number: Number(enr),
-            subject_code: subCode,
-            marks: Number(mrks),
-          }),
-        });
+          const res = await authFetch(`${apiBase}/admin/marks/upload`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ marks: [{ enrollment_number: Number(enr), subject_code: subCode, semester: 1, marks_obtained: Number(mrks), status: "internal" }] }),
+          });
 
         if (res.ok) {
           successCount++;

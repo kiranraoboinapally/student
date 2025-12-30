@@ -5,34 +5,31 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kiranraoboinapally/student/backend/config"
-	"github.com/kiranraoboinapally/student/backend/models"
+	"github.com/kiranraoboinapally/student/backend/internal/config"
+	"github.com/kiranraoboinapally/student/backend/internal/models"
 )
 
-// GetFaculty - List all faculty
-func GetFaculty(c *gin.Context) {
+func GetFaculties(c *gin.Context) {
 	db := config.DB
-	var faculty []models.Faculty
-	db.Find(&faculty)
-	c.JSON(http.StatusOK, gin.H{"data": faculty})
+	var facs []models.Faculty
+	db.Find(&facs)
+	c.JSON(http.StatusOK, gin.H{"data": facs})
 }
 
-// CreateFaculty - Admin creates faculty user (assumes user already exists with role 3)
 func CreateFaculty(c *gin.Context) {
-	var faculty models.Faculty
-	if err := c.ShouldBindJSON(&faculty); err != nil {
+	var f models.Faculty
+	if err := c.ShouldBindJSON(&f); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	db := config.DB
-	if err := db.Create(&faculty).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create faculty record"})
+	if err := db.Create(&f).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create faculty"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"message": "faculty created", "data": faculty})
+	c.JSON(http.StatusCreated, gin.H{"message": "faculty created", "data": f})
 }
 
-// UpdateFaculty
 func UpdateFaculty(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -40,21 +37,20 @@ func UpdateFaculty(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	var faculty models.Faculty
+	var f models.Faculty
 	db := config.DB
-	if err := db.First(&faculty, id).Error; err != nil {
+	if err := db.First(&f, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "faculty not found"})
 		return
 	}
-	if err := c.ShouldBindJSON(&faculty); err != nil {
+	if err := c.ShouldBindJSON(&f); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	db.Save(&faculty)
-	c.JSON(http.StatusOK, gin.H{"message": "faculty updated", "data": faculty})
+	db.Save(&f)
+	c.JSON(http.StatusOK, gin.H{"message": "faculty updated", "data": f})
 }
 
-// DeleteFaculty
 func DeleteFaculty(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)

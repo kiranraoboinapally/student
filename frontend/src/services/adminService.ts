@@ -351,12 +351,19 @@ class AdminService {
     return Array.isArray(data) ? data : data.payments || [];
   }
 
+  // Admin aggregated stats
+  async getAdminStats(): Promise<any> {
+    const res = await this.authFetch(`${apiBase}/admin/stats`);
+    if (!res.ok) return {};
+    return res.json();
+  }
+
   // Marks Upload
   async uploadMarks(marksData: any[]): Promise<{ success: boolean; message: string }> {
     const res = await this.authFetch(`${apiBase}/admin/marks/upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(marksData),
+      body: JSON.stringify({ marks: marksData }),
     });
     if (!res.ok) throw new Error("Failed to upload marks");
     return res.json();

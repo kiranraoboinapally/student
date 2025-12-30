@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kiranraoboinapally/student/backend/config"
-	"github.com/kiranraoboinapally/student/backend/models"
+	"github.com/kiranraoboinapally/student/backend/internal/config"
+	"github.com/kiranraoboinapally/student/backend/internal/models"
 )
 
 // GetMyProfile returns the logged-in user's profile
@@ -39,7 +39,6 @@ func GetMyProfile(c *gin.Context) {
 	}
 
 	var master models.MasterStudent
-	// match enrollment number if username is numeric
 	if en, err := strconv.ParseInt(user.Username, 10, 64); err == nil {
 		_ = db.Where("enrollment_number = ?", en).First(&master).Error
 	}

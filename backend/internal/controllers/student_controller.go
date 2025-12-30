@@ -1,23 +1,17 @@
-// controllers/student_controller.go - FULLY UPDATED WITH NEW APIs
-
 package controllers
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kiranraoboinapally/student/backend/config"
-	"github.com/kiranraoboinapally/student/backend/models"
+	"github.com/kiranraoboinapally/student/backend/internal/config"
+	"github.com/kiranraoboinapally/student/backend/internal/models"
 )
 
-/*
-====================================
-HELPER: Resolve Current Semester (SAFE)
-*/
+// resolveCurrentSemester (copied from legacy) - helper
 func resolveCurrentSemester(enrollment int64) interface{} {
 	db := config.DB
 
-	// 1️⃣ Try semester_results
 	var sem models.SemesterResult
 	if err := db.Where("enrollment_number = ?", enrollment).
 		Order("semester desc").
@@ -25,11 +19,9 @@ func resolveCurrentSemester(enrollment int64) interface{} {
 		return sem.Semester
 	}
 
-	// 2️⃣ Fallback: MAX semester from student_marks
 	var result struct {
 		MaxSemester int `gorm:"column:max_semester"`
 	}
-
 	db.Table("student_marks").
 		Select("COALESCE(MAX(semester), 0) AS max_semester").
 		Where("enrollment_number = ?", enrollment).
@@ -38,10 +30,6 @@ func resolveCurrentSemester(enrollment int64) interface{} {
 	return result.MaxSemester
 }
 
-/*
-====================================
-STUDENT PROFILE (SAFE)
-*/
 func GetStudentProfile(c *gin.Context) {
 	db := config.DB
 
@@ -52,7 +40,6 @@ func GetStudentProfile(c *gin.Context) {
 		return
 	}
 
-	// Uses the unexported helper from fees.go
 	enrollment, err := getStudentEnrollment(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid session"})
@@ -79,10 +66,6 @@ func GetStudentProfile(c *gin.Context) {
 	})
 }
 
-/*
-====================================
-STUDENT DASHBOARD
-*/
 func GetStudentDashboard(c *gin.Context) {
 	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
@@ -109,12 +92,6 @@ func GetStudentDashboard(c *gin.Context) {
 		"latest_result": latestResult,
 	})
 }
-
-/*
-====================================
-FEES
-====================================
-*/
 
 func GetStudentFeeSummary(c *gin.Context) {
 	enrollment, err := getEnrollmentOrError(c)
@@ -161,12 +138,6 @@ func GetStudentExaminationFees(c *gin.Context) {
 
 	c.JSON(http.StatusOK, fees)
 }
-
-/*
-====================================
-ACADEMICS
-====================================
-*/
 
 func GetCurrentSemester(c *gin.Context) {
 	enrollment, err := getEnrollmentOrError(c)
@@ -250,18 +221,18 @@ func GetStudentAttendance(c *gin.Context) {
 
 	var attendance []AttendanceRecord
 	query := `
-		SELECT
-			sm.subject_name,
-			COALESCE(COUNT(a.class_date), 0) AS total_classes,
-			COALESCE(SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END), 0) AS attended_classes
-		FROM subjects_master sm
-		LEFT JOIN attendance a
-			ON sm.subject_code = a.subject_code
-			AND a.enrollment_number = ?
-			AND a.semester = ?
-		WHERE sm.semester = ?
-		GROUP BY sm.subject_name
-	`
+        SELECT
+            sm.subject_name,
+            COALESCE(COUNT(a.class_date), 0) AS total_classes,
+            COALESCE(SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END), 0) AS attended_classes
+        FROM subjects_master sm
+        LEFT JOIN attendance a
+            ON sm.subject_code = a.subject_code
+            AND a.enrollment_number = ?
+            AND a.semester = ?
+        WHERE sm.semester = ?
+        GROUP BY sm.subject_name
+    `
 
 	if err := db.Raw(query, enrollment, semInt, semInt).
 		Scan(&attendance).Error; err != nil {
@@ -272,7 +243,6 @@ func GetStudentAttendance(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"attendance": attendance})
 }
 
-// NEW: Get all marks across semesters
 func GetAllMarks(c *gin.Context) {
 	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
@@ -287,7 +257,6 @@ func GetAllMarks(c *gin.Context) {
 	c.JSON(http.StatusOK, marks)
 }
 
-// NEW: Get semester results
 func GetSemesterResults(c *gin.Context) {
 	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {

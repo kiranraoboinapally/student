@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kiranraoboinapally/student/backend/config"
-	"github.com/kiranraoboinapally/student/backend/models"
+	"github.com/kiranraoboinapally/student/backend/internal/config"
+	"github.com/kiranraoboinapally/student/backend/internal/models"
 )
 
 // GetSubjects

@@ -5,11 +5,10 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kiranraoboinapally/student/backend/config"
-	"github.com/kiranraoboinapally/student/backend/models"
+	"github.com/kiranraoboinapally/student/backend/internal/config"
+	"github.com/kiranraoboinapally/student/backend/internal/models"
 )
 
-// GetCourses
 func GetCourses(c *gin.Context) {
 	db := config.DB
 	var courses []models.Course
@@ -17,7 +16,6 @@ func GetCourses(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": courses})
 }
 
-// CreateCourse
 func CreateCourse(c *gin.Context) {
 	var course models.Course
 	if err := c.ShouldBindJSON(&course); err != nil {
@@ -32,7 +30,6 @@ func CreateCourse(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "course created", "data": course})
 }
 
-// UpdateCourse
 func UpdateCourse(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -54,7 +51,6 @@ func UpdateCourse(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "course updated", "data": course})
 }
 
-// DeleteCourse
 func DeleteCourse(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)

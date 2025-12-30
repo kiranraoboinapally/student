@@ -7,15 +7,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kiranraoboinapally/student/backend/config"
+	"github.com/kiranraoboinapally/student/backend/internal/config"
 )
 
-// AuthRoleMiddleware verifies JWT and (optionally) enforces allowed role IDs.
-// - If no allowedRoles are provided, it only authenticates the token.
-// - If allowedRoles provided, it also checks user's role_id from users table.
 func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1) Get Authorization header
 		header := c.GetHeader("Authorization")
 		if header == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
@@ -28,7 +24,6 @@ func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 		}
 		tokenStr := parts[1]
 
-		// 2) Parse token
 		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 			return []byte(config.JwtSecret), nil
 		})
@@ -37,13 +32,11 @@ func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 			return
 		}
 
-		// 3) Extract claims safely
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
 			return
 		}
-		// expiry check
 		if expRaw, ok := claims["exp"].(float64); ok {
 			if time.Now().After(time.Unix(int64(expRaw), 0)) {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
@@ -51,7 +44,6 @@ func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 			}
 		}
 
-		// 4) user_id and username safe extraction
 		var userID int64
 		switch v := claims["user_id"].(type) {
 		case float64:
@@ -65,21 +57,18 @@ func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 			return
 		}
 
-		username, _ := claims["username"].(string) // username optional
+		username, _ := claims["username"].(string)
 
-		// set base context values
 		c.Set("user_id", userID)
 		if username != "" {
 			c.Set("username", username)
 		}
 
-		// 5) If no role checks required, continue
 		if len(allowedRoles) == 0 {
 			c.Next()
 			return
 		}
 
-		// 6) Otherwise fetch user's role from DB and authorize
 		var result struct {
 			RoleID int `gorm:"column:role_id"`
 		}
@@ -88,10 +77,8 @@ func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 			return
 		}
 
-		// check if user's roleID is allowed
 		for _, r := range allowedRoles {
 			if r == result.RoleID {
-				// also set role in context for handlers
 				c.Set("role_id", result.RoleID)
 				c.Next()
 				return
