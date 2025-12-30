@@ -1,0 +1,330 @@
+import React, { useMemo, useState } from "react";
+import {
+    CheckCircle,
+    XCircle,
+    Filter,
+    Search,
+    AlertCircle,
+    DollarSign,
+    Building2,
+    BookOpen
+} from "lucide-react";
+import type { FeePayment, Institute, Course, Student } from "../../services/adminService";
+import AdminService from "../../services/adminService";
+import { useAuth } from "../../../auth/AuthProvider";
+
+interface FeeVerificationDashboardProps {
+    payments: FeePayment[];
+    institutes: Institute[];
+    courses: Course[];
+    students: Student[];
+    onRefresh: () => void;
+}
+
+export default function FeeVerificationDashboard({
+    payments,
+    institutes,
+    courses,
+    students,
+    onRefresh
+}: FeeVerificationDashboardProps) {
+    const { authFetch } = useAuth();
+    const service = new AdminService(authFetch);
+
+    // Filters
+    const [selectedInstitute, setSelectedInstitute] = useState<number | "all">("all");
+    const [selectedCourse, setSelectedCourse] = useState<number | "all">("all");
+    const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "verified" | "rejected">("all");
+    const [searchTerm, setSearchTerm] = useState("");
+
+    // Processing State
+    const [processingId, setProcessingId] = useState<number | null>(null);
+
+    // Filter Logic: Join Payment -> Student -> Institute/Course
+    const filteredData = useMemo(() => {
+        return payments.filter(payment => {
+            // 1. Status Filter
+            if (statusFilter !== "all" && (payment.status || 'pending').toLowerCase() !== statusFilter) return false;
+
+            // Find linked student
+            const student = students.find(s => s.user_id === payment.student_id);
+
+            // 2. Institute Filter (requires linked student)
+            if (selectedInstitute !== "all") {
+                if (!student || student.institute_id !== selectedInstitute) return false;
+            }
+
+            // 3. Course Filter
+            if (selectedCourse !== "all") {
+                if (!student || student.course_id !== selectedCourse) return false;
+            }
+
+            // 4. Search (Name/Transaction ID)
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                const matchesName = (student?.full_name || payment.student_name || '').toLowerCase().includes(term);
+                const matchesTrans = (payment.transaction_number || '').toLowerCase().includes(term);
+                return matchesName || matchesTrans;
+            }
+
+            return true;
+        });
+    }, [payments, students, selectedInstitute, selectedCourse, statusFilter, searchTerm]);
+
+    // Derived Stats
+    const stats = useMemo(() => {
+        const total = filteredData.reduce((acc, curr) => acc + (Number(curr.amount_paid) || 0), 0);
+        const pendingCount = filteredData.filter(p => (p.status || 'pending') === 'pending').length;
+        const verifiedCount = filteredData.filter(p => p.status === 'verified').length;
+        return { total, pendingCount, verifiedCount };
+    }, [filteredData]);
+
+    // Handlers
+    const handleVerify = async (id: number) => {
+        if (!window.confirm("Verify this payment?")) return;
+        setProcessingId(id);
+        try {
+            await service.updateFeePaymentStatus(id, 'verified');
+            onRefresh();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to verify payment");
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleReject = async (id: number) => {
+        if (!window.confirm("Reject this payment?")) return;
+        setProcessingId(id);
+        try {
+            await service.updateFeePaymentStatus(id, 'rejected');
+            onRefresh();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to reject payment");
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Header Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm text-gray-500 mb-1">Total Collection (Filtered)</p>
+                            <h3 className="text-2xl font-bold text-emerald-600">₹{stats.total.toLocaleString()}</h3>
+                        </div>
+                        <div className="p-3 bg-emerald-50 rounded-lg">
+                            <DollarSign className="w-6 h-6 text-emerald-600" />
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm text-gray-500 mb-1">Pending Verification</p>
+                            <h3 className="text-2xl font-bold text-orange-600">{stats.pendingCount}</h3>
+                        </div>
+                        <div className="p-3 bg-orange-50 rounded-lg">
+                            <AlertCircle className="w-6 h-6 text-orange-600" />
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm text-gray-500 mb-1">Verified Transactions</p>
+                            <h3 className="text-2xl font-bold text-blue-600">{stats.verifiedCount}</h3>
+                        </div>
+                        <div className="p-3 bg-blue-50 rounded-lg">
+                            <CheckCircle className="w-6 h-6 text-blue-600" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Advanced Filters */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center">
+                <div className="flex items-center gap-2 text-gray-700 font-medium">
+                    <Filter size={20} />
+                    <span>Filters:</span>
+                </div>
+
+                {/* Institute Filter */}
+                <div className="relative">
+                    <select
+                        className="pl-9 pr-4 py-2 border rounded-lg appearance-none bg-gray-50 hover:bg-white transition-colors focus:ring-2 focus:ring-[#650C08] focus:border-transparent min-w-[200px]"
+                        value={selectedInstitute}
+                        onChange={e => {
+                            setSelectedInstitute(e.target.value === "all" ? "all" : Number(e.target.value));
+                            setSelectedCourse("all"); // Reset course when institute changes
+                        }}
+                    >
+                        <option value="all">All Institutes</option>
+                        {institutes.map(inst => (
+                            <option key={inst.institute_id || inst.id} value={inst.institute_id || inst.id}>
+                                {inst.name}
+                            </option>
+                        ))}
+                    </select>
+                    <Building2 className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                </div>
+
+                {/* Course Filter */}
+                <div className="relative">
+                    <select
+                        className="pl-9 pr-4 py-2 border rounded-lg appearance-none bg-gray-50 hover:bg-white transition-colors focus:ring-2 focus:ring-[#650C08] focus:border-transparent min-w-[200px]"
+                        value={selectedCourse}
+                        onChange={e => setSelectedCourse(e.target.value === "all" ? "all" : Number(e.target.value))}
+                        disabled={selectedInstitute === "all"} // Disable if no institute selected (optional, but good UX)
+                    >
+                        <option value="all">All Courses</option>
+                        {courses
+                            .filter(c => selectedInstitute === "all" || c.institute_id === selectedInstitute)
+                            .map(course => (
+                                <option key={course.course_id || course.id} value={course.course_id || course.id}>
+                                    {course.name || course.course_name}
+                                </option>
+                            ))
+                        }
+                    </select>
+                    <BookOpen className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                </div>
+
+                {/* Status Filter */}
+                <select
+                    className="px-4 py-2 border rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-[#650C08]"
+                    value={statusFilter}
+                    onChange={e => setStatusFilter(e.target.value as any)}
+                >
+                    <option value="all">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="verified">Verified</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+
+                {/* Search */}
+                <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search student or transaction ID..."
+                        className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            {/* Data Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                                <th className="px-6 py-4 font-semibold text-gray-900">Student Name</th>
+                                <th className="px-6 py-4 font-semibold text-gray-900">Institute / Course</th>
+                                <th className="px-6 py-4 font-semibold text-gray-900">Fee Type</th>
+                                <th className="px-6 py-4 font-semibold text-gray-900">Amount</th>
+                                <th className="px-6 py-4 font-semibold text-gray-900">Date</th>
+                                <th className="px-6 py-4 font-semibold text-gray-900">Status</th>
+                                <th className="px-6 py-4 text-right font-semibold text-gray-900">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {filteredData.length > 0 ? filteredData.map(payment => {
+                                const student = students.find(s => s.user_id === payment.student_id);
+                                const status = (payment.status || 'pending').toLowerCase();
+                                const isPending = status === 'pending';
+
+                                return (
+                                    <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="font-medium text-gray-900">{payment.student_name || student?.full_name || 'Unknown Student'}</div>
+                                            <div className="text-xs text-gray-500 font-mono">{payment.transaction_number || 'NO-REF'}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {/* We need student linking for this to be accurate */}
+                                            {student?.institute_id ? (
+                                                <div className="flex flex-col">
+                                                    <span className="text-gray-900 font-medium">
+                                                        {institutes.find(i => (i.institute_id || i.id) === student.institute_id)?.name || 'Unknown Institute'}
+                                                    </span>
+                                                    <span className="text-xs text-gray-500">
+                                                        {courses.find(c => (c.course_id || c.id) === student.course_id)?.name || 'Unknown Course'}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-400 italic">No academic data</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
+                                                {payment.fee_type || 'Tuition'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-gray-900">
+                                            ₹{(payment.amount_paid || 0).toLocaleString()}
+                                        </td>
+                                        <td className="px-6 py-4 text-gray-600">
+                                            {payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : '-'}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
+                                                ${status === 'verified' ? 'bg-emerald-100 text-emerald-800' :
+                                                    status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                                        'bg-amber-100 text-amber-800'}`}>
+                                                {status === 'verified' && <CheckCircle size={14} />}
+                                                {status === 'rejected' && <XCircle size={14} />}
+                                                {status === 'pending' && <AlertCircle size={14} />}
+                                                {status.charAt(0).toUpperCase() + status.slice(1)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            {isPending && (
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleVerify(payment.id!)}
+                                                        disabled={processingId === payment.id}
+                                                        className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                                        title="Verify Payment"
+                                                    >
+                                                        <CheckCircle size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleReject(payment.id!)}
+                                                        disabled={processingId === payment.id}
+                                                        className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                                                        title="Reject Payment"
+                                                    >
+                                                        <XCircle size={18} />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            }) : (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                                        <div className="flex flex-col items-center justify-center">
+                                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                                                <Filter className="text-gray-400" size={24} />
+                                            </div>
+                                            <p className="font-medium">No payments found</p>
+                                            <p className="text-sm">Try adjusting your filters</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}

@@ -13,22 +13,23 @@ import type {
     FeePayment
 } from "../../services/adminService";
 import {
-    BarChart3,
-    Users,
-    GraduationCap,
+    Bell,
+    Settings,
+    User,
+    LogOut,
+    Menu,
+    Plus,
+    RefreshCw,
+    Home,
+    ChevronRight,
     AlertCircle,
     CheckCircle,
-    LogOut,
-    RefreshCw,
-    File,
-    DollarSign,
-    BookOpen,
     Building2,
-    Plus,
-    Trash2,
+    DollarSign,
     X,
-    ChevronRight,
-    Home
+    Users,
+    GraduationCap,
+    File as FileIcon
 } from "lucide-react";
 import StatCard from "../../../../shared/components/StatCard";
 import Modal from "../../../../shared/components/Modal";
@@ -36,10 +37,12 @@ import InstituteDrillDown from "./InstituteDrillDown";
 import CourseDrillDown from "./CourseDrillDown";
 import StudentsByInstitute from "./StudentsByInstitute";
 import StatisticsCharts from "./StatisticsCharts";
+import FeeVerificationDashboard from "./FeeVerificationDashboard";
+import AcademicUploads from "./AcademicUploads";
 
 const theme = "#650C08";
 
-type TabType = "overview" | "institutes" | "students" | "analytics" | "courses" | "subjects" | "faculty" | "notices" | "fees";
+type TabType = "overview" | "institutes" | "students" | "analytics" | "courses" | "subjects" | "academics" | "faculty" | "notices" | "fees";
 
 // Breadcrumb navigation state
 type DrillDownLevel = "institutes" | "courses" | "students";
@@ -199,19 +202,6 @@ export default function AdminDashboard() {
         } catch (err) {
             console.error(err);
             alert("Failed to create institute");
-        }
-    };
-
-    const handleDeleteInstitute = async (id: number) => {
-        if (window.confirm("Delete this institute?")) {
-            try {
-                await service.deleteInstitute(id);
-                alert("Institute deleted");
-                loadAllData();
-            } catch (err) {
-                console.error(err);
-                alert("Failed to delete institute");
-            }
         }
     };
 
@@ -433,6 +423,7 @@ export default function AdminDashboard() {
                     { id: "analytics", label: "Analytics" },
                     { id: "courses", label: "Courses" },
                     { id: "subjects", label: "Subjects" },
+                    { id: "academics", label: "Academics" },
                     { id: "faculty", label: "Faculty" },
                     { id: "notices", label: "Notices" },
                     { id: "fees", label: "Fee Payments" },
@@ -471,7 +462,7 @@ export default function AdminDashboard() {
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                                 <StatCard title="Institutes" value={adminStats.total_institutes || 0} icon={<Building2 className="text-white" />} />
                                 <StatCard title="Fees Paid (₹)" value={adminStats.total_fees_paid ? Math.round(adminStats.total_fees_paid) : 0} icon={<DollarSign className="text-white" />} />
-                                <StatCard title="Pending Fees (₹)" value={adminStats.total_pending_fees ? Math.round(adminStats.total_pending_fees) : 0} icon={<File className="text-white" />} />
+                                <StatCard title="Pending Fees (₹)" value={adminStats.total_pending_fees ? Math.round(adminStats.total_pending_fees) : 0} icon={<FileIcon className="text-white" />} />
                                 <StatCard title="Passed Students" value={adminStats.passed_students_count || 0} icon={<CheckCircle className="text-white" />} />
                             </div>
                         )}
@@ -619,6 +610,16 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
+                {/* ACADEMICS TAB */}
+                {activeTab === "academics" && (
+                    <AcademicUploads
+                        institutes={institutes}
+                        courses={courses}
+                        subjects={subjects}
+                        students={students}
+                    />
+                )}
+
                 {/* SUBJECTS TAB */}
                 {activeTab === "subjects" && (
                     <div className="bg-white/95 rounded-xl shadow p-6">
@@ -670,122 +671,171 @@ export default function AdminDashboard() {
                 )}
 
                 {/* FACULTY TAB */}
+                {/* FACULTY TAB - MODERN CARDS */}
                 {activeTab === "faculty" && (
-                    <div className="bg-white/95 rounded-xl shadow p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold text-gray-900">Faculty</h2>
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center bg-white/95 rounded-xl shadow p-4 backdrop-blur">
+                            <div>
+                                <h2 className="text-xl font-bold text-gray-900">Faculty Directory</h2>
+                                <p className="text-sm text-gray-500">Manage registered faculty members</p>
+                            </div>
                             <button
                                 onClick={() => setShowFacultyModal(true)}
-                                className="bg-[#650C08] text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-[#8B1A1A]"
+                                className="bg-[#650C08] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-colors shadow-md"
                             >
-                                <Plus size={16} /> Add Faculty
+                                <Plus size={18} /> Add Faculty
                             </button>
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead>
-                                    <tr className="text-gray-600 border-b bg-gray-50">
-                                        <th className="py-3 px-4">Name</th>
-                                        <th className="py-3 px-4">Email</th>
-                                        <th className="py-3 px-4">Phone</th>
-                                        <th className="py-3 px-4">Specialization</th>
-                                        <th className="py-3 px-4 text-right">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {faculty.length > 0 ? faculty.map(fac => (
-                                        <tr key={fac.faculty_id} className="border-b hover:bg-gray-50">
-                                            <td className="py-3 px-4 text-gray-900">{fac.name || fac.faculty_name}</td>
-                                            <td className="py-3 px-4 text-gray-700">{fac.email || '-'}</td>
-                                            <td className="py-3 px-4 text-gray-700">{fac.phone || '-'}</td>
-                                            <td className="py-3 px-4 text-gray-700">{fac.specialization || '-'}</td>
-                                            <td className="py-3 px-4 text-right">
-                                                <button
-                                                    onClick={() => handleDeleteFaculty(fac.faculty_id!)}
-                                                    className="text-red-600 hover:text-red-800"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td colSpan={5} className="py-4 text-center text-gray-500">No faculty found.</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+
+                        {faculty.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {faculty.map((fac) => (
+                                    <div key={fac.faculty_id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all duration-300 group relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => handleDeleteFaculty(fac.faculty_id!)}
+                                                className="text-gray-400 hover:text-red-600 bg-white rounded-full p-2 shadow-sm"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-start gap-4 mb-4">
+                                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#650C08] to-[#991b1b] flex items-center justify-center text-white text-xl font-bold border-4 border-white shadow-md">
+                                                {(fac.name || fac.faculty_name || '?').charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-bold text-gray-900 line-clamp-1">{fac.name || fac.faculty_name}</h3>
+                                                <span className="inline-block px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium mt-1">
+                                                    {fac.specialization || 'General Faculty'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3 pt-4 border-t border-gray-100">
+                                            <div className="flex items-center gap-3 text-sm text-gray-600">
+                                                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
+                                                    {/* Email Icon placeholder using simpler div to avoid importing if not needed, or assume Lucide is available globally? No, need imports. */}
+                                                    <span className="text-gray-400">@</span>
+                                                </div>
+                                                <span className="truncate">{fac.email || 'No email provided'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3 text-sm text-gray-600">
+                                                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-gray-400">#</span>
+                                                </div>
+                                                <span>{fac.phone || 'No phone provided'}</span>
+                                            </div>
+                                            {fac.qualification && (
+                                                <div className="flex items-center gap-3 text-sm text-gray-600">
+                                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
+                                                        <span className="text-gray-400">🎓</span>
+                                                    </div>
+                                                    <span>{fac.qualification}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl shadow-sm border border-dashed border-gray-300">
+                                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                                    <Users className="text-gray-400" size={32} />
+                                </div>
+                                <h3 className="text-lg font-medium text-gray-900">No Faculty Registered</h3>
+                                <p className="text-gray-500 mt-1">Get started by adding your first faculty member.</p>
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {/* NOTICES TAB */}
+                {/* NOTICES TAB - TIMELINE */}
                 {activeTab === "notices" && (
-                    <div className="bg-white/95 rounded-xl shadow p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold text-gray-900">Notices</h2>
-                            <button
-                                onClick={() => setShowNoticeModal(true)}
-                                className="bg-[#650C08] text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-[#8B1A1A]"
-                            >
-                                <Plus size={16} /> Add Notice
-                            </button>
-                        </div>
-                        <div className="space-y-4">
-                            {notices.length > 0 ? notices.map(notice => (
-                                <div key={notice.notice_id} className="border border-gray-200 rounded-lg p-4 flex justify-between items-start">
-                                    <div>
-                                        <h3 className="font-bold text-gray-900">{notice.title}</h3>
-                                        <p className="text-gray-700 text-sm mt-1">{notice.description}</p>
-                                        <p className="text-xs text-gray-500 mt-2">{new Date(notice.created_at).toLocaleDateString("en-IN")}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => handleDeleteNotice(notice.notice_id!)}
-                                        className="text-red-600 hover:text-red-800 ml-4"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="flex justify-between items-center bg-white/95 rounded-xl shadow p-4 backdrop-blur">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900">Notice Board</h2>
+                                    <p className="text-sm text-gray-500">Announcements & Updates</p>
                                 </div>
-                            )) : (
-                                <div className="text-center py-8 text-gray-500">No notices found.</div>
-                            )}
+                                <button
+                                    onClick={() => setShowNoticeModal(true)}
+                                    className="bg-[#650C08] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-colors shadow-md"
+                                >
+                                    <Plus size={18} /> New Notice
+                                </button>
+                            </div>
+
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
+                                {notices.length > 0 ? (
+                                    <div className="absolute left-8 top-8 bottom-8 w-0.5 bg-gray-100"></div>
+                                ) : null}
+
+                                <div className="space-y-8 relative">
+                                    {notices.length > 0 ? notices.map((notice, idx) => (
+                                        <div key={notice.notice_id} className="relative pl-10 group">
+                                            {/* Timeline Dot */}
+                                            <div className="absolute left-[-5px] top-1 w-4 h-4 rounded-full border-4 border-white bg-[#650C08] shadow-sm z-10 group-hover:scale-125 transition-transform"></div>
+
+                                            <div className="bg-gray-50 rounded-xl p-5 hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-gray-100 group-hover:-translate-y-1">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="text-xs font-bold text-[#650C08] bg-red-50 px-2 py-1 rounded uppercase tracking-wider">
+                                                        {new Date(notice.created_at).toLocaleDateString("en-US", { month: 'short', day: 'numeric' })}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => handleDeleteNotice(notice.notice_id!)}
+                                                        className="text-gray-300 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                                <h3 className="text-lg font-bold text-gray-900 mb-2">{notice.title}</h3>
+                                                <p className="text-gray-600 text-sm leading-relaxed">{notice.description}</p>
+                                                <div className="mt-3 text-xs text-gray-400 flex items-center gap-2">
+                                                    <span>🕒 Posted {new Date(notice.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="text-center py-12">
+                                            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <span className="text-2xl">📢</span>
+                                            </div>
+                                            <h3 className="text-lg font-medium text-gray-900">No Notices Yet</h3>
+                                            <p className="text-gray-500 mt-1">Create your first announcement to notify students and faculty.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Recent Activity Mini Feed / Summary could go here */}
+                        <div className="space-y-6">
+                            <div className="bg-[#650C08] text-white rounded-xl shadow-lg p-6 relative overflow-hidden">
+                                <div className="relative z-10">
+                                    <h3 className="tex-lg font-bold mb-2">Quick Stats</h3>
+                                    <div className="text-4xl font-bold mb-1">{notices.length}</div>
+                                    <p className="text-red-200 text-sm">Active Notices</p>
+                                </div>
+                                <div className="absolute right-[-20px] top-[-20px] opacity-10">
+                                    <span className="text-[150px]">📢</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
 
-                {/* FEE PAYMENTS TAB */}
+                {/* FEE PAYMENTS TAB - ADVANCED VERIFICATION DASHBOARD */}
                 {activeTab === "fees" && (
-                    <div className="bg-white/95 rounded-xl shadow p-6">
-                        <h2 className="text-lg font-bold text-gray-900 mb-4">Fee Payment History</h2>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead>
-                                    <tr className="text-gray-600 border-b bg-gray-50">
-                                        <th className="py-3 px-4">Student Name</th>
-                                        <th className="py-3 px-4">Amount Paid (₹)</th>
-                                        <th className="py-3 px-4">Fee Type</th>
-                                        <th className="py-3 px-4">Payment Date</th>
-                                        <th className="py-3 px-4">Transaction No.</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {feePayments.length > 0 ? feePayments.map((payment, idx) => (
-                                        <tr key={idx} className="border-b hover:bg-gray-50">
-                                            <td className="py-3 px-4 text-gray-900">{payment.student_name || '-'}</td>
-                                            <td className="py-3 px-4 text-gray-700">₹{(payment.amount_paid || 0).toLocaleString("en-IN")}</td>
-                                            <td className="py-3 px-4 text-gray-700">{payment.fee_type || '-'}</td>
-                                            <td className="py-3 px-4 text-gray-700">{payment.payment_date || '-'}</td>
-                                            <td className="py-3 px-4 text-gray-700 font-mono">{payment.transaction_number || '-'}</td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td colSpan={5} className="py-4 text-center text-gray-500">No fee payments found.</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <FeeVerificationDashboard
+                        payments={feePayments}
+                        institutes={institutes}
+                        courses={courses}
+                        students={students}
+                        onRefresh={loadAllData}
+                    />
                 )}
             </div>
 

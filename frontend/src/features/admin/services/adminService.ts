@@ -8,11 +8,16 @@ export interface PendingUser {
   created_at: string;
 }
 
+// Enhanced interfaces for real-world data linking
 export interface Student {
   user_id: number;
   username: string;
   email: string;
   full_name: string;
+  institute_id?: number; // Optional linking field
+  course_id?: number;    // Optional linking field
+  enrollment_date?: string;
+  status?: string;
 }
 
 export interface User {
@@ -70,6 +75,7 @@ export interface Faculty {
   phone?: string;
   qualification?: string;
   specialization?: string;
+  institute_id?: number;
 }
 
 export interface Notice {
@@ -79,6 +85,7 @@ export interface Notice {
   description: string;
   created_at: string;
   updated_at?: string;
+  priority?: "low" | "medium" | "high";
 }
 
 export interface FeePayment {
@@ -89,6 +96,7 @@ export interface FeePayment {
   payment_date?: string;
   transaction_number?: string;
   fee_type?: string;
+  status?: string;
 }
 
 class AdminService {
@@ -351,6 +359,16 @@ class AdminService {
     return Array.isArray(data) ? data : data.payments || [];
   }
 
+  async updateFeePaymentStatus(paymentId: number, status: 'verified' | 'rejected'): Promise<{ success: boolean; message: string }> {
+    const res = await this.authFetch(`${apiBase}/admin/fees/payments/${paymentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error("Failed to update payment status");
+    return res.json();
+  }
+
   // Admin aggregated stats
   async getAdminStats(): Promise<any> {
     const res = await this.authFetch(`${apiBase}/admin/stats`);
@@ -366,6 +384,17 @@ class AdminService {
       body: JSON.stringify({ marks: marksData }),
     });
     if (!res.ok) throw new Error("Failed to upload marks");
+    return res.json();
+  }
+
+  // Attendance Upload
+  async uploadAttendance(attendanceData: any[]): Promise<{ success: boolean; message: string }> {
+    const res = await this.authFetch(`${apiBase}/admin/attendance/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attendance: attendanceData }),
+    });
+    if (!res.ok) throw new Error("Failed to upload attendance");
     return res.json();
   }
 }
