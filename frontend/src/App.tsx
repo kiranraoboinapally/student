@@ -12,10 +12,7 @@ import ChangePasswordPage from "./features/auth/components/ChangePasswordPage";
 import ForgotPasswordPage from "./features/auth/components/ForgotPasswordPage";
 import ResetPasswordPage from "./features/auth/components/ResetPasswordPage";
 
-// ADMIN DATA ENTRY PAGES
-import AdminFeeCreationPage from "./features/admin/components/AdminFeeCreationPage";
-import AdminAttendancePage from "./features/admin/components/AdminAttendancePage";
-import AdminMarksUploadPage from "./features/admin/components/AdminMarksUploadPage";
+
 
 function Protected({ children, allowedRole }: { children: JSX.Element; allowedRole: number }) {
   const { token, roleId } = useAuth();
@@ -57,31 +54,6 @@ export default function App() {
             }
           />
 
-          {/* ADMIN DATA ENTRY ROUTES */}
-          <Route
-            path="/admin/create-fees"
-            element={
-              <Protected allowedRole={1}>
-                <AdminFeeCreationPage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/admin/record-attendance"
-            element={
-              <Protected allowedRole={1}>
-                <AdminAttendancePage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/admin/upload-marks"
-            element={
-              <Protected allowedRole={1}>
-                <AdminMarksUploadPage />
-              </Protected>
-            }
-          />
 
           <Route
             path="/change-password"
