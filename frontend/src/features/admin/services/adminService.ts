@@ -118,11 +118,14 @@ class AdminService {
   }
 
   // Pending Users
-  async getPendingUsers(): Promise<PendingUser[]> {
-    const res = await this.authFetch(`${apiBase}/admin/pending-registrations`);
-    if (!res.ok) return [];
+  async getPendingUsers(page: number = 1, limit: number = 10): Promise<{ pending_registrations: PendingUser[]; total: number }> {
+    const res = await this.authFetch(`${apiBase}/admin/pending-registrations?page=${page}&limit=${limit}`);
+    if (!res.ok) return { pending_registrations: [], total: 0 };
     const data = await res.json();
-    return data.pending_registrations || [];
+    return {
+      pending_registrations: data.pending_registrations || [],
+      total: data.pagination?.total || 0,
+    };
   }
 
   async approveUser(userId: number): Promise<{ success: boolean; message: string }> {
@@ -183,11 +186,14 @@ class AdminService {
   }
 
   // Institutes
-  async getInstitutes(): Promise<Institute[]> {
-    const res = await this.authFetch(`${apiBase}/admin/institutes`);
-    if (!res.ok) return [];
+  async getInstitutes(page: number = 1, limit: number = 10): Promise<{ institutes: Institute[]; total: number }> {
+    const res = await this.authFetch(`${apiBase}/admin/institutes?page=${page}&limit=${limit}`);
+    if (!res.ok) return { institutes: [], total: 0 };
     const data = await res.json();
-    return Array.isArray(data) ? data : data.data || data.institutes || [];
+    return {
+      institutes: data.data || data.institutes || [],
+      total: data.pagination?.total || 0,
+    };
   }
 
   async createInstitute(instituteData: Institute): Promise<{ success: boolean; message: string; id?: number }> {
@@ -219,11 +225,14 @@ class AdminService {
   }
 
   // Courses
-  async getCourses(): Promise<Course[]> {
-    const res = await this.authFetch(`${apiBase}/admin/courses`);
-    if (!res.ok) return [];
+  async getCourses(page: number = 1, limit: number = 10): Promise<{ courses: Course[]; total: number }> {
+    const res = await this.authFetch(`${apiBase}/admin/courses?page=${page}&limit=${limit}`);
+    if (!res.ok) return { courses: [], total: 0 };
     const data = await res.json();
-    return Array.isArray(data) ? data : data.data || data.courses || [];
+    return {
+      courses: data.data || data.courses || [],
+      total: data.pagination?.total || 0,
+    };
   }
 
   async createCourse(courseData: Course): Promise<{ success: boolean; message: string; id?: number }> {
@@ -255,11 +264,14 @@ class AdminService {
   }
 
   // Subjects
-  async getSubjects(): Promise<Subject[]> {
-    const res = await this.authFetch(`${apiBase}/admin/subjects`);
-    if (!res.ok) return [];
+  async getSubjects(page: number = 1, limit: number = 10): Promise<{ subjects: Subject[]; total: number }> {
+    const res = await this.authFetch(`${apiBase}/admin/subjects?page=${page}&limit=${limit}`);
+    if (!res.ok) return { subjects: [], total: 0 };
     const data = await res.json();
-    return Array.isArray(data) ? data : data.data || data.subjects || [];
+    return {
+      subjects: data.data || data.subjects || [],
+      total: data.pagination?.total || 0,
+    };
   }
 
   async createSubject(subjectData: Subject): Promise<{ success: boolean; message: string; id?: number }> {
@@ -291,11 +303,14 @@ class AdminService {
   }
 
   // Faculty
-  async getFaculty(): Promise<Faculty[]> {
-    const res = await this.authFetch(`${apiBase}/admin/faculty`);
-    if (!res.ok) return [];
+  async getFaculty(page: number = 1, limit: number = 10): Promise<{ faculty: Faculty[]; total: number }> {
+    const res = await this.authFetch(`${apiBase}/admin/faculty?page=${page}&limit=${limit}`);
+    if (!res.ok) return { faculty: [], total: 0 };
     const data = await res.json();
-    return Array.isArray(data) ? data : data.data || data.faculty || [];
+    return {
+      faculty: data.data || data.faculty || [],
+      total: data.pagination?.total || 0,
+    };
   }
 
   async createFaculty(facultyData: Faculty): Promise<{ success: boolean; message: string; id?: number }> {
@@ -363,11 +378,14 @@ class AdminService {
   }
 
   // Fee Payments
-  async getFeePayments(): Promise<FeePayment[]> {
-    const res = await this.authFetch(`${apiBase}/admin/fees/payments`);
-    if (!res.ok) return [];
+  async getFeePayments(page: number = 1, limit: number = 20): Promise<{ payments: FeePayment[]; total: number }> {
+    const res = await this.authFetch(`${apiBase}/admin/fees/payments?page=${page}&limit=${limit}`);
+    if (!res.ok) return { payments: [], total: 0 };
     const data = await res.json();
-    return Array.isArray(data) ? data : data.payments || [];
+    return {
+      payments: data.payments || [],
+      total: data.pagination?.total || 0,
+    };
   }
 
   async updateFeePaymentStatus(paymentId: number, status: 'verified' | 'rejected'): Promise<{ success: boolean; message: string }> {

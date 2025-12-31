@@ -1,204 +1,175 @@
-import React from 'react';
 import {
-    Building2,
     Users,
     GraduationCap,
+    BookOpen,
+    Building2,
+    Clock,
     DollarSign,
-    AlertCircle,
-    Bell,
-    CheckCircle,
-    ArrowRight,
-    TrendingUp,
-    Activity
-} from 'lucide-react';
+    ShieldCheck,
+    ArrowUpRight
+} from "lucide-react";
 import type { Notice, PendingUser } from '../../services/adminService';
 
 interface UniversityOverviewProps {
     stats: any;
     pendingUsers: PendingUser[];
     notices: Notice[];
-    onNavigate: (tab: string) => void;
+    onNavigate: (tab: any) => void;
+    onReviewUser: (user: PendingUser) => void;
 }
 
-export default function UniversityOverview({ stats, pendingUsers, notices, onNavigate }: UniversityOverviewProps) {
+export default function UniversityOverview({ stats, pendingUsers, notices, onReviewUser, onNavigate }: UniversityOverviewProps) {
     if (!stats) return <div className="text-white">Loading Overview...</div>;
 
-    const totalRevenue = stats.total_fees_paid || 0;
-    const expectedRevenue = stats.total_expected_fees || 0;
-    const pendingRevenue = stats.total_pending_fees || 0;
-    const collectionRate = expectedRevenue > 0 ? (totalRevenue / expectedRevenue) * 100 : 0;
+    // Fallbacks if stats are waiting to load from parent
+    const totalInstitutes = stats.total_institutes || 0;
+    const totalCourses = stats.total_courses || 0;
+    const totalStudents = stats.total_students || 0;
+    const totalFaculty = stats.total_faculty || 0;
 
     return (
-        <div className="space-y-6 animate-fadeIn">
-            {/* Header Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Total Institutes */}
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-[#650C08]">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500">Total Institutes</p>
-                            <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.total_institutes || 0}</h3>
+        <div className="space-y-6">
+            {/* Top Metrics Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-blue-50/50 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('institutes')}>
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-3 bg-blue-100 rounded-xl text-blue-600 group-hover:scale-110 transition-transform">
+                            <Building2 size={24} />
                         </div>
-                        <div className="p-3 bg-red-50 rounded-lg">
-                            <Building2 className="text-[#650C08]" size={24} />
-                        </div>
+                        <ArrowUpRight size={16} className="text-gray-400 group-hover:text-blue-600" />
                     </div>
-                    <div className="mt-4 flex items-center text-sm text-gray-600">
-                        <TrendingUp size={16} className="mr-1 text-green-600" />
-                        <span className="text-green-600 font-medium">+2 New</span>
-                        <span className="ml-1">this month</span>
+                    <div>
+                        <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Colleges</p>
+                        <h3 className="text-2xl font-black text-gray-900">{totalInstitutes}</h3>
                     </div>
                 </div>
 
-                {/* Total Students */}
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-600">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500">Total Students</p>
-                            <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.total_students || 0}</h3>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-purple-50/50 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('institutes')}>
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-3 bg-purple-100 rounded-xl text-purple-600 group-hover:scale-110 transition-transform">
+                            <BookOpen size={24} />
                         </div>
-                        <div className="p-3 bg-blue-50 rounded-lg">
-                            <GraduationCap className="text-blue-600" size={24} />
-                        </div>
+                        <ArrowUpRight size={16} className="text-gray-400 group-hover:text-purple-600" />
                     </div>
-                    <div className="mt-4 flex items-center text-sm text-gray-600">
-                        <span className="text-gray-500">Across {stats.students_per_branch?.length || 0} Branches</span>
+                    <div>
+                        <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Courses</p>
+                        <h3 className="text-2xl font-black text-gray-900">{totalCourses}</h3>
                     </div>
                 </div>
 
-                {/* Financial Health */}
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-emerald-500">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500">Fee Collection</p>
-                            <h3 className="text-2xl font-bold text-gray-900 mt-2">₹{(totalRevenue / 10000000).toFixed(2)}Cr</h3>
-                            <p className="text-xs text-gray-400">Target: ₹{(expectedRevenue / 10000000).toFixed(2)}Cr</p>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-emerald-50/50 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('institutes')}>
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
+                            <Users size={24} />
                         </div>
-                        <div className="p-3 bg-emerald-50 rounded-lg">
-                            <DollarSign className="text-emerald-600" size={24} />
-                        </div>
+                        <ArrowUpRight size={16} className="text-gray-400 group-hover:text-emerald-600" />
                     </div>
-                    <div className="mt-4 w-full bg-gray-100 rounded-full h-2">
-                        <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${collectionRate}%` }}></div>
+                    <div>
+                        <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Students</p>
+                        <h3 className="text-2xl font-black text-gray-900">{totalStudents}</h3>
                     </div>
                 </div>
 
-                {/* System Status / Pending */}
-                <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500">Action Items</p>
-                            <h3 className="text-3xl font-bold text-gray-900 mt-2">{pendingUsers.length}</h3>
-                            <p className="text-xs text-gray-400">Pending Registrations</p>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-orange-50/50 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('faculty')}>
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-3 bg-orange-100 rounded-xl text-orange-600 group-hover:scale-110 transition-transform">
+                            <GraduationCap size={24} />
                         </div>
-                        <div className="p-3 bg-orange-50 rounded-lg">
-                            <AlertCircle className="text-orange-500" size={24} />
-                        </div>
+                        <ArrowUpRight size={16} className="text-gray-400 group-hover:text-orange-600" />
                     </div>
-                    <div className="mt-4">
-                        <button
-                            onClick={() => onNavigate('students')}
-                            className="text-sm text-orange-600 font-medium hover:underline flex items-center gap-1"
-                        >
-                            Review All <ArrowRight size={14} />
-                        </button>
+                    <div>
+                        <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Faculty</p>
+                        <h3 className="text-2xl font-black text-gray-900">{totalFaculty}</h3>
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-[#650C08]/5 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('fees')}>
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-3 bg-red-100 rounded-xl text-[#650C08] group-hover:scale-110 transition-transform">
+                            <DollarSign size={24} />
+                        </div>
+                        <ArrowUpRight size={16} className="text-gray-400 group-hover:text-[#650C08]" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Collection</p>
+                        <h3 className="text-2xl font-black text-[#650C08]">₹{(stats.total_fees_paid || 0).toLocaleString()}</h3>
                     </div>
                 </div>
             </div>
 
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Recent Activity / Notices */}
-                <div className="bg-white/95 rounded-xl shadow-sm p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                            <Bell className="text-[#650C08]" size={20} />
-                            Recent Notices
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Recent Activity / Pending Users */}
+                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                        <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                            Pending Registrations
+                            <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                {pendingUsers.length}
+                            </span>
                         </h3>
-                        <button onClick={() => onNavigate('notices')} className="text-sm text-blue-600 hover:text-blue-800">View All</button>
                     </div>
-                    <div className="space-y-4">
-                        {notices.slice(0, 4).map((notice, idx) => (
-                            <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
-                                <div className="flex justify-between items-start">
-                                    <h4 className="font-semibold text-gray-900 line-clamp-1">{notice.title}</h4>
-                                    <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                                        {new Date(notice.created_at || '').toLocaleDateString()}
-                                    </span>
-                                </div>
-                                <p className="text-sm text-gray-600 mt-1 line-clamp-2">{notice.description}</p>
-                            </div>
-                        ))}
-                        {notices.length === 0 && <p className="text-gray-500 text-center py-4">No recent notices posted.</p>}
-                    </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="bg-white/95 rounded-xl shadow-sm p-6">
-                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-6">
-                        <Activity className="text-[#650C08]" size={20} />
-                        Quick Actions
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => onNavigate('institutes')} className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-100 text-left transition-colors group">
-                            <Building2 className="text-blue-600 mb-2 group-hover:scale-110 transition-transform" />
-                            <div className="font-semibold text-gray-900">Add Institute</div>
-                            <div className="text-xs text-gray-500">Register new campus</div>
-                        </button>
-                        <button onClick={() => onNavigate('notices')} className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-100 text-left transition-colors group">
-                            <Bell className="text-purple-600 mb-2 group-hover:scale-110 transition-transform" />
-                            <div className="font-semibold text-gray-900">Post Notice</div>
-                            <div className="text-xs text-gray-500">Announce to all</div>
-                        </button>
-                        <button onClick={() => onNavigate('fees')} className="p-4 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-100 text-left transition-colors group">
-                            <DollarSign className="text-emerald-600 mb-2 group-hover:scale-110 transition-transform" />
-                            <div className="font-semibold text-gray-900">Verify Fees</div>
-                            <div className="text-xs text-gray-500">Check payments</div>
-                        </button>
-                        <button onClick={() => onNavigate('overview')} className="p-4 bg-orange-50 hover:bg-orange-100 rounded-lg border border-orange-100 text-left transition-colors group">
-                            <Users className="text-orange-600 mb-2 group-hover:scale-110 transition-transform" />
-                            <div className="font-semibold text-gray-900">Approve Users</div>
-                            <div className="text-xs text-gray-500">Review signups</div>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Pending Registrations (Mini-View) */}
-                <div className="bg-white/95 rounded-xl shadow-sm p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                            <Users className="text-[#650C08]" size={20} />
-                            Pending Approvals
-                        </h3>
-                        <span className="bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs font-bold">{pendingUsers.length}</span>
-                    </div>
-                    <div className="space-y-3">
-                        {pendingUsers.slice(0, 5).map(user => (
-                            <div key={user.user_id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-100 transition-all">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
-                                        {user.full_name?.charAt(0)}
+                    <div className="divide-y divide-gray-100">
+                        {pendingUsers.length > 0 ? (
+                            pendingUsers.map((user) => (
+                                <div key={user.user_id} className="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-bold uppercase">
+                                            {user.full_name?.[0] || 'U'}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-900">{user.full_name}</p>
+                                            <p className="text-xs text-gray-500">{user.email} • {user.username}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <div className="font-medium text-gray-900">{user.full_name}</div>
-                                        <div className="text-xs text-gray-500">{user.username}</div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-1 text-xs text-gray-400">
+                                            <Clock size={12} />
+                                            {new Date(user.created_at).toLocaleDateString()}
+                                        </div>
+                                        <button
+                                            onClick={() => onReviewUser(user)}
+                                            className="text-xs bg-[#650C08] text-white px-3 py-1.5 rounded hover:bg-[#8B1A1A] transition-colors"
+                                        >
+                                            Review
+                                        </button>
                                     </div>
                                 </div>
-                                <button onClick={() => onNavigate('overview')} className="text-xs bg-[#650C08] text-white px-3 py-1.5 rounded hover:bg-[#8B1A1A]">
-                                    Review
-                                </button>
-                            </div>
-                        ))}
-                        {pendingUsers.length === 0 && (
-                            <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-                                <CheckCircle size={32} className="mb-2 text-green-500" />
-                                <p>All caught up!</p>
+                            ))
+                        ) : (
+                            <div className="p-12 text-center text-gray-500">
+                                <p className="font-medium">All caught up!</p>
+                                <p className="text-sm">No pending registrations at the moment.</p>
                             </div>
                         )}
                     </div>
                 </div>
 
+                {/* Notices Section */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                        <h3 className="font-bold text-gray-900">Recent Notices</h3>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        {notices.slice(0, 5).map((notice) => (
+                            <div key={notice.notice_id} className="group cursor-pointer">
+                                <p className="text-xs text-[#650C08] font-bold uppercase tracking-wider mb-1">
+                                    {new Date(notice.created_at).toLocaleDateString()}
+                                </p>
+                                <h4 className="text-sm font-semibold text-gray-900 group-hover:text-[#650C08] transition-colors line-clamp-1">
+                                    {notice.title}
+                                </h4>
+                                <p className="text-xs text-gray-500 line-clamp-2 mt-1">
+                                    {notice.description}
+                                </p>
+                            </div>
+                        ))}
+                        {notices.length === 0 && (
+                            <div className="text-center py-8 text-gray-400 text-sm">
+                                <p>No notices available.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

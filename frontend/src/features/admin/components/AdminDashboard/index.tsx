@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../auth/AuthProvider";
 import AdminService from "../../services/adminService";
@@ -14,24 +14,20 @@ import type {
 } from "../../services/adminService";
 import {
     Bell,
-    Settings,
-    User,
     LogOut,
-    Menu,
     Plus,
     RefreshCw,
     Home,
     ChevronRight,
-    AlertCircle,
-    CheckCircle,
     Building2,
     DollarSign,
     X,
     Users,
-    GraduationCap,
     File as FileIcon,
     Edit,
-    Trash2
+    Trash2,
+    BookOpen,
+    ChevronLeft
 } from "lucide-react";
 import Modal from "../../../../shared/components/Modal";
 import InstituteDrillDown from "./InstituteDrillDown";
@@ -42,9 +38,36 @@ import AcademicUploads from "./AcademicUploads";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import UniversityOverview from "./UniversityOverview";
 
-const theme = "#650C08";
 
-type TabType = "overview" | "institutes" | "students" | "analytics" | "courses" | "subjects" | "academics" | "faculty" | "notices" | "fees";
+const Pagination = ({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) => {
+    const totalPages = Math.ceil(total / 20); // assuming 20 limit
+    if (totalPages <= 1) return null;
+    return (
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/30">
+            <div className="text-sm text-gray-500">
+                Showing page <span className="font-medium">{current}</span> of <span className="font-medium">{totalPages}</span>
+            </div>
+            <div className="flex gap-2">
+                <button
+                    disabled={current === 1}
+                    onClick={() => onPageChange(current - 1)}
+                    className="p-1.5 rounded border border-gray-200 enabled:hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                >
+                    <ChevronLeft size={16} />
+                </button>
+                <button
+                    disabled={current === totalPages}
+                    onClick={() => onPageChange(current + 1)}
+                    className="p-1.5 rounded border border-gray-200 enabled:hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                >
+                    <ChevronRight size={16} />
+                </button>
+            </div>
+        </div>
+    );
+};
+
+type TabType = "overview" | "institutes" | "analytics" | "subjects" | "academics" | "faculty" | "notices" | "fees";
 
 // Breadcrumb navigation state
 type DrillDownLevel = "institutes" | "courses" | "students";
@@ -64,18 +87,35 @@ export default function AdminDashboard() {
 
     // Data States
     const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
-    const [students, setStudents] = useState<Student[]>([]);
+    const [pendingTotal, setPendingTotal] = useState(0);
+    const [students] = useState<Student[]>([]);
+    const [studentsTotal] = useState(0);
     const [adminStats, setAdminStats] = useState<any>(null);
-    const [searchTerm, setSearchTerm] = useState("");
     const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null);
     const [showActionModal, setShowActionModal] = useState(false);
 
     const [institutes, setInstitutes] = useState<Institute[]>([]);
+    const [institutesTotal, setInstitutesTotal] = useState(0);
     const [courses, setCourses] = useState<Course[]>([]);
+    const [coursesTotal, setCoursesTotal] = useState(0);
     const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [subjectsTotal, setSubjectsTotal] = useState(0);
     const [faculty, setFaculty] = useState<Faculty[]>([]);
+    const [facultyTotal, setFacultyTotal] = useState(0);
     const [notices, setNotices] = useState<Notice[]>([]);
     const [feePayments, setFeePayments] = useState<FeePayment[]>([]);
+    const [feesTotal, setFeesTotal] = useState(0);
+
+    // Pagination States
+    const [pages, setPages] = useState<Record<string, number>>({
+        students: 1,
+        institutes: 1,
+        courses: 1,
+        subjects: 1,
+        faculty: 1,
+        fees: 1,
+        pending: 1
+    });
 
     // Modal States
     const [showInstituteModal, setShowInstituteModal] = useState(false);
@@ -86,7 +126,7 @@ export default function AdminDashboard() {
 
     // Form States
     const [instituteForm, setInstituteForm] = useState<Institute>({ institute_name: "", institute_code: "", address: "", city: "", state: "", contact_number: "", contact_email: "" } as any);
-    const [courseForm, setCourseForm] = useState<Course>({ name: "", code: "", duration_years: 0, institute_id: 0 } as any);
+    const [courseForm, setCourseForm] = useState<Course>({ name: "", code: "", duration: 0, institute_id: 0 } as any);
     const [subjectForm, setSubjectForm] = useState<Subject>({ subject_name: "", subject_code: "", credits: 0, semester: 0, course_id: 0 } as any);
     const [facultyForm, setFacultyForm] = useState<Faculty>({ faculty_name: "", email: "", phone: "", department: "", position: "" } as any);
     const [noticeForm, setNoticeForm] = useState<Notice>({ title: "", description: "", created_at: new Date().toISOString() });
@@ -96,82 +136,91 @@ export default function AdminDashboard() {
     const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
-        loadAllData();
+        loadDashboardBase();
     }, []);
 
-    // Real-time admin notifications via WebSocket
-    useEffect(() => {
-        if (!authFetch) return;
-        const token = (window.localStorage.getItem('app_token') as string | null);
-        if (!token) return;
-        const wsUrl = (window.location.protocol === 'https:' ? 'wss' : 'ws') + '://localhost:8080/ws/admin?token=' + encodeURIComponent(token);
-        let ws: WebSocket | null = null;
+    // Load only base data for dashboard (stats + pending)
+    async function loadDashboardBase() {
         try {
-            ws = new WebSocket(wsUrl);
-            ws.onopen = () => console.log('Admin websocket connected');
-            ws.onmessage = (ev) => {
-                try {
-                    const msg = JSON.parse(ev.data);
-                    console.log('ws msg', msg);
-                    if (msg.event === 'marks_uploaded' || msg.event === 'payment_recorded' || msg.event === 'registration_status_changed') {
-                        alert(`Admin Notification: ${msg.event} — ${JSON.stringify(msg.payload)}`);
-                        loadAllData();
-                    }
-                } catch (e) {
-                    console.error('invalid ws message', e);
-                }
-            };
-            ws.onclose = () => console.log('Admin websocket closed');
-        } catch (e) {
-            console.error('ws error', e);
-        }
-        return () => { if (ws) ws.close(); };
-    }, [authFetch]);
-
-    async function loadAllData() {
-        try {
-            setRefreshing(true);
-            const [pendingData, studentsData, institutesData, coursesData, subjectsData, facultyData, noticesData, feesData, adminStatsData] = await Promise.all([
-                service.getPendingUsers(),
-                service.getStudents(1, 1000),
-                service.getInstitutes(),
-                service.getCourses(),
-                service.getSubjects(),
-                service.getFaculty(),
-                service.getNotices(),
-                service.getFeePayments(),
+            setLoading(true);
+            const [statsData, pendingData, noticesData] = await Promise.all([
                 service.getAdminStats(),
+                service.getPendingUsers(1, 5),
+                service.getNotices()
             ]);
-
-            setPendingUsers(pendingData);
-
-            // Enrich students with IDs for filtering
-            const instMap = new Map((institutesData || []).map(i => [i.institute_name, i.institute_id]));
-            const courseMap = new Map((coursesData || []).map(c => [c.name, c.course_id]));
-
-            const enrichedStudents = (studentsData.students || []).map(s => ({
-                ...s,
-                institute_id: s.institute_name ? instMap.get(s.institute_name) : undefined,
-                course_id: s.course_name ? courseMap.get(s.course_name) : undefined
-            }));
-
-            setStudents(enrichedStudents);
-            setInstitutes(institutesData);
-            setCourses(coursesData);
-            setSubjects(subjectsData);
-            setFaculty(facultyData);
+            setAdminStats(statsData || {});
+            setPendingUsers(pendingData.pending_registrations);
+            setPendingTotal(pendingData.total);
             setNotices(noticesData);
-            setFeePayments(feesData);
-            setAdminStats(adminStatsData || {});
+
+            // Pre-load lookup data for modals
+            const [instLook, courseLook] = await Promise.all([
+                service.getInstitutes(1, 1000),
+                service.getCourses(1, 1000)
+            ]);
+            setInstitutes(instLook.institutes);
+            setInstitutesTotal(instLook.total);
+            setCourses(courseLook.courses);
+            setCoursesTotal(courseLook.total);
 
             setLoading(false);
         } catch (err) {
             console.error(err);
             setLoading(false);
+        }
+    }
+
+    // Lazy load tab data
+    useEffect(() => {
+        if (activeTab === "overview") return;
+        loadTabData(activeTab);
+    }, [activeTab, pages]);
+
+    async function loadTabData(tab: TabType) {
+        try {
+            setRefreshing(true);
+            const page = pages[tab] || 1;
+            const limit = 20;
+
+            switch (tab) {
+                case "institutes":
+                    const iData = await service.getInstitutes(page, limit);
+                    setInstitutes(iData.institutes);
+                    setInstitutesTotal(iData.total);
+                    break;
+                case "subjects":
+                    const subData = await service.getSubjects(page, limit);
+                    setSubjects(subData.subjects);
+                    setSubjectsTotal(subData.total);
+                    break;
+                case "faculty":
+                    const fData = await service.getFaculty(page, limit);
+                    setFaculty(fData.faculty);
+                    setFacultyTotal(fData.total);
+                    break;
+                case "fees":
+                    const feeData = await service.getFeePayments(page, limit);
+                    setFeePayments(feeData.payments);
+                    setFeesTotal(feeData.total);
+                    break;
+            }
+        } catch (err) {
+            console.error(err);
         } finally {
             setRefreshing(false);
         }
     }
+
+    async function loadAllData() {
+        // Legacy or refresh all
+        loadDashboardBase();
+        if (activeTab !== "overview") loadTabData(activeTab);
+    }
+
+    const handleReviewUser = (user: PendingUser) => {
+        setSelectedUser(user);
+        setShowActionModal(true);
+    };
 
     const handleApproveUser = async (user: PendingUser) => {
         try {
@@ -253,7 +302,7 @@ export default function AdminDashboard() {
             }
             setShowCourseModal(false);
             setEditingId(null);
-            setCourseForm({ name: "", code: "", duration: 0, institute_id: 0 } as any);
+            setCourseForm({ name: "", code: "", duration: 0, institute_id: selectedInstitute?.institute_id || 0 } as any);
             loadAllData();
         } catch (err) {
             console.error(err);
@@ -371,618 +420,510 @@ export default function AdminDashboard() {
         setDrillDownLevel("courses");
     };
 
-    const filteredUsers = pendingUsers.filter(u =>
-        `${u.full_name} ${u.email} ${u.username}`.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // Computed Stats for Overview
+    const dashboardStats = {
+        ...adminStats,
+        total_institutes: institutesTotal || institutes.length,
+        total_courses: coursesTotal || courses.length,
+        total_students: studentsTotal || students.length,
+        total_faculty: facultyTotal || faculty.length,
+        total_pending: pendingTotal || pendingUsers.length,
+        active_colleges: institutesTotal || institutes.length,
+    };
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${theme} 0%, #8B1A1A 50%, #1a1a1a 100%)` }}>
-                <div className="text-white text-lg">Loading admin dashboard...</div>
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="flex flex-col items-center gap-4">
+                    <RefreshCw className="w-8 h-8 text-[#650C08] animate-spin" />
+                    <div className="text-[#650C08] font-medium text-lg">Loading University Dashboard...</div>
+                </div>
             </div>
         );
     }
 
+    const SidebarItem = ({ id, label, icon: Icon }: { id: TabType, label: string, icon: any }) => (
+        <button
+            onClick={() => { setActiveTab(id); if (id === "institutes") handleBackToInstitutes(); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-all duration-200 ${activeTab === id
+                ? "bg-[#650C08] text-white shadow-md"
+                : "text-gray-600 hover:bg-gray-100 hover:text-[#650C08]"
+                }`}
+        >
+            <Icon size={20} />
+            <span className="font-medium">{label}</span>
+        </button>
+    );
+
     return (
-        <div className="min-h-screen flex flex-col" style={{ background: `linear-gradient(135deg, ${theme} 0%, #8B1A1A 50%, #1a1a1a 100%)` }}>
-            {/* NAVBAR */}
-            <nav className="flex justify-between items-center px-6 py-4 bg-white/5 backdrop-blur border-b border-white/10">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm bg-white">
-                        <img src="/Logo.png" alt="Logo" className="w-full h-full object-contain" />
+        <div className="min-h-screen bg-gray-50 flex font-sans">
+            {/* SIDEBAR */}
+            <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col fixed h-full z-20">
+                <div className="p-6 border-b border-gray-100 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-[#650C08] flex items-center justify-center">
+                        <span className="text-white font-bold text-xl">U</span>
                     </div>
                     <div>
-                        <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
-                        <p className="text-xs text-white/80">ERP Management System</p>
+                        <h1 className="text-lg font-bold text-gray-900 leading-none">UniAdmin</h1>
+                        <p className="text-xs text-gray-500 mt-1">Management Portal</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button onClick={() => loadAllData()} disabled={refreshing} className="flex items-center gap-2 bg-white/5 text-white px-3 py-2 rounded hover:bg-white/10">
-                        <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing' : 'Refresh'}
-                    </button>
-                    <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
-                        <LogOut size={16} /> Logout
-                    </button>
-                </div>
-            </nav>
 
-            {/* BREADCRUMB */}
-            {activeTab === "institutes" && (
-                <div className="px-6 pt-4">
-                    <div className="flex items-center gap-2 text-sm text-white/80">
-                        <button onClick={handleBackToInstitutes} className="hover:text-white transition-colors flex items-center gap-1">
-                            <Home size={16} /> Institutes
-                        </button>
-                        {selectedInstitute && (
-                            <>
-                                <ChevronRight size={16} />
-                                <button onClick={() => setDrillDownLevel("courses")} className="hover:text-white transition-colors">
-                                    {selectedInstitute.institute_name}
-                                </button>
-                            </>
-                        )}
-                        {selectedCourse && (
-                            <>
-                                <ChevronRight size={16} />
-                                <span className="text-white">{selectedCourse.name}</span>
-                            </>
-                        )}
+                <div className="flex-1 overflow-y-auto p-4">
+                    <div className="space-y-1">
+                        <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Main</p>
+                        <SidebarItem id="overview" label="Dashboard" icon={Home} />
+                        <SidebarItem id="institutes" label="Colleges" icon={Building2} />
+                        <SidebarItem id="faculty" label="Faculty" icon={Users} />
+                    </div>
+
+                    <div className="space-y-1 mt-8">
+                        <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</p>
+                        <SidebarItem id="fees" label="Fee Payments" icon={DollarSign} />
+                        <SidebarItem id="academics" label="Academics" icon={FileIcon} />
+                        <SidebarItem id="notices" label="Holidays & Notices" icon={Bell} />
+                        <SidebarItem id="subjects" label="Subjects" icon={BookOpen} />
                     </div>
                 </div>
-            )}
 
-            {/* TABS */}
-            <div className="flex gap-0 px-6 pt-6 pb-0 flex-wrap">
-                {[
-                    { id: "overview", label: "Overview" },
-                    { id: "institutes", label: "Institutes & Students" },
-                    { id: "analytics", label: "Analytics" },
-                    { id: "courses", label: "Courses" },
-                    { id: "subjects", label: "Subjects" },
-                    { id: "academics", label: "Academics" },
-                    { id: "faculty", label: "Faculty" },
-                    { id: "notices", label: "Notices" },
-                    { id: "fees", label: "Fee Payments" },
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => { setActiveTab(tab.id as TabType); if (tab.id === "institutes") handleBackToInstitutes(); }}
-                        className={`px-4 py-3 font-semibold text-sm border-b-2 transition ${activeTab === tab.id ? "text-white border-white" : "text-white/60 border-transparent hover:text-white/80"}`}
-                    >
-                        {tab.label}
+                <div className="p-4 border-t border-gray-100">
+                    <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors">
+                        <LogOut size={20} />
+                        <span className="font-medium">Logout</span>
                     </button>
-                ))}
-            </div>
+                </div>
+            </aside>
 
-            {/* CONTENT */}
-            <div className="flex-1 px-6 py-8 max-w-[1600px] mx-auto w-full">
-
-                {activeTab === "overview" && (
-                    <div className="space-y-8">
-                        <UniversityOverview
-                            stats={adminStats}
-                            pendingUsers={pendingUsers}
-                            notices={notices}
-                            onNavigate={(tab) => {
-                                // Handle navigation logic
-                                if (tab === 'students') {
-                                    setActiveTab('institutes');
-                                    // Logic to show students would go here, but for now just switching tab
-                                } else {
-                                    setActiveTab(tab as TabType);
-                                }
-                            }}
-                        />
-
-                        {/* Keep the detailed table for Review action context if needed, 
-                            or we can move the review modal triggers to within the component.
-                            For now, let's keep the Pending Registration Table below as a detailed view 
-                            specifically if the user wants to see ALL of them, or we can just rely on the component.
-                            Actually, the component has a "Review All" button.
-                            Let's keep the Pending Table ONLY if we scroll down, or maybe hide it? 
-                            The user asked to make it "more better". Replacing it is better.
-                            But wait, where is the logic to open the modal? 
-                            The new component calls onNavigate.
-                            Let's add the table ONLY if there are pending users, below the overview?
-                            No, let's put the Pending Users Table inside a dedicated section or just keep it 
-                            revealed when clicking "Approve Users" which sets tab to... ?
-                            
-                            Actually, the existing code had the table right there.
-                            The user wants a DASHBOARD.
-                            Let's just put the detailed table below the Overview component if there are any pending users,
-                            or strictly use the Overview.
-                            
-                            Better yet: The 'Review' button in the new component calls `onNavigate('overview')`.
-                            So remaining on 'overview' is correct.
-                            Let's keep the table but styling it as "Detailed Pending Queue" below the dashboard.
-                        */}
-
-                        {pendingUsers.length > 0 && (
-                            <div className="bg-white/95 rounded-xl shadow p-6 mt-8">
-                                <h2 className="text-lg font-bold text-gray-900 mb-4">Detailed Pending Queue</h2>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="text-gray-500 border-b">
-                                            <tr>
-                                                <th className="py-2">Name</th>
-                                                <th className="py-2">Email</th>
-                                                <th className="py-2">Date</th>
-                                                <th className="py-2 text-right">Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredUsers.map(user => (
-                                                <tr key={user.user_id} className="border-b hover:bg-gray-50">
-                                                    <td className="py-3 font-medium">{user.full_name}</td>
-                                                    <td className="py-3 text-gray-600">{user.email}</td>
-                                                    <td className="py-3 text-gray-500">{new Date(user.created_at || '').toLocaleDateString()}</td>
-                                                    <td className="py-3 text-right">
-                                                        <button
-                                                            onClick={() => { setSelectedUser(user); setShowActionModal(true); }}
-                                                            className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold hover:bg-orange-200"
-                                                        >
-                                                            Review
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+            {/* MAIN CONTENT WRAPPER */}
+            <div className="flex-1 ml-64 min-w-0 flex flex-col">
+                {/* TOP HEADER */}
+                <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-8 py-4 flex justify-between items-center shadow-sm">
+                    {/* Breadcrumbs or Title */}
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-800 capitalize">
+                            {activeTab === 'overview' ? 'Admin Dashboard' :
+                                activeTab === 'institutes' ? 'Colleges Management' :
+                                    activeTab}
+                        </h2>
+                        {activeTab === "institutes" && (selectedInstitute || selectedCourse) && (
+                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                                <span className="hover:text-[#650C08] cursor-pointer" onClick={handleBackToInstitutes}>Colleges</span>
+                                {selectedInstitute && (
+                                    <>
+                                        <ChevronRight size={14} />
+                                        <span
+                                            className={`${!selectedCourse ? 'text-gray-900 font-medium' : 'hover:text-[#650C08] cursor-pointer'}`}
+                                            onClick={() => setDrillDownLevel("courses")}
+                                        >
+                                            {selectedInstitute.institute_name}
+                                        </span>
+                                    </>
+                                )}
+                                {selectedCourse && (
+                                    <>
+                                        <ChevronRight size={14} />
+                                        <span className="text-gray-900 font-medium">{selectedCourse.name}</span>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
-                )}
 
-                {activeTab === "institutes" && (
-                    <>
-                        {drillDownLevel === "institutes" && (
-                            <InstituteDrillDown
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => loadAllData()} disabled={refreshing} className="p-2 text-gray-500 hover:text-[#650C08] hover:bg-gray-50 rounded-full transition-all">
+                            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+                        </button>
+                        <div className="h-8 w-px bg-gray-200 mx-2"></div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-right hidden sm:block">
+                                <p className="text-sm font-semibold text-gray-900">University Admin</p>
+                                <p className="text-xs text-gray-500">Administrator</p>
+                            </div>
+                            <div className="w-10 h-10 rounded-full bg-[#650C08] text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                                A
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                {/* CONTENT AREA */}
+                <main className="flex-1 p-8 overflow-y-auto">
+                    <div className="max-w-7xl mx-auto">
+
+                        {activeTab === "overview" && (
+                            <UniversityOverview
+                                stats={dashboardStats}
+                                pendingUsers={pendingUsers}
+                                notices={notices}
+                                onReviewUser={handleReviewUser}
+                                onNavigate={(tab) => {
+                                    if (tab === 'students') {
+                                        setActiveTab('institutes'); // Redirect to institutes drill down
+                                    } else {
+                                        setActiveTab(tab as TabType);
+                                    }
+                                }}
+                            />
+                        )}
+
+                        {activeTab === "institutes" && (
+                            <>
+                                {drillDownLevel === "institutes" && (
+                                    <InstituteDrillDown
+                                        institutes={institutes}
+                                        courses={courses}
+                                        students={students}
+                                        onSelectInstitute={handleSelectInstitute}
+                                    />
+                                )}
+                                {drillDownLevel === "courses" && selectedInstitute && (
+                                    <CourseDrillDown
+                                        selectedInstitute={selectedInstitute}
+                                        courses={courses}
+                                        students={students}
+                                        onSelectCourse={handleSelectCourse}
+                                        onBack={handleBackToInstitutes}
+                                        onAdd={() => {
+                                            setEditingId(null);
+                                            setCourseForm({ name: "", code: "", duration: 0, institute_id: selectedInstitute.institute_id } as any);
+                                            setShowCourseModal(true);
+                                        }}
+                                        onEdit={(c) => startEdit('course', c)}
+                                        onDelete={handleDeleteCourse}
+                                    />
+                                )}
+                                {drillDownLevel === "students" && (
+                                    <StudentsByInstitute
+                                        selectedInstitute={selectedInstitute}
+                                        selectedCourse={selectedCourse}
+                                        students={students}
+                                        courses={courses}
+                                        onBack={selectedCourse ? handleBackToCourses : handleBackToInstitutes}
+                                    />
+                                )}
+                            </>
+                        )}
+
+
+                        {activeTab === "analytics" && (
+                            <AnalyticsDashboard
                                 institutes={institutes}
                                 courses={courses}
                                 students={students}
-                                onSelectInstitute={handleSelectInstitute}
+                                feePayments={feePayments}
+                                subjects={subjects}
+                                adminStats={adminStats}
                             />
                         )}
-                        {drillDownLevel === "courses" && selectedInstitute && (
-                            <CourseDrillDown
-                                selectedInstitute={selectedInstitute}
+
+
+                        {activeTab === "academics" && (
+                            <AcademicUploads
+                                institutes={institutes}
                                 courses={courses}
+                                subjects={subjects}
                                 students={students}
-                                onSelectCourse={handleSelectCourse}
-                                onBack={handleBackToInstitutes}
                             />
                         )}
-                        {drillDownLevel === "students" && (
-                            <StudentsByInstitute
-                                selectedInstitute={selectedInstitute}
-                                selectedCourse={selectedCourse}
-                                students={students}
-                                courses={courses}
-                                onBack={selectedCourse ? handleBackToCourses : handleBackToInstitutes}
-                            />
-                        )}
-                    </>
-                )}
 
-
-                {/* ANALYTICS TAB */}
-                {
-                    activeTab === "analytics" && (
-                        <AnalyticsDashboard
-                            institutes={institutes}
-                            courses={courses}
-                            students={students}
-                            feePayments={feePayments}
-                            subjects={subjects}
-                            adminStats={adminStats}
-                        />
-                    )
-                }
-
-                {/* COURSES TAB */}
-                {
-                    activeTab === "courses" && (
-                        <div className="bg-white/95 rounded-xl shadow p-6">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-bold text-gray-900">Courses</h2>
-                                <button
-                                    onClick={() => setShowCourseModal(true)}
-                                    className="bg-[#650C08] text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-[#8B1A1A]"
-                                >
-                                    <Plus size={16} /> Add Course
-                                </button>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead>
-                                        <tr className="text-gray-600 border-b bg-gray-50">
-                                            <th className="py-3 px-4">Name</th>
-                                            <th className="py-3 px-4">Code</th>
-                                            <th className="py-3 px-4">Duration (Years)</th>
-                                            <th className="py-3 px-4 text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {courses.length > 0 ? courses.map(course => (
-                                            <tr key={course.course_id} className="border-b hover:bg-gray-50">
-                                                <td className="py-3 px-4 text-gray-900">{course.name}</td>
-                                                <td className="py-3 px-4 text-gray-700">{course.code || '-'}</td>
-                                                <td className="py-3 px-4 text-gray-700">{course.duration_years || '-'}</td>
-                                                <td className="py-3 px-4 text-right flex justify-end gap-2">
-                                                    <button onClick={() => startEdit('course', course)} className="text-blue-600 hover:text-blue-800">
-                                                        <Edit size={16} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteCourse(course.course_id!)}
-                                                        className="text-red-600 hover:text-red-800"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        )) : (
-                                            <tr>
-                                                <td colSpan={4} className="py-4 text-center text-gray-500">No courses found.</td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )
-                }
-
-                {/* ACADEMICS TAB */}
-                {
-                    activeTab === "academics" && (
-                        <AcademicUploads
-                            institutes={institutes}
-                            courses={courses}
-                            subjects={subjects}
-                            students={students}
-                        />
-                    )
-                }
-
-                {/* SUBJECTS TAB */}
-                {
-                    activeTab === "subjects" && (
-                        <div className="bg-white/95 rounded-xl shadow p-6">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-bold text-gray-900">Subjects</h2>
-                                <button
-                                    onClick={() => setShowSubjectModal(true)}
-                                    className="bg-[#650C08] text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-[#8B1A1A]"
-                                >
-                                    <Plus size={16} /> Add Subject
-                                </button>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead>
-                                        <tr className="text-gray-600 border-b bg-gray-50">
-                                            <th className="py-3 px-4">Name</th>
-                                            <th className="py-3 px-4">Code</th>
-                                            <th className="py-3 px-4">Semester</th>
-                                            <th className="py-3 px-4">Credits</th>
-                                            <th className="py-3 px-4 text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {subjects.length > 0 ? subjects.map(subject => (
-                                            <tr key={subject.subject_id} className="border-b hover:bg-gray-50">
-                                                <td className="py-3 px-4 text-gray-900">{subject.subject_name}</td>
-                                                <td className="py-3 px-4 text-gray-700">{subject.subject_code || '-'}</td>
-                                                <td className="py-3 px-4 text-gray-700">{subject.semester || '-'}</td>
-                                                <td className="py-3 px-4 text-gray-700">{subject.credits || '-'}</td>
-                                                <td className="py-3 px-4 text-right flex justify-end gap-2">
-                                                    <button onClick={() => startEdit('subject', subject)} className="text-blue-600 hover:text-blue-800">
-                                                        <Edit size={16} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteSubject(subject.subject_id!)}
-                                                        className="text-red-600 hover:text-red-800"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        )) : (
-                                            <tr>
-                                                <td colSpan={5} className="py-4 text-center text-gray-500">No subjects found.</td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )
-                }
-
-                {/* FACULTY TAB */}
-                {/* FACULTY TAB - MODERN CARDS */}
-                {
-                    activeTab === "faculty" && (
-                        <div className="space-y-6">
-                            <div className="flex justify-between items-center bg-white/95 rounded-xl shadow p-4 backdrop-blur">
-                                <div>
-                                    <h2 className="text-xl font-bold text-gray-900">Faculty Directory</h2>
-                                    <p className="text-sm text-gray-500">Manage registered faculty members</p>
-                                </div>
-                                <button
-                                    onClick={() => setShowFacultyModal(true)}
-                                    className="bg-[#650C08] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-colors shadow-md"
-                                >
-                                    <Plus size={18} /> Add Faculty
-                                </button>
-                            </div>
-
-                            {faculty.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {faculty.map((fac) => (
-                                        <div key={fac.faculty_id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all duration-300 group relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                                                <button
-                                                    onClick={() => startEdit('faculty', fac)}
-                                                    className="text-gray-400 hover:text-blue-600 bg-white rounded-full p-2 shadow-sm"
-                                                >
-                                                    <Edit size={18} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteFaculty(fac.faculty_id!)}
-                                                    className="text-gray-400 hover:text-red-600 bg-white rounded-full p-2 shadow-sm"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
-
-                                            <div className="flex items-start gap-4 mb-4">
-                                                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#650C08] to-[#991b1b] flex items-center justify-center text-white text-xl font-bold border-4 border-white shadow-md">
-                                                    {(fac.faculty_name || '?').charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-lg font-bold text-gray-900 line-clamp-1">{fac.faculty_name}</h3>
-                                                    <span className="inline-block px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium mt-1">
-                                                        {fac.position || 'Faculty'}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-3 pt-4 border-t border-gray-100">
-                                                <div className="flex items-center gap-3 text-sm text-gray-600">
-                                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
-                                                        {/* Email Icon placeholder using simpler div to avoid importing if not needed, or assume Lucide is available globally? No, need imports. */}
-                                                        <span className="text-gray-400">@</span>
-                                                    </div>
-                                                    <span className="truncate">{fac.email || 'No email provided'}</span>
-                                                </div>
-                                                <div className="flex items-center gap-3 text-sm text-gray-600">
-                                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
-                                                        <span className="text-gray-400">#</span>
-                                                    </div>
-                                                    <span>{fac.phone || 'No phone provided'}</span>
-                                                </div>
-                                                {fac.department && (
-                                                    <div className="flex items-center gap-3 text-sm text-gray-600">
-                                                        <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
-                                                            <span className="text-gray-400">🎓</span>
-                                                        </div>
-                                                        <span>{fac.department}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl shadow-sm border border-dashed border-gray-300">
-                                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                                        <Users className="text-gray-400" size={32} />
-                                    </div>
-                                    <h3 className="text-lg font-medium text-gray-900">No Faculty Registered</h3>
-                                    <p className="text-gray-500 mt-1">Get started by adding your first faculty member.</p>
-                                </div>
-                            )}
-                        </div>
-                    )
-                }
-
-                {/* NOTICES TAB */}
-                {/* NOTICES TAB - TIMELINE */}
-                {
-                    activeTab === "notices" && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-2 space-y-6">
-                                <div className="flex justify-between items-center bg-white/95 rounded-xl shadow p-4 backdrop-blur">
+                        {activeTab === "subjects" && (
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
                                     <div>
-                                        <h2 className="text-xl font-bold text-gray-900">Notice Board</h2>
-                                        <p className="text-sm text-gray-500">Announcements & Updates</p>
+                                        <h2 className="text-lg font-bold text-gray-900">Subjects Repository</h2>
+                                        <p className="text-sm text-gray-500">Manage subjects and credits</p>
                                     </div>
                                     <button
-                                        onClick={() => setShowNoticeModal(true)}
+                                        onClick={() => setShowSubjectModal(true)}
+                                        className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-sm transition-all"
+                                    >
+                                        <Plus size={18} /> Add Subject
+                                    </button>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-gray-50 text-gray-600 font-medium">
+                                            <tr>
+                                                <th className="py-3 px-6">Subject Name</th>
+                                                <th className="py-3 px-6">Code</th>
+                                                <th className="py-3 px-6">Semester</th>
+                                                <th className="py-3 px-6">Credits</th>
+                                                <th className="py-3 px-6 text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {subjects.length > 0 ? subjects.map(subject => (
+                                                <tr key={subject.subject_id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="py-4 px-6 font-medium text-gray-900">{subject.subject_name}</td>
+                                                    <td className="py-4 px-6 text-gray-600"><span className="bg-gray-100 px-2 py-1 rounded text-xs">{subject.subject_code || 'N/A'}</span></td>
+                                                    <td className="py-4 px-6 text-gray-600">Sem {subject.semester}</td>
+                                                    <td className="py-4 px-6 text-gray-600">{subject.credits}</td>
+                                                    <td className="py-4 px-6 text-right flex justify-end gap-2">
+                                                        <button onClick={() => startEdit('subject', subject)} className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded"><Edit size={16} /></button>
+                                                        <button onClick={() => handleDeleteSubject(subject.subject_id!)} className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                                    </td>
+                                                </tr>
+                                            )) : (
+                                                <tr>
+                                                    <td colSpan={5} className="py-8 text-center text-gray-500">No subjects found.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <Pagination
+                                    current={pages.subjects}
+                                    total={subjectsTotal}
+                                    onPageChange={(p) => setPages({ ...pages, subjects: p })}
+                                />
+                            </div>
+                        )}
+
+                        {activeTab === "faculty" && (
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-gray-900">Faculty Directory</h2>
+                                        <p className="text-sm text-gray-500">Manage registered faculty members</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowFacultyModal(true)}
                                         className="bg-[#650C08] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-colors shadow-md"
                                     >
-                                        <Plus size={18} /> New Notice
+                                        <Plus size={18} /> Add Faculty
                                     </button>
                                 </div>
 
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
-                                    {notices.length > 0 ? (
-                                        <div className="absolute left-8 top-8 bottom-8 w-0.5 bg-gray-100"></div>
-                                    ) : null}
+                                {faculty.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {faculty.map((fac) => (
+                                            <div key={fac.faculty_id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group relative">
+                                                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                                                    <button onClick={() => startEdit('faculty', fac)} className="text-gray-500 hover:text-blue-600 bg-gray-100 rounded-full p-2"><Edit size={16} /></button>
+                                                    <button onClick={() => handleDeleteFaculty(fac.faculty_id!)} className="text-gray-500 hover:text-red-600 bg-gray-100 rounded-full p-2"><Trash2 size={16} /></button>
+                                                </div>
 
-                                    <div className="space-y-8 relative">
-                                        {notices.length > 0 ? notices.map((notice, idx) => (
-                                            <div key={notice.notice_id} className="relative pl-10 group">
-                                                {/* Timeline Dot */}
-                                                <div className="absolute left-[-5px] top-1 w-4 h-4 rounded-full border-4 border-white bg-[#650C08] shadow-sm z-10 group-hover:scale-125 transition-transform"></div>
-
-                                                <div className="bg-gray-50 rounded-xl p-5 hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-gray-100 group-hover:-translate-y-1">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <span className="text-xs font-bold text-[#650C08] bg-red-50 px-2 py-1 rounded uppercase tracking-wider">
-                                                            {new Date(notice.created_at).toLocaleDateString("en-US", { month: 'short', day: 'numeric' })}
+                                                <div className="flex items-center gap-4 mb-4">
+                                                    <div className="w-16 h-16 rounded-full bg-[#650C08]/10 flex items-center justify-center text-[#650C08] text-2xl font-bold">
+                                                        {(fac.faculty_name || 'F').charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-lg font-bold text-gray-900 line-clamp-1">{fac.faculty_name}</h3>
+                                                        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100 mt-1">
+                                                            {fac.position || 'Faculty Member'}
                                                         </span>
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => startEdit('notice', notice)} className="text-gray-300 hover:text-blue-600 transition-colors">
-                                                                <Edit size={16} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteNotice(notice.notice_id!)}
-                                                                className="text-gray-300 hover:text-red-500 transition-colors"
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-3 pt-4 border-t border-gray-100">
+                                                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                                                        <span className="text-gray-400 w-4"><Users size={16} /></span>
+                                                        <span className="truncate">{fac.department || 'General Department'}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                                                        <span className="text-gray-400 w-4">@</span>
+                                                        <span className="truncate">{fac.email || 'No email provided'}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                                                        <span className="text-gray-400 w-4">#</span>
+                                                        <span>{fac.phone || 'No phone'}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl shadow-sm border border-dashed border-gray-300">
+                                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                                            <Users className="text-gray-400" size={32} />
+                                        </div>
+                                        <h3 className="text-lg font-medium text-gray-900">No Faculty Registered</h3>
+                                        <p className="text-gray-500 mt-1">Get started by adding your first faculty member.</p>
+                                    </div>
+                                )}
+                                {faculty.length > 0 && (
+                                    <Pagination
+                                        current={pages.faculty}
+                                        total={facultyTotal}
+                                        onPageChange={(p) => setPages({ ...pages, faculty: p })}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === "notices" && (
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="lg:col-span-2 space-y-6">
+                                    <div className="flex justify-between items-center bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                        <div>
+                                            <h2 className="text-xl font-bold text-gray-900">Notice Board</h2>
+                                            <p className="text-sm text-gray-500 mt-1">Announcements & Updates</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setShowNoticeModal(true)}
+                                            className="bg-[#650C08] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-colors shadow-md"
+                                        >
+                                            <Plus size={18} /> New Notice
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
+                                        {notices.length > 0 ? (
+                                            <div className="absolute left-8 top-8 bottom-8 w-0.5 bg-gray-100"></div>
+                                        ) : null}
+
+                                        <div className="space-y-8 relative">
+                                            {notices.length > 0 ? notices.map((notice) => (
+                                                <div key={notice.notice_id} className="relative pl-10 group">
+                                                    <div className="absolute left-[-5px] top-1 w-4 h-4 rounded-full border-4 border-white bg-[#650C08] shadow-sm z-10 group-hover:scale-125 transition-transform"></div>
+
+                                                    <div className="bg-gray-50 rounded-xl p-5 hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-gray-100 group-hover:-translate-y-1">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <span className="text-xs font-bold text-[#650C08] bg-red-50 px-2 py-1 rounded uppercase tracking-wider">
+                                                                {new Date(notice.created_at).toLocaleDateString("en-US", { month: 'short', day: 'numeric' })}
+                                                            </span>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => startEdit('notice', notice)} className="text-gray-300 hover:text-blue-600 transition-colors">
+                                                                    <Edit size={16} />
+                                                                </button>
+                                                                <button onClick={() => handleDeleteNotice(notice.notice_id!)} className="text-gray-300 hover:text-red-500 transition-colors">
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <h3 className="text-lg font-bold text-gray-900 mb-2">{notice.title}</h3>
+                                                        <p className="text-gray-600 text-sm leading-relaxed">{notice.description}</p>
+                                                        <div className="mt-3 text-xs text-gray-400 flex items-center gap-2">
+                                                            <span>🕒 Posted {new Date(notice.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}</span>
                                                         </div>
                                                     </div>
-                                                    <h3 className="text-lg font-bold text-gray-900 mb-2">{notice.title}</h3>
-                                                    <p className="text-gray-600 text-sm leading-relaxed">{notice.description}</p>
-                                                    <div className="mt-3 text-xs text-gray-400 flex items-center gap-2">
-                                                        <span>🕒 Posted {new Date(notice.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                            )) : (
+                                                <div className="text-center py-12">
+                                                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                        <span className="text-2xl">📢</span>
                                                     </div>
+                                                    <h3 className="text-lg font-medium text-gray-900">No Notices Yet</h3>
+                                                    <p className="text-gray-500 mt-1">Create your first announcement to notify students and faculty.</p>
                                                 </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="lg:col-span-1">
+                                    <div className="space-y-6">
+                                        <div className="bg-[#650C08] text-white rounded-xl shadow-lg p-6 relative overflow-hidden">
+                                            <div className="relative z-10">
+                                                <h3 className="text-lg font-bold mb-2">Quick Stats</h3>
+                                                <div className="text-4xl font-bold mb-1">{notices.length}</div>
+                                                <p className="text-red-200 text-sm">Active Notices</p>
                                             </div>
-                                        )) : (
-                                            <div className="text-center py-12">
-                                                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                                    <span className="text-2xl">📢</span>
-                                                </div>
-                                                <h3 className="text-lg font-medium text-gray-900">No Notices Yet</h3>
-                                                <p className="text-gray-500 mt-1">Create your first announcement to notify students and faculty.</p>
+                                            <div className="absolute right-[-20px] top-[-20px] opacity-10">
+                                                <span className="text-[150px]">📢</span>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        )}
 
-                            {/* Recent Activity Mini Feed / Summary could go here */}
+                        {activeTab === "fees" && (
                             <div className="space-y-6">
-                                <div className="bg-[#650C08] text-white rounded-xl shadow-lg p-6 relative overflow-hidden">
-                                    <div className="relative z-10">
-                                        <h3 className="tex-lg font-bold mb-2">Quick Stats</h3>
-                                        <div className="text-4xl font-bold mb-1">{notices.length}</div>
-                                        <p className="text-red-200 text-sm">Active Notices</p>
-                                    </div>
-                                    <div className="absolute right-[-20px] top-[-20px] opacity-10">
-                                        <span className="text-[150px]">📢</span>
-                                    </div>
-                                </div>
+                                <FeeVerificationDashboard
+                                    payments={feePayments}
+                                    institutes={institutes}
+                                    courses={courses}
+                                    students={students}
+                                    onRefresh={loadAllData}
+                                    adminStats={adminStats}
+                                />
+                                <Pagination
+                                    current={pages.fees}
+                                    total={feesTotal}
+                                    onPageChange={(p) => setPages({ ...pages, fees: p })}
+                                />
                             </div>
-                        </div>
-                    )
-                }
-
-                {/* FEE PAYMENTS TAB - ADVANCED VERIFICATION DASHBOARD */}
-                {
-                    activeTab === "fees" && (
-                        <FeeVerificationDashboard
-                            payments={feePayments}
-                            institutes={institutes}
-                            courses={courses}
-                            students={students}
-                            onRefresh={loadAllData}
-                        />
-                    )
-                }
-
-
-                {/* MODALS */}
-                {
-                    showActionModal && selectedUser && (
-                        <ConfirmActionModal
-                            user={selectedUser}
-                            onApprove={() => handleApproveUser(selectedUser)}
-                            onReject={() => handleRejectUser(selectedUser)}
-                            onClose={() => setShowActionModal(false)}
-                        />
-                    )
-                }
-
-                {
-                    showInstituteModal && (
-                        <Modal
-                            title="Add Institute"
-                            onClose={() => setShowInstituteModal(false)}
-                            onSave={handleCreateOrUpdateInstitute}
-                        >
-                            <input type="text" placeholder="Name" value={instituteForm.institute_name} onChange={e => setInstituteForm({ ...instituteForm, institute_name: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="text" placeholder="Code" value={instituteForm.institute_code || ""} onChange={e => setInstituteForm({ ...instituteForm, institute_code: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="text" placeholder="City" value={instituteForm.city || ""} onChange={e => setInstituteForm({ ...instituteForm, city: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="text" placeholder="Contact" value={instituteForm.contact_number || ""} onChange={e => setInstituteForm({ ...instituteForm, contact_number: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                        </Modal>
-                    )
-                }
-
-                {
-                    showCourseModal && (
-                        <Modal
-                            title="Add Course"
-                            onClose={() => setShowCourseModal(false)}
-                            onSave={handleCreateOrUpdateCourse}
-                        >
-                            <input type="text" placeholder="Name" value={courseForm.name || ""} onChange={e => setCourseForm({ ...courseForm, name: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="text" placeholder="Code" value={courseForm.code || ""} onChange={e => setCourseForm({ ...courseForm, code: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="number" placeholder="Duration (Years)" value={courseForm.duration_years || ""} onChange={e => setCourseForm({ ...courseForm, duration_years: Number(e.target.value) })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <select value={courseForm.institute_id || 0} onChange={e => setCourseForm({ ...courseForm, institute_id: Number(e.target.value) })} className="w-full px-3 py-2 border rounded mb-2">
-                                <option value={0}>Select Institute</option>
-                                {institutes.map(inst => (
-                                    <option key={inst.institute_id} value={inst.institute_id}>{inst.institute_name}</option>
-                                ))}
-                            </select>
-                        </Modal>
-                    )
-                }
-
-                {
-                    showSubjectModal && (
-                        <Modal
-                            title="Add Subject"
-                            onClose={() => setShowSubjectModal(false)}
-                            onSave={handleCreateOrUpdateSubject}
-                        >
-                            <input type="text" placeholder="Name" value={subjectForm.subject_name || ""} onChange={e => setSubjectForm({ ...subjectForm, subject_name: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="text" placeholder="Code" value={subjectForm.subject_code || ""} onChange={e => setSubjectForm({ ...subjectForm, subject_code: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="number" placeholder="Credits" value={subjectForm.credits || ""} onChange={e => setSubjectForm({ ...subjectForm, credits: Number(e.target.value) })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="number" placeholder="Semester" value={subjectForm.semester || ""} onChange={e => setSubjectForm({ ...subjectForm, semester: Number(e.target.value) })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <select value={subjectForm.course_id || 0} onChange={e => setSubjectForm({ ...subjectForm, course_id: Number(e.target.value) })} className="w-full px-3 py-2 border rounded mb-2">
-                                <option value={0}>Select Course</option>
-                                {courses.map(course => (
-                                    <option key={course.course_id} value={course.course_id}>{course.name}</option>
-                                ))}
-                            </select>
-                        </Modal>
-                    )
-                }
-
-                {
-                    showFacultyModal && (
-                        <Modal
-                            title="Add Faculty"
-                            onClose={() => setShowFacultyModal(false)}
-                            onSave={handleCreateOrUpdateFaculty}
-                        >
-                            <input type="text" placeholder="Name" value={facultyForm.faculty_name || ""} onChange={e => setFacultyForm({ ...facultyForm, faculty_name: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="email" placeholder="Email" value={facultyForm.email || ""} onChange={e => setFacultyForm({ ...facultyForm, email: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="tel" placeholder="Phone" value={facultyForm.phone || ""} onChange={e => setFacultyForm({ ...facultyForm, phone: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="text" placeholder="Department" value={facultyForm.department || ""} onChange={e => setFacultyForm({ ...facultyForm, department: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <input type="text" placeholder="Position" value={facultyForm.position || ""} onChange={e => setFacultyForm({ ...facultyForm, position: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                        </Modal>
-                    )
-                }
-
-                {
-                    showNoticeModal && (
-                        <Modal
-                            title="Add Notice"
-                            onClose={() => setShowNoticeModal(false)}
-                            onSave={handleCreateOrUpdateNotice}
-                        >
-                            <input type="text" placeholder="Title" value={noticeForm.title || ""} onChange={e => setNoticeForm({ ...noticeForm, title: e.target.value })} className="w-full px-3 py-2 border rounded mb-2" />
-                            <textarea placeholder="Description" value={noticeForm.description || ""} onChange={e => setNoticeForm({ ...noticeForm, description: e.target.value })} rows={4} className="w-full px-3 py-2 border rounded mb-2" />
-                        </Modal>
-                    )
-                }
+                        )}
+                    </div>
+                </main>
             </div>
+
+            {/* MODALS */}
+            {/* Same modals as before, just kept for functionality */}
+            {showInstituteModal && (
+                <Modal onClose={() => setShowInstituteModal(false)} onSave={handleCreateOrUpdateInstitute} title={editingId ? "Edit College" : "Add College"}>
+                    <div className="space-y-4">
+                        <input className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#650C08] outline-none" placeholder="Institute Name" value={instituteForm.institute_name} onChange={e => setInstituteForm({ ...instituteForm, institute_name: e.target.value })} />
+                        <input className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#650C08] outline-none" placeholder="Email" value={instituteForm.contact_email} onChange={e => setInstituteForm({ ...instituteForm, contact_email: e.target.value })} />
+                        <input className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#650C08] outline-none" placeholder="Location" value={instituteForm.address} onChange={e => setInstituteForm({ ...instituteForm, address: e.target.value })} />
+                    </div>
+                </Modal>
+            )}
+
+            {showCourseModal && (
+                <Modal onClose={() => setShowCourseModal(false)} onSave={handleCreateOrUpdateCourse} title={editingId ? "Edit Course" : "Add Course"}>
+                    <div className="space-y-4">
+                        <input className="w-full p-2 border rounded" placeholder="Course Name" value={courseForm.name} onChange={e => setCourseForm({ ...courseForm, name: e.target.value })} />
+                        <input className="w-full p-2 border rounded" placeholder="Code" value={courseForm.code} onChange={e => setCourseForm({ ...courseForm, code: e.target.value })} />
+                        <input className="w-full p-2 border rounded" type="number" placeholder="Duration (Years)" value={courseForm.duration_years} onChange={e => setCourseForm({ ...courseForm, duration_years: Number(e.target.value) })} />
+                        <select
+                            className="w-full p-2 border rounded"
+                            value={courseForm.institute_id || ""}
+                            onChange={e => setCourseForm({ ...courseForm, institute_id: Number(e.target.value) })}
+                        >
+                            <option value="">Select Institute</option>
+                            {institutes.map(inst => (
+                                <option key={inst.institute_id} value={inst.institute_id}>{inst.institute_name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </Modal>
+            )}
+
+            {showSubjectModal && (
+                <Modal onClose={() => setShowSubjectModal(false)} onSave={handleCreateOrUpdateSubject} title={editingId ? "Edit Subject" : "Add Subject"}>
+                    <div className="space-y-4">
+                        <input className="w-full p-2 border rounded" placeholder="Subject Name" value={subjectForm.subject_name} onChange={e => setSubjectForm({ ...subjectForm, subject_name: e.target.value })} />
+                        <input className="w-full p-2 border rounded" placeholder="Code" value={subjectForm.subject_code} onChange={e => setSubjectForm({ ...subjectForm, subject_code: e.target.value })} />
+                        <input className="w-full p-2 border rounded" type="number" placeholder="Semester" value={subjectForm.semester} onChange={e => setSubjectForm({ ...subjectForm, semester: Number(e.target.value) })} />
+                        <input className="w-full p-2 border rounded" type="number" placeholder="Credits" value={subjectForm.credits} onChange={e => setSubjectForm({ ...subjectForm, credits: Number(e.target.value) })} />
+                    </div>
+                </Modal>
+            )}
+
+            {showFacultyModal && (
+                <Modal onClose={() => setShowFacultyModal(false)} onSave={handleCreateOrUpdateFaculty} title={editingId ? "Edit Faculty" : "Add Faculty"}>
+                    <div className="space-y-4">
+                        <input className="w-full p-2 border rounded" placeholder="Name" value={facultyForm.faculty_name} onChange={e => setFacultyForm({ ...facultyForm, faculty_name: e.target.value })} />
+                        <input className="w-full p-2 border rounded" placeholder="Position" value={facultyForm.position} onChange={e => setFacultyForm({ ...facultyForm, position: e.target.value })} />
+                        <input className="w-full p-2 border rounded" placeholder="Email" value={facultyForm.email} onChange={e => setFacultyForm({ ...facultyForm, email: e.target.value })} />
+                        <input className="w-full p-2 border rounded" placeholder="Department" value={facultyForm.department} onChange={e => setFacultyForm({ ...facultyForm, department: e.target.value })} />
+                    </div>
+                </Modal>
+            )}
+
+            {showNoticeModal && (
+                <Modal onClose={() => setShowNoticeModal(false)} onSave={handleCreateOrUpdateNotice} title={editingId ? "Edit Notice" : "Post Notice"}>
+                    <div className="space-y-4">
+                        <input className="w-full p-2 border rounded" placeholder="Title" value={noticeForm.title} onChange={e => setNoticeForm({ ...noticeForm, title: e.target.value })} />
+                        <textarea className="w-full p-2 border rounded h-32" placeholder="Description" value={noticeForm.description} onChange={e => setNoticeForm({ ...noticeForm, description: e.target.value })} />
+                        <div className="flex justify-end gap-2 mt-4">
+                            <button onClick={() => setShowNoticeModal(false)} className="px-4 py-2 text-gray-600">Cancel</button>
+                            <button onClick={handleCreateOrUpdateNotice} className="px-4 py-2 bg-[#650C08] text-white rounded">Save</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {showActionModal && selectedUser && (
+                <ConfirmActionModal
+                    user={selectedUser}
+                    onApprove={() => handleApproveUser(selectedUser)}
+                    onReject={() => handleRejectUser(selectedUser)}
+                    onClose={() => setShowActionModal(false)}
+                />
+            )}
         </div>
     );
 }

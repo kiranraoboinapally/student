@@ -206,11 +206,15 @@ func GetAllUsers(c *gin.Context) {
 // ADMIN – FEE PAYMENT HISTORY
 
 func GetAllFeePaymentHistory(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset := (page - 1) * limit
+
 	db := config.DB
 	enrollment := c.Query("enrollment_number")
 
 	var payments []models.FeePaymentDetail
-	query := db.Order("payment_id desc")
+	query := db.Model(&models.FeePaymentDetail{}).Order("payment_id desc")
 
 	if enrollment != "" {
 		enNum, err := strconv.ParseInt(enrollment, 10, 64)
@@ -221,14 +225,23 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		query = query.Where("enrollment_number = ?", enNum)
 	}
 
-	if err := query.Find(&payments).Error; err != nil {
+	var total int64
+	query.Count(&total)
+
+	if err := query.Limit(limit).Offset(offset).Find(&payments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_records": len(payments),
+		"total_records": total,
 		"payments":      payments,
+		"pagination": gin.H{
+			"page":        page,
+			"limit":       limit,
+			"total":       total,
+			"total_pages": (total + int64(limit) - 1) / int64(limit),
+		},
 	})
 }
 
@@ -314,13 +327,22 @@ func UploadStudentMarks(c *gin.Context) {
 
 // GET /api/admin/pending-registrations
 func GetPendingRegistrations(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset := (page - 1) * limit
+
 	db := config.DB
 
 	var users []models.User
+	var total int64
 
-	if err := db.
-		Where("status = ? AND role_id = ?", "inactive", 5).
+	query := db.Model(&models.User{}).Where("status = ? AND role_id = ?", "inactive", 5)
+	query.Count(&total)
+
+	if err := query.
 		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
 		Find(&users).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to fetch inactive registrations",
@@ -342,6 +364,12 @@ func GetPendingRegistrations(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"pending_registrations": response,
+		"pagination": gin.H{
+			"page":        page,
+			"limit":       limit,
+			"total":       total,
+			"total_pages": (total + int64(limit) - 1) / int64(limit),
+		},
 	})
 }
 

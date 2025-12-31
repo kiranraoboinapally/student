@@ -10,10 +10,27 @@ import (
 )
 
 func GetInstitutes(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset := (page - 1) * limit
+
 	db := config.DB
 	var institutes []models.Institute
-	db.Find(&institutes)
-	c.JSON(http.StatusOK, gin.H{"data": institutes})
+	var total int64
+
+	db.Model(&models.Institute{}).Count(&total)
+
+	db.Limit(limit).Offset(offset).Find(&institutes)
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": institutes,
+		"pagination": gin.H{
+			"page":        page,
+			"limit":       limit,
+			"total":       total,
+			"total_pages": (total + int64(limit) - 1) / int64(limit),
+		},
+	})
 }
 
 func CreateInstitute(c *gin.Context) {

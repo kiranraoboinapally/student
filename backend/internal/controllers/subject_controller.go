@@ -9,12 +9,29 @@ import (
 	"github.com/kiranraoboinapally/student/backend/internal/models"
 )
 
-// GetSubjects
+// GetSubjects returns all subjects with pagination
 func GetSubjects(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset := (page - 1) * limit
+
 	db := config.DB
 	var subjects []models.SubjectMaster
-	db.Find(&subjects)
-	c.JSON(http.StatusOK, gin.H{"data": subjects})
+	var total int64
+
+	db.Model(&models.SubjectMaster{}).Count(&total)
+
+	db.Limit(limit).Offset(offset).Find(&subjects)
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": subjects,
+		"pagination": gin.H{
+			"page":        page,
+			"limit":       limit,
+			"total":       total,
+			"total_pages": (total + int64(limit) - 1) / int64(limit),
+		},
+	})
 }
 
 // CreateSubject

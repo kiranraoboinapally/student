@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
     CheckCircle,
     XCircle,
@@ -7,7 +7,8 @@ import {
     AlertCircle,
     DollarSign,
     Building2,
-    BookOpen
+    BookOpen,
+    TrendingUp
 } from "lucide-react";
 import type { FeePayment, Institute, Course, Student } from "../../services/adminService";
 import AdminService from "../../services/adminService";
@@ -19,6 +20,7 @@ interface FeeVerificationDashboardProps {
     courses: Course[];
     students: Student[];
     onRefresh: () => void;
+    adminStats?: any;
 }
 
 export default function FeeVerificationDashboard({
@@ -26,7 +28,8 @@ export default function FeeVerificationDashboard({
     institutes,
     courses,
     students,
-    onRefresh
+    onRefresh,
+    adminStats
 }: FeeVerificationDashboardProps) {
     const { authFetch } = useAuth();
     const service = new AdminService(authFetch);
@@ -111,37 +114,48 @@ export default function FeeVerificationDashboard({
     return (
         <div className="space-y-6">
             {/* Header Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 bg-gradient-to-br from-emerald-50 to-white">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-sm text-gray-500 mb-1">Total Collection (Filtered)</p>
-                            <h3 className="text-2xl font-bold text-emerald-600">₹{stats.total.toLocaleString()}</h3>
+                            <p className="text-sm font-semibold text-emerald-700 mb-1 uppercase tracking-wider">Total Collected</p>
+                            <h3 className="text-2xl font-bold text-emerald-600">₹{(adminStats?.total_fees_paid || stats.total).toLocaleString()}</h3>
                         </div>
-                        <div className="p-3 bg-emerald-50 rounded-lg">
+                        <div className="p-3 bg-emerald-100 rounded-lg shadow-sm">
                             <DollarSign className="w-6 h-6 text-emerald-600" />
                         </div>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 bg-gradient-to-br from-blue-50 to-white">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-sm text-gray-500 mb-1">Pending Verification</p>
-                            <h3 className="text-2xl font-bold text-orange-600">{stats.pendingCount}</h3>
+                            <p className="text-sm font-semibold text-blue-700 mb-1 uppercase tracking-wider">Revenue Goal</p>
+                            <h3 className="text-2xl font-bold text-blue-600">₹{(adminStats?.total_expected_fees || 0).toLocaleString()}</h3>
                         </div>
-                        <div className="p-3 bg-orange-50 rounded-lg">
-                            <AlertCircle className="w-6 h-6 text-orange-600" />
+                        <div className="p-3 bg-blue-100 rounded-lg shadow-sm">
+                            <TrendingUp className="w-6 h-6 text-blue-600" />
                         </div>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 bg-gradient-to-br from-red-50 to-white">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-sm text-gray-500 mb-1">Verified Transactions</p>
-                            <h3 className="text-2xl font-bold text-blue-600">{stats.verifiedCount}</h3>
+                            <p className="text-sm font-semibold text-red-700 mb-1 uppercase tracking-wider">Pending/Due</p>
+                            <h3 className="text-2xl font-bold text-red-600">₹{(adminStats?.total_pending_fees || 0).toLocaleString()}</h3>
                         </div>
-                        <div className="p-3 bg-blue-50 rounded-lg">
-                            <CheckCircle className="w-6 h-6 text-blue-600" />
+                        <div className="p-3 bg-red-100 rounded-lg shadow-sm">
+                            <AlertCircle className="w-6 h-6 text-red-600" />
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 bg-gradient-to-br from-orange-50 to-white">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm font-semibold text-orange-700 mb-1 uppercase tracking-wider">To Verify</p>
+                            <h3 className="text-2xl font-bold text-orange-600">{stats.pendingCount}</h3>
+                        </div>
+                        <div className="p-3 bg-orange-100 rounded-lg shadow-sm">
+                            <CheckCircle className="w-6 h-6 text-orange-600" />
                         </div>
                     </div>
                 </div>
@@ -166,8 +180,8 @@ export default function FeeVerificationDashboard({
                     >
                         <option value="all">All Institutes</option>
                         {institutes.map(inst => (
-                            <option key={inst.institute_id || inst.id} value={inst.institute_id || inst.id}>
-                                {inst.name}
+                            <option key={inst.institute_id} value={inst.institute_id}>
+                                {inst.institute_name}
                             </option>
                         ))}
                     </select>
@@ -186,8 +200,8 @@ export default function FeeVerificationDashboard({
                         {courses
                             .filter(c => selectedInstitute === "all" || c.institute_id === selectedInstitute)
                             .map(course => (
-                                <option key={course.course_id || course.id} value={course.course_id || course.id}>
-                                    {course.name || course.course_name}
+                                <option key={course.course_id} value={course.course_id}>
+                                    {course.name}
                                 </option>
                             ))
                         }
@@ -242,7 +256,7 @@ export default function FeeVerificationDashboard({
                                 const isPending = status === 'pending';
 
                                 return (
-                                    <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
+                                    <tr key={payment.payment_id} className="hover:bg-gray-50/50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-gray-900">{payment.student_name || student?.full_name || 'Unknown Student'}</div>
                                             <div className="text-xs text-gray-500 font-mono">{payment.transaction_number || 'NO-REF'}</div>
@@ -252,10 +266,10 @@ export default function FeeVerificationDashboard({
                                             {student?.institute_id ? (
                                                 <div className="flex flex-col">
                                                     <span className="text-gray-900 font-medium">
-                                                        {institutes.find(i => (i.institute_id || i.id) === student.institute_id)?.name || 'Unknown Institute'}
+                                                        {institutes.find(i => i.institute_id === student.institute_id)?.institute_name || 'Unknown Institute'}
                                                     </span>
                                                     <span className="text-xs text-gray-500">
-                                                        {courses.find(c => (c.course_id || c.id) === student.course_id)?.name || 'Unknown Course'}
+                                                        {courses.find(c => c.course_id === student.course_id)?.name || 'Unknown Course'}
                                                     </span>
                                                 </div>
                                             ) : (
@@ -264,14 +278,14 @@ export default function FeeVerificationDashboard({
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
-                                                {payment.fee_type || 'Tuition'}
+                                                {payment.payment_method || 'Online'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 font-bold text-gray-900">
-                                            ₹{(payment.amount_paid || 0).toLocaleString()}
+                                            ₹{(payment.amount_paid || payment.paid_amount || 0).toLocaleString()}
                                         </td>
                                         <td className="px-6 py-4 text-gray-600">
-                                            {payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : '-'}
+                                            {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString() : '-'}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
@@ -288,16 +302,16 @@ export default function FeeVerificationDashboard({
                                             {isPending && (
                                                 <div className="flex justify-end gap-2">
                                                     <button
-                                                        onClick={() => handleVerify(payment.id!)}
-                                                        disabled={processingId === payment.id}
+                                                        onClick={() => handleVerify(payment.payment_id!)}
+                                                        disabled={processingId === payment.payment_id}
                                                         className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
                                                         title="Verify Payment"
                                                     >
                                                         <CheckCircle size={18} />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleReject(payment.id!)}
-                                                        disabled={processingId === payment.id}
+                                                        onClick={() => handleReject(payment.payment_id!)}
+                                                        disabled={processingId === payment.payment_id}
                                                         className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
                                                         title="Reject Payment"
                                                     >

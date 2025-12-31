@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { BookOpen, Users, Clock, ChevronRight, ArrowLeft, Search } from "lucide-react";
+import { useState, useMemo } from "react";
+import { BookOpen, Users, Clock, ChevronRight, ArrowLeft, Search, Plus, Edit, Trash2 } from "lucide-react";
 import type { Institute, Course, Student } from "../../services/adminService";
 
 interface CourseDrillDownProps {
@@ -8,48 +8,54 @@ interface CourseDrillDownProps {
     students: Student[];
     onSelectCourse: (course: Course) => void;
     onBack: () => void;
+    onAdd: () => void;
+    onEdit: (course: Course) => void;
+    onDelete: (id: number) => void;
 }
 
-export default function CourseDrillDown({ selectedInstitute, courses, students, onSelectCourse, onBack }: CourseDrillDownProps) {
+export default function CourseDrillDown({
+    selectedInstitute,
+    courses,
+    students,
+    onSelectCourse,
+    onBack,
+    onAdd,
+    onEdit,
+    onDelete
+}: CourseDrillDownProps) {
     const [searchTerm, setSearchTerm] = useState("");
 
-    // Filter courses for selected institute
-    // Filter courses for selected institute (Hybrid Match)
     const instituteCourses = useMemo(() => {
-        return courses.filter(c => {
-            // Match by ID
-            if (c.institute_id === selectedInstitute.institute_id) return true;
-            // Match by Name (Fallback)
-            if (c.institute_name === selectedInstitute.institute_name) return true;
-            // Match by enriched property if present (from previous steps)
-            // ...
-            return false;
-        });
+        return courses.filter(c => c.institute_id === selectedInstitute.institute_id);
     }, [courses, selectedInstitute]);
 
     // Calculate stats for each course
     const courseStats = useMemo(() => {
         return instituteCourses.map(course => {
-            // In a real scenario, you'd have enrollment data
+            const enrolled = students.filter(s =>
+                s.course_id === course.course_id ||
+                (s.course_name && s.course_name === course.name)
+            ).length;
+
             return {
                 ...course,
-                studentCount: 0, // Would be calculated from enrollment data
-                activeStudents: 0,
+                studentCount: enrolled,
+                activeStudents: enrolled,
                 totalSemesters: (course.duration_years || 0) * 2
             };
         });
-    }, [instituteCourses]);
+    }, [instituteCourses, students]);
 
     const filteredCourses = courseStats.filter(course =>
-        (course.name || course.course_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (course.code || course.course_code || '').toLowerCase().includes(searchTerm.toLowerCase())
+        (course.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (course.code || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Group courses by department/branch
     const coursesByDepartment = useMemo(() => {
         const grouped = new Map<string, typeof courseStats>();
         filteredCourses.forEach(course => {
-            const dept = (course.name || course.course_name || 'General').split(' ')[0];
+            const dept = (course.name || 'General').split(' ')[0];
             if (!grouped.has(dept)) {
                 grouped.set(dept, []);
             }
@@ -69,14 +75,22 @@ export default function CourseDrillDown({ selectedInstitute, courses, students, 
                     <ArrowLeft size={20} />
                     Back to Institutes
                 </button>
-                <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#650C08] to-[#8B1A1A] flex items-center justify-center">
-                        <BookOpen className="text-white" size={28} />
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#650C08] to-[#8B1A1A] flex items-center justify-center shadow-md">
+                            <BookOpen className="text-white" size={28} />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900">{selectedInstitute.institute_name}</h2>
+                            <p className="text-gray-600 font-medium">Available Courses</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900">{selectedInstitute.name}</h2>
-                        <p className="text-gray-600">{instituteCourses.length} Courses Available</p>
-                    </div>
+                    <button
+                        onClick={onAdd}
+                        className="bg-[#650C08] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-all shadow-md active:scale-95"
+                    >
+                        <Plus size={20} /> Add Course
+                    </button>
                 </div>
             </div>
 
@@ -101,7 +115,7 @@ export default function CourseDrillDown({ selectedInstitute, courses, students, 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {deptCourses.map((course) => (
                             <div
-                                key={course.course_id || course.id}
+                                key={course.course_id}
                                 onClick={() => onSelectCourse(course)}
                                 className="bg-white/95 backdrop-blur rounded-xl p-5 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-transparent hover:border-[#650C08] group"
                             >
@@ -109,9 +123,9 @@ export default function CourseDrillDown({ selectedInstitute, courses, students, 
                                 <div className="flex items-start justify-between mb-3">
                                     <div className="flex-1">
                                         <h4 className="font-bold text-gray-900 text-base group-hover:text-[#650C08] transition-colors line-clamp-2">
-                                            {course.name || course.course_name}
+                                            {course.name}
                                         </h4>
-                                        <p className="text-sm text-gray-500 font-mono mt-1">{course.code || course.course_code || 'N/A'}</p>
+                                        <p className="text-sm text-gray-500 font-mono mt-1">{course.code || 'N/A'}</p>
                                     </div>
                                     <ChevronRight className="text-gray-400 group-hover:text-[#650C08] group-hover:translate-x-1 transition-all flex-shrink-0" size={20} />
                                 </div>
@@ -130,12 +144,21 @@ export default function CourseDrillDown({ selectedInstitute, courses, students, 
                                     </div>
                                 </div>
 
-                                {/* Description if available */}
-                                {course.description && (
-                                    <p className="text-xs text-gray-600 line-clamp-2 border-t border-gray-100 pt-2">
-                                        {course.description}
-                                    </p>
-                                )}
+                                {/* Actions footer */}
+                                <div className="flex justify-end gap-2 pt-3 border-t border-gray-100 mt-2">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onEdit(course); }}
+                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                    >
+                                        <Edit size={16} />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onDelete(course.course_id!); }}
+                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
