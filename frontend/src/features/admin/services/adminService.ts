@@ -9,17 +9,6 @@ export interface PendingUser {
 }
 
 // Enhanced interfaces for real-world data linking
-export interface Student {
-  user_id: number;
-  username: string;
-  email: string;
-  full_name: string;
-  institute_id?: number; // Optional linking field
-  course_id?: number;    // Optional linking field
-  enrollment_date?: string;
-  status?: string;
-}
-
 export interface User {
   user_id: number;
   username: string;
@@ -30,73 +19,95 @@ export interface User {
 
 export interface Institute {
   institute_id?: number;
-  id?: number;
-  name: string;
-  code?: string;
+  institute_code?: string;
+  institute_name: string;
+  institute_type?: string;
   address?: string;
   city?: string;
   state?: string;
-  country?: string;
+  pincode?: string;
+  contact_person?: string;
+  contact_email?: string;
+  contact_phone?: string;
   contact_number?: string;
-  email?: string;
-  established_year?: number;
+  status?: string;
+  created_at?: string;
 }
 
 export interface Course {
   course_id?: number;
-  id?: number;
-  course_name?: string;
-  name?: string;
-  course_code?: string;
-  code?: string;
+  name: string;
+  duration?: number;
   duration_years?: number;
   institute_id?: number;
-  description?: string;
+  status?: string;
+  code?: string;
 }
 
 export interface Subject {
   subject_id?: number;
-  id?: number;
-  subject_name?: string;
-  name?: string;
   subject_code?: string;
-  code?: string;
+  subject_name: string;
+  subject_type?: string;
   credits?: number;
-  course_id?: number;
   semester?: number;
+  course_name?: string;
+  is_active?: boolean;
+  course_id?: number;
 }
 
 export interface Faculty {
   faculty_id?: number;
-  id?: number;
+  user_id?: number;
+  department?: string;
+  position?: string;
   faculty_name?: string;
   name?: string;
   email?: string;
   phone?: string;
-  qualification?: string;
-  specialization?: string;
-  institute_id?: number;
 }
 
 export interface Notice {
   notice_id?: number;
-  id?: number;
   title: string;
   description: string;
   created_at: string;
-  updated_at?: string;
   priority?: "low" | "medium" | "high";
 }
 
-export interface FeePayment {
-  id?: number;
-  student_id?: number;
-  student_name?: string;
-  amount_paid?: number;
-  payment_date?: string;
-  transaction_number?: string;
-  fee_type?: string;
+export interface Student {
+  student_id: number;
+  enrollment_number: number;
+  full_name: string;
+  father_name?: string;
+  email?: string;
+  phone?: string;
+  institute_name?: string;
+  course_name?: string;
   status?: string;
+  session?: string;
+  batch?: string;
+  program_pattern?: string;
+  program_duration?: number;
+
+  // Frontend helpers
+  user_id?: number;
+  username?: string;
+  institute_id?: number;
+  course_id?: number;
+}
+
+export interface FeePayment {
+  payment_id?: number;
+  student_id?: number;
+  amount_paid?: number;
+  paid_amount?: number;
+  payment_method?: string;
+  payment_note?: string;
+  paid_at?: string;
+  status?: string;
+  transaction_number?: string;
+  student_name?: string;
 }
 
 class AdminService {
@@ -140,7 +151,7 @@ class AdminService {
     if (!res.ok) return { students: [], total: 0 };
     const data = await res.json();
     return {
-      students: data.students || [],
+      students: data.data || data.students || [],
       total: data.pagination?.total || 0,
     };
   }
@@ -151,7 +162,7 @@ class AdminService {
     if (!res.ok) return { users: [], total: 0 };
     const data = await res.json();
     return {
-      users: data.users || [],
+      users: data.data || data.users || [],
       total: data.pagination?.total || 0,
     };
   }
@@ -176,7 +187,7 @@ class AdminService {
     const res = await this.authFetch(`${apiBase}/admin/institutes`);
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data) ? data : data.institutes || [];
+    return Array.isArray(data) ? data : data.data || data.institutes || [];
   }
 
   async createInstitute(instituteData: Institute): Promise<{ success: boolean; message: string; id?: number }> {
@@ -212,7 +223,7 @@ class AdminService {
     const res = await this.authFetch(`${apiBase}/admin/courses`);
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data) ? data : data.courses || [];
+    return Array.isArray(data) ? data : data.data || data.courses || [];
   }
 
   async createCourse(courseData: Course): Promise<{ success: boolean; message: string; id?: number }> {
@@ -248,7 +259,7 @@ class AdminService {
     const res = await this.authFetch(`${apiBase}/admin/subjects`);
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data) ? data : data.subjects || [];
+    return Array.isArray(data) ? data : data.data || data.subjects || [];
   }
 
   async createSubject(subjectData: Subject): Promise<{ success: boolean; message: string; id?: number }> {
@@ -284,7 +295,7 @@ class AdminService {
     const res = await this.authFetch(`${apiBase}/admin/faculty`);
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data) ? data : data.faculty || [];
+    return Array.isArray(data) ? data : data.data || data.faculty || [];
   }
 
   async createFaculty(facultyData: Faculty): Promise<{ success: boolean; message: string; id?: number }> {
@@ -320,7 +331,7 @@ class AdminService {
     const res = await this.authFetch(`${apiBase}/admin/notices`);
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data) ? data : data.notices || [];
+    return Array.isArray(data) ? data : data.data || data.notices || [];
   }
 
   async createNotice(noticeData: Notice): Promise<{ success: boolean; message: string; id?: number }> {

@@ -14,8 +14,17 @@ export default function CourseDrillDown({ selectedInstitute, courses, students, 
     const [searchTerm, setSearchTerm] = useState("");
 
     // Filter courses for selected institute
+    // Filter courses for selected institute (Hybrid Match)
     const instituteCourses = useMemo(() => {
-        return courses.filter(c => c.institute_id === selectedInstitute.institute_id);
+        return courses.filter(c => {
+            // Match by ID
+            if (c.institute_id === selectedInstitute.institute_id) return true;
+            // Match by Name (Fallback)
+            if (c.institute_name === selectedInstitute.institute_name) return true;
+            // Match by enriched property if present (from previous steps)
+            // ...
+            return false;
+        });
     }, [courses, selectedInstitute]);
 
     // Calculate stats for each course

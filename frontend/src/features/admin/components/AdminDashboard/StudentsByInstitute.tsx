@@ -16,17 +16,35 @@ export default function StudentsByInstitute({ selectedInstitute, selectedCourse,
 
     // In a real scenario, you'd have enrollment data linking students to institutes/courses
     // For now, we'll show all students
+    // Hybrid Filtering for Students
     const filteredStudents = useMemo(() => {
         return students.filter(student => {
-            const matchesSearch =
-                student.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                student.username.toLowerCase().includes(searchTerm.toLowerCase());
+            // 1. Institute Filter (if selected)
+            if (selectedInstitute) {
+                const matchesId = student.institute_id === selectedInstitute.institute_id;
+                const matchesName = student.institute_name === selectedInstitute.institute_name; // or institute_name if available
+                // Note: student might have institute_name field from backend or enriched
+                if (!matchesId && !matchesName) return false;
+            }
 
-            // Would also filter by course if filterCourse !== "all"
+            // 2. Course Filter (if selected)
+            const targetCourse = selectedCourse || (filterCourse !== 'all' ? courses.find(c => String(c.course_id) === filterCourse) : null);
+
+            if (targetCourse) {
+                const matchesId = student.course_id === targetCourse.course_id;
+                const matchesName = student.course_name === targetCourse.name || student.course_name === targetCourse.course_name;
+                if (!matchesId && !matchesName) return false;
+            }
+
+            // 3. Search Filter
+            const matchesSearch =
+                (student.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (student.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (student.username || '').toLowerCase().includes(searchTerm.toLowerCase());
+
             return matchesSearch;
         });
-    }, [students, searchTerm, filterCourse]);
+    }, [students, searchTerm, filterCourse, selectedInstitute, selectedCourse, courses]);
 
     const handleExport = () => {
         // Simple CSV export
@@ -103,7 +121,11 @@ export default function StudentsByInstitute({ selectedInstitute, selectedCourse,
                             >
                                 <option value="all">All Courses</option>
                                 {courses
-                                    .filter(c => !selectedInstitute || c.institute_id === selectedInstitute.institute_id)
+                                    .filter(c => {
+                                        // Hybrid filter for dropdown options
+                                        if (!selectedInstitute) return true;
+                                        return c.institute_id === selectedInstitute.institute_id || c.institute_name === selectedInstitute.institute_name;
+                                    })
                                     .map(course => (
                                         <option key={course.course_id || course.id} value={course.course_id || course.id}>
                                             {course.name || course.course_name}

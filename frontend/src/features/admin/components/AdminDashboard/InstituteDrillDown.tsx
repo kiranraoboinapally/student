@@ -15,7 +15,10 @@ export default function InstituteDrillDown({ institutes, courses, students, onSe
     // Calculate stats for each institute
     const instituteStats = useMemo(() => {
         return institutes.map(institute => {
-            const instituteCourses = courses.filter(c => c.institute_id === institute.institute_id);
+            const instituteCourses = courses.filter(c =>
+                c.institute_id === institute.institute_id ||
+                (c.institute_name && c.institute_name === institute.institute_name)
+            );
             const courseIds = instituteCourses.map(c => c.course_id);
             // Note: In a real scenario, you'd have enrollment data. For now, we'll show course count
             return {
