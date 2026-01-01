@@ -43,26 +43,21 @@ export default function FeeVerificationDashboard({
     // Processing State
     const [processingId, setProcessingId] = useState<number | null>(null);
 
-    // Filter Logic: Join Payment -> Student -> Institute/Course
+    // Filter Logic
     const filteredData = useMemo(() => {
         return payments.filter(payment => {
-            // 1. Status Filter
             if (statusFilter !== "all" && (payment.status || 'pending').toLowerCase() !== statusFilter) return false;
 
-            // Find linked student
             const student = students.find(s => s.user_id === payment.student_id);
 
-            // 2. Institute Filter (requires linked student)
             if (selectedInstitute !== "all") {
                 if (!student || student.institute_id !== selectedInstitute) return false;
             }
 
-            // 3. Course Filter
             if (selectedCourse !== "all") {
                 if (!student || student.course_id !== selectedCourse) return false;
             }
 
-            // 4. Search (Name/Transaction ID)
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
                 const matchesName = (student?.full_name || payment.student_name || '').toLowerCase().includes(term);
@@ -115,6 +110,7 @@ export default function FeeVerificationDashboard({
         <div className="space-y-6">
             {/* Header Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Total Collected */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 bg-gradient-to-br from-emerald-50 to-white">
                     <div className="flex justify-between items-start">
                         <div>
@@ -126,6 +122,8 @@ export default function FeeVerificationDashboard({
                         </div>
                     </div>
                 </div>
+
+                {/* Revenue Goal */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 bg-gradient-to-br from-blue-50 to-white">
                     <div className="flex justify-between items-start">
                         <div>
@@ -137,6 +135,8 @@ export default function FeeVerificationDashboard({
                         </div>
                     </div>
                 </div>
+
+                {/* Pending/Due */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 bg-gradient-to-br from-red-50 to-white">
                     <div className="flex justify-between items-start">
                         <div>
@@ -148,6 +148,8 @@ export default function FeeVerificationDashboard({
                         </div>
                     </div>
                 </div>
+
+                {/* To Verify */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 bg-gradient-to-br from-orange-50 to-white">
                     <div className="flex justify-between items-start">
                         <div>
@@ -175,15 +177,21 @@ export default function FeeVerificationDashboard({
                         value={selectedInstitute}
                         onChange={e => {
                             setSelectedInstitute(e.target.value === "all" ? "all" : Number(e.target.value));
-                            setSelectedCourse("all"); // Reset course when institute changes
+                            setSelectedCourse("all");
                         }}
                     >
                         <option value="all">All Institutes</option>
-                        {institutes.map(inst => (
-                            <option key={inst.institute_id} value={inst.institute_id}>
-                                {inst.institute_name}
-                            </option>
-                        ))}
+                        {institutes
+                            .sort((a, b) => (a.institute_name ?? a.name ?? '').localeCompare(b.institute_name ?? b.name ?? ''))
+                            .map(inst => {
+                                const id = inst.institute_id ?? inst.id;
+                                const name = inst.institute_name ?? inst.name;
+                                return (
+                                    <option key={id} value={id}>
+                                        {name}
+                                    </option>
+                                );
+                            })}
                     </select>
                     <Building2 className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
                 </div>
@@ -194,17 +202,17 @@ export default function FeeVerificationDashboard({
                         className="pl-9 pr-4 py-2 border rounded-lg appearance-none bg-gray-50 hover:bg-white transition-colors focus:ring-2 focus:ring-[#650C08] focus:border-transparent min-w-[200px]"
                         value={selectedCourse}
                         onChange={e => setSelectedCourse(e.target.value === "all" ? "all" : Number(e.target.value))}
-                        disabled={selectedInstitute === "all"} // Disable if no institute selected (optional, but good UX)
+                        disabled={selectedInstitute === "all"}
                     >
                         <option value="all">All Courses</option>
                         {courses
                             .filter(c => selectedInstitute === "all" || c.institute_id === selectedInstitute)
+                            .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
                             .map(course => (
                                 <option key={course.course_id} value={course.course_id}>
                                     {course.name}
                                 </option>
-                            ))
-                        }
+                            ))}
                     </select>
                     <BookOpen className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
                 </div>
@@ -262,7 +270,6 @@ export default function FeeVerificationDashboard({
                                             <div className="text-xs text-gray-500 font-mono">{payment.transaction_number || 'NO-REF'}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            {/* We need student linking for this to be accurate */}
                                             {student?.institute_id ? (
                                                 <div className="flex flex-col">
                                                     <span className="text-gray-900 font-medium">

@@ -180,7 +180,7 @@ export default function AdminDashboard() {
         try {
             setRefreshing(true);
             const page = pages[tab] || 1;
-            const limit = 20;
+            const limit = 70;
 
             switch (tab) {
                 case "institutes":
