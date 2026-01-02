@@ -17,15 +17,12 @@ import (
 func GetAdminStats(c *gin.Context) {
 	db := config.DB
 
-	// total institutes
 	var totalInstitutes int64
 	db.Model(&models.Institute{}).Count(&totalInstitutes)
 
-	// total students
 	var totalStudents int64
 	db.Model(&models.MasterStudent{}).Count(&totalStudents)
 
-	// total distinct courses
 	var totalCourses int64
 	db.Raw(`
 		SELECT COUNT(DISTINCT course_name)
@@ -33,26 +30,25 @@ func GetAdminStats(c *gin.Context) {
 		WHERE course_name IS NOT NULL AND course_name != ''
 	`).Scan(&totalCourses)
 
-	// fees: sum of paid amounts across registration, exam, misc
+	var passedCount int64
+	db.Model(&models.MasterStudent{}).
+		Where("LOWER(student_status) IN (?)", []string{"passed", "completed", "graduated", "passed out"}).
+		Count(&passedCount)
+
 	var regPaid, examPaid, miscPaid float64
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM registration_fees WHERE payment_status = ?", "Paid").Scan(&regPaid)
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM examination_fees WHERE payment_status = ?", "Paid").Scan(&examPaid)
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM miscellaneous_fees WHERE payment_status = ?", "Paid").Scan(&miscPaid)
 	totalFeesPaid := regPaid + examPaid + miscPaid
 
-	// expected vs paid (pending amount)
 	var totalExpected, totalPaid float64
 	db.Raw("SELECT COALESCE(SUM(total_expected_fee),0) FROM expected_fee_collections").Scan(&totalExpected)
 	db.Raw("SELECT COALESCE(SUM(total_paid),0) FROM expected_fee_collections").Scan(&totalPaid)
 	totalPending := totalExpected - totalPaid
 
-	// passed out students
-	var passedCount int64
-	db.Model(&models.MasterStudent{}).
-		Where("student_status LIKE ?", "%pass%").
-		Count(&passedCount)
+	var pendingCount int64
+	db.Model(&models.User{}).Where("status = ?", "pending").Count(&pendingCount)
 
-	// FINAL RESPONSE (ONLY REQUIRED FIELDS)
 	c.JSON(http.StatusOK, gin.H{
 		"total_institutes":      totalInstitutes,
 		"total_students":        totalStudents,
