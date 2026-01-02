@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kiranraoboinapally/student/backend/internal/config"
@@ -18,12 +19,59 @@ func GetInstitutes(c *gin.Context) {
 	var institutes []models.Institute
 	var total int64
 
+	// Count total institutes for pagination
 	db.Model(&models.Institute{}).Count(&total)
 
+	// Fetch institutes with pagination
 	db.Limit(limit).Offset(offset).Find(&institutes)
 
+	// Get all master_students counts grouped by institute_name
+	type Stats struct {
+		InstituteName  string
+		TotalStudents  int64
+		ActiveStudents int64
+		TotalCourses   int64
+	}
+
+	var stats []Stats
+	db.Model(&models.MasterStudent{}).
+		Select("LOWER(TRIM(institute_name)) AS institute_name, COUNT(*) AS total_students, COUNT(DISTINCT course_name) AS total_courses, COUNT(CASE WHEN student_status LIKE '%active%' THEN 1 END) AS active_students").
+		Where("institute_name IS NOT NULL").
+		Group("LOWER(TRIM(institute_name))").
+		Scan(&stats)
+
+	// Map for fast lookup
+	statsMap := make(map[string]Stats)
+	for _, s := range stats {
+		statsMap[s.InstituteName] = s
+	}
+
+	// Attach stats to institutes
+	type InstituteWithStats struct {
+		models.Institute
+		TotalStudents  int64 `json:"total_students"`
+		ActiveStudents int64 `json:"active_students"`
+		TotalCourses   int64 `json:"total_courses"`
+	}
+
+	var result []InstituteWithStats
+	for _, inst := range institutes {
+		key := strings.ToLower(strings.TrimSpace(inst.InstituteName))
+		s, ok := statsMap[key]
+		if !ok {
+			s = Stats{} // default 0 if not found
+		}
+		result = append(result, InstituteWithStats{
+			Institute:      inst,
+			TotalStudents:  s.TotalStudents,
+			ActiveStudents: s.ActiveStudents,
+			TotalCourses:   s.TotalCourses,
+		})
+	}
+
+	// Return response
 	c.JSON(http.StatusOK, gin.H{
-		"data": institutes,
+		"data": result,
 		"pagination": gin.H{
 			"page":        page,
 			"limit":       limit,
