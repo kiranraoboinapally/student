@@ -423,10 +423,6 @@ export default function AdminDashboard() {
     // Computed Stats for Overview
     const dashboardStats = {
         ...adminStats,
-        total_institutes: institutesTotal || institutes.length,
-        total_courses: coursesTotal || courses.length,
-        total_students: studentsTotal || students.length,
-        total_faculty: facultyTotal || faculty.length,
         total_pending: pendingTotal || pendingUsers.length,
         active_colleges: institutesTotal || institutes.length,
     };
