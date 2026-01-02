@@ -4,7 +4,9 @@ import {
     BookOpen,
     Building2,
     Clock,
-    ArrowUpRight
+    ArrowUpRight,
+    DollarSign,
+    RefreshCw
 } from "lucide-react";
 import type { Notice, PendingUser } from '../../services/adminService';
 
@@ -14,22 +16,24 @@ interface UniversityOverviewProps {
     notices: Notice[];
     onNavigate: (tab: any) => void;
     onReviewUser: (user: PendingUser) => void;
+    onRefresh: () => void; // Added for refresh button
 }
 
-export default function UniversityOverview({ stats, pendingUsers, notices, onReviewUser, onNavigate }: UniversityOverviewProps) {
+export default function UniversityOverview({ stats, pendingUsers, notices, onReviewUser, onNavigate, onRefresh }: UniversityOverviewProps) {
     if (!stats) return <div className="text-white">Loading Overview...</div>;
 
-    // Fallbacks if stats are waiting to load from parent
+    // Fallbacks
     const totalInstitutes = stats.total_institutes || 0;
     const totalCourses = stats.total_courses || 0;
     const totalStudents = stats.total_students || 0;
-    const totalActiveStudents = stats.total_active_students || 0; // New
+    const totalActiveStudents = stats.total_active_students || 0;
     const totalFaculty = stats.total_faculty || 0;
+
 
     return (
         <div className="space-y-6">
             {/* Top Metrics Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2">
                 {/* Colleges Card */}
                 <div
                     className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-blue-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
@@ -67,7 +71,7 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                 {/* Students Card */}
                 <div
                     className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-emerald-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => onNavigate('institutes')}
+                    onClick={() => onNavigate('students')}
                 >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
@@ -81,7 +85,7 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                     </div>
                 </div>
 
-                {/* Currently Active Students Card */}
+                {/* Active Students Card */}
                 <div
                     className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-teal-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
                     onClick={() => onNavigate('students')}
@@ -116,7 +120,32 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                 </div>
             </div>
 
-            {/* Grid below with Pending Users and Notices */}
+            {/* Quick Actions Section */}
+            <div className="bg-white rounded-xl p-6 shadow-sm">
+                <h3 className="font-bold text-gray-900 mb-4">Quick Actions</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button
+                        onClick={() => onNavigate('institutes')}
+                        className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 text-blue-900 font-medium flex items-center gap-2"
+                    >
+                        <Building2 size={20} /> Manage Institutes
+                    </button>
+                    <button
+                        onClick={() => onNavigate('fees')}
+                        className="p-4 bg-green-50 rounded-lg hover:bg-green-100 text-green-900 font-medium flex items-center gap-2"
+                    >
+                        <DollarSign size={20} /> Verify Fees
+                    </button>
+                    <button
+                        onClick={onRefresh}
+                        className="p-4 bg-purple-50 rounded-lg hover:bg-purple-100 text-purple-900 font-medium flex items-center gap-2"
+                    >
+                        <RefreshCw size={20} /> Refresh Data
+                    </button>
+                </div>
+            </div>
+
+            {/* Pending Users and Notices Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Pending Registrations */}
                 <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
