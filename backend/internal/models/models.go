@@ -49,15 +49,14 @@ type Institute struct {
 
 func (Institute) TableName() string { return "institutes" }
 
-type Course struct {
-	CourseID    int    `gorm:"column:course_id;primaryKey" json:"course_id"`
-	Name        string `gorm:"column:name" json:"name"`
-	Duration    int    `gorm:"column:duration" json:"duration_years"`
-	InstituteID int    `gorm:"column:institute_id" json:"institute_id"`
-	Status      string `gorm:"column:status" json:"status"`
+type CourseStream struct {
+	ID         int       `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	CourseName string    `gorm:"column:course_name;not null" json:"course_name"`
+	Stream     string    `gorm:"column:stream;not null" json:"stream"`
+	CreatedAt  time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 }
 
-func (Course) TableName() string { return "courses" }
+func (CourseStream) TableName() string { return "courses_streams" }
 
 type MasterStudent struct {
 	StudentID          int64      `gorm:"column:student_id;primaryKey" json:"student_id"`
