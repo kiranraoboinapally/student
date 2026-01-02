@@ -37,7 +37,7 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                 {/* Colleges Card */}
                 <div
                     className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-blue-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => onNavigate('institutes')}
+
                 >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-blue-100 rounded-xl text-blue-600 group-hover:scale-110 transition-transform">
@@ -54,7 +54,6 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                 {/* Courses Card */}
                 <div
                     className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-purple-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => onNavigate('institutes')}
                 >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-purple-100 rounded-xl text-purple-600 group-hover:scale-110 transition-transform">
@@ -71,7 +70,6 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                 {/* Students Card */}
                 <div
                     className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-emerald-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => onNavigate('students')}
                 >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
@@ -88,7 +86,6 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                 {/* Active Students Card */}
                 <div
                     className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-teal-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => onNavigate('students')}
                 >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-teal-100 rounded-xl text-teal-600 group-hover:scale-110 transition-transform">
@@ -105,7 +102,6 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                 {/* Faculty Card */}
                 <div
                     className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-orange-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => onNavigate('faculty')}
                 >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-orange-100 rounded-xl text-orange-600 group-hover:scale-110 transition-transform">
