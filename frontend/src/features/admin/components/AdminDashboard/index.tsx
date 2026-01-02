@@ -154,14 +154,14 @@ export default function AdminDashboard() {
             setNotices(noticesData);
 
             // Pre-load lookup data for modals
-            const [instLook, courseLook] = await Promise.all([
+            const [instLook/*, courseLook*/] = await Promise.all([
                 service.getInstitutes(1, 1000),
-                service.getCourses(1, 1000)
+                //service.getCourses(1, 1000)
             ]);
             setInstitutes(instLook.institutes);
             setInstitutesTotal(instLook.total);
-            setCourses(courseLook.courses);
-            setCoursesTotal(courseLook.total);
+            //setCourses(courseLook.courses);
+            //setCoursesTotal(courseLook.total);
 
             setLoading(false);
         } catch (err) {

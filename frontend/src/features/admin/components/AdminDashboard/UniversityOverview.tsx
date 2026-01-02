@@ -4,8 +4,6 @@ import {
     BookOpen,
     Building2,
     Clock,
-    DollarSign,
-    ShieldCheck,
     ArrowUpRight
 } from "lucide-react";
 import type { Notice, PendingUser } from '../../services/adminService';
@@ -25,13 +23,18 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
     const totalInstitutes = stats.total_institutes || 0;
     const totalCourses = stats.total_courses || 0;
     const totalStudents = stats.total_students || 0;
+    const totalActiveStudents = stats.total_active_students || 0; // New
     const totalFaculty = stats.total_faculty || 0;
 
     return (
         <div className="space-y-6">
             {/* Top Metrics Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-blue-50/50 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('institutes')}>
+                {/* Colleges Card */}
+                <div
+                    className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-blue-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
+                    onClick={() => onNavigate('institutes')}
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-blue-100 rounded-xl text-blue-600 group-hover:scale-110 transition-transform">
                             <Building2 size={24} />
@@ -44,7 +47,11 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-purple-50/50 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('institutes')}>
+                {/* Courses Card */}
+                <div
+                    className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-purple-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
+                    onClick={() => onNavigate('institutes')}
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-purple-100 rounded-xl text-purple-600 group-hover:scale-110 transition-transform">
                             <BookOpen size={24} />
@@ -57,7 +64,11 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-emerald-50/50 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('institutes')}>
+                {/* Students Card */}
+                <div
+                    className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-emerald-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
+                    onClick={() => onNavigate('institutes')}
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
                             <Users size={24} />
@@ -70,7 +81,28 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-orange-50/50 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('faculty')}>
+                {/* Currently Active Students Card */}
+                <div
+                    className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-teal-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
+                    onClick={() => onNavigate('students')}
+                >
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-3 bg-teal-100 rounded-xl text-teal-600 group-hover:scale-110 transition-transform">
+                            <Users size={24} />
+                        </div>
+                        <ArrowUpRight size={16} className="text-gray-400 group-hover:text-teal-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Active Students</p>
+                        <h3 className="text-2xl font-black text-gray-900">{totalActiveStudents}</h3>
+                    </div>
+                </div>
+
+                {/* Faculty Card */}
+                <div
+                    className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-orange-50/50 to-white hover:shadow-md transition-all cursor-pointer group"
+                    onClick={() => onNavigate('faculty')}
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-orange-100 rounded-xl text-orange-600 group-hover:scale-110 transition-transform">
                             <GraduationCap size={24} />
@@ -82,23 +114,11 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
                         <h3 className="text-2xl font-black text-gray-900">{totalFaculty}</h3>
                     </div>
                 </div>
-
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 bg-gradient-to-br from-[#650C08]/5 to-white hover:shadow-md transition-all cursor-pointer group" onClick={() => onNavigate('fees')}>
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-3 bg-red-100 rounded-xl text-[#650C08] group-hover:scale-110 transition-transform">
-                            <DollarSign size={24} />
-                        </div>
-                        <ArrowUpRight size={16} className="text-gray-400 group-hover:text-[#650C08]" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Collection</p>
-                        <h3 className="text-2xl font-black text-[#650C08]">₹{(stats.total_fees_paid || 0).toLocaleString()}</h3>
-                    </div>
-                </div>
             </div>
 
+            {/* Grid below with Pending Users and Notices */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Recent Activity / Pending Users */}
+                {/* Pending Registrations */}
                 <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                     <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                         <h3 className="font-bold text-gray-900 flex items-center gap-2">

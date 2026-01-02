@@ -14,15 +14,25 @@ import (
 )
 
 // ADMIN - AGGREGATED STATS FOR DASHBOARD
+// ADMIN - AGGREGATED STATS FOR DASHBOARD
 func GetAdminStats(c *gin.Context) {
 	db := config.DB
 
+	// Total Institutes
 	var totalInstitutes int64
 	db.Model(&models.Institute{}).Count(&totalInstitutes)
 
+	// Total Students
 	var totalStudents int64
 	db.Model(&models.MasterStudent{}).Count(&totalStudents)
 
+	// Total Active Students
+	var totalActiveStudents int64
+	db.Model(&models.MasterStudent{}).
+		Where("student_status = ?", "active").
+		Count(&totalActiveStudents)
+
+	// Total Courses
 	var totalCourses int64
 	db.Raw(`
 		SELECT COUNT(DISTINCT course_name)
@@ -30,28 +40,34 @@ func GetAdminStats(c *gin.Context) {
 		WHERE course_name IS NOT NULL AND course_name != ''
 	`).Scan(&totalCourses)
 
+	// Passed/Graduated Students Count
 	var passedCount int64
 	db.Model(&models.MasterStudent{}).
 		Where("LOWER(student_status) IN (?)", []string{"passed", "completed", "graduated", "passed out"}).
 		Count(&passedCount)
 
+	// Fees Paid
 	var regPaid, examPaid, miscPaid float64
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM registration_fees WHERE payment_status = ?", "Paid").Scan(&regPaid)
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM examination_fees WHERE payment_status = ?", "Paid").Scan(&examPaid)
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM miscellaneous_fees WHERE payment_status = ?", "Paid").Scan(&miscPaid)
 	totalFeesPaid := regPaid + examPaid + miscPaid
 
+	// Expected and Pending Fees
 	var totalExpected, totalPaid float64
 	db.Raw("SELECT COALESCE(SUM(total_expected_fee),0) FROM expected_fee_collections").Scan(&totalExpected)
 	db.Raw("SELECT COALESCE(SUM(total_paid),0) FROM expected_fee_collections").Scan(&totalPaid)
 	totalPending := totalExpected - totalPaid
 
+	// Pending Users Count
 	var pendingCount int64
 	db.Model(&models.User{}).Where("status = ?", "pending").Count(&pendingCount)
 
+	// Return JSON with new field total_active_students
 	c.JSON(http.StatusOK, gin.H{
 		"total_institutes":      totalInstitutes,
 		"total_students":        totalStudents,
+		"total_active_students": totalActiveStudents, // <-- NEW
 		"total_courses":         totalCourses,
 		"total_fees_paid":       totalFeesPaid,
 		"total_expected_fees":   totalExpected,

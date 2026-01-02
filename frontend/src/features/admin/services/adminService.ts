@@ -225,15 +225,15 @@ class AdminService {
   }
 
   // Courses
-  async getCourses(page: number = 1, limit: number = 10): Promise<{ courses: Course[]; total: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/courses?page=${page}&limit=${limit}`);
-    if (!res.ok) return { courses: [], total: 0 };
-    const data = await res.json();
-    return {
-      courses: data.data || data.courses || [],
-      total: data.pagination?.total || 0,
-    };
-  }
+  // async getCourses(page: number = 1, limit: number = 10): Promise<{ courses: Course[]; total: number }> {
+  //   const res = await this.authFetch(`${apiBase}/admin/courses?page=${page}&limit=${limit}`);
+  //   if (!res.ok) return { courses: [], total: 0 };
+  //   const data = await res.json();
+  //   return {
+  //     courses: data.data || data.courses || [],
+  //     total: data.pagination?.total || 0,
+  //   };
+  // }
 
   async createCourse(courseData: Course): Promise<{ success: boolean; message: string; id?: number }> {
     const res = await this.authFetch(`${apiBase}/admin/courses`, {
