@@ -17,30 +17,21 @@ import (
 func GetAdminStats(c *gin.Context) {
 	db := config.DB
 
+	// total institutes
 	var totalInstitutes int64
 	db.Model(&models.Institute{}).Count(&totalInstitutes)
 
+	// total students
 	var totalStudents int64
 	db.Model(&models.MasterStudent{}).Count(&totalStudents)
 
-	// students per institute
-	type InstCount struct {
-		InstituteName string `json:"institute_name"`
-		Count         int64  `json:"count"`
-	}
-	var studentsPerInstitute []InstCount
-	db.Model(&models.MasterStudent{}).
-		Select("COALESCE(institute_name,'') as institute_name, COUNT(*) as count").
-		Group("institute_name").
-		Scan(&studentsPerInstitute)
-
-	// branches per institute (distinct course_name)
-	type BranchCount struct {
-		InstituteName string `json:"institute_name"`
-		Branches      int64  `json:"branches"`
-	}
-	var branchesPerInstitute []BranchCount
-	db.Raw(`SELECT COALESCE(institute_name,'') AS institute_name, COUNT(DISTINCT course_name) AS branches FROM master_students GROUP BY institute_name`).Scan(&branchesPerInstitute)
+	// total distinct courses
+	var totalCourses int64
+	db.Raw(`
+		SELECT COUNT(DISTINCT course_name)
+		FROM master_students
+		WHERE course_name IS NOT NULL AND course_name != ''
+	`).Scan(&totalCourses)
 
 	// fees: sum of paid amounts across registration, exam, misc
 	var regPaid, examPaid, miscPaid float64
@@ -55,32 +46,21 @@ func GetAdminStats(c *gin.Context) {
 	db.Raw("SELECT COALESCE(SUM(total_paid),0) FROM expected_fee_collections").Scan(&totalPaid)
 	totalPending := totalExpected - totalPaid
 
-	// passed out students (student_status contains pass)
+	// passed out students
 	var passedCount int64
-	db.Model(&models.MasterStudent{}).Where("student_status LIKE ?", "%pass%").Count(&passedCount)
-
-	// students per branch
-	type BranchStudents struct {
-		CourseName string `json:"course_name"`
-		Count      int64  `json:"count"`
-	}
-	var studentsPerBranch []BranchStudents
 	db.Model(&models.MasterStudent{}).
-		Select("COALESCE(course_name,'') as course_name, COUNT(*) as count").
-		Group("course_name").
-		Order("count desc").
-		Scan(&studentsPerBranch)
+		Where("student_status LIKE ?", "%pass%").
+		Count(&passedCount)
 
+	// FINAL RESPONSE (ONLY REQUIRED FIELDS)
 	c.JSON(http.StatusOK, gin.H{
-		"total_institutes":       totalInstitutes,
-		"total_students":         totalStudents,
-		"students_per_institute": studentsPerInstitute,
-		"branches_per_institute": branchesPerInstitute,
-		"total_fees_paid":        totalFeesPaid,
-		"total_expected_fees":    totalExpected,
-		"total_pending_fees":     totalPending,
-		"passed_students_count":  passedCount,
-		"students_per_branch":    studentsPerBranch,
+		"total_institutes":      totalInstitutes,
+		"total_students":        totalStudents,
+		"total_courses":         totalCourses,
+		"total_fees_paid":       totalFeesPaid,
+		"total_expected_fees":   totalExpected,
+		"total_pending_fees":    totalPending,
+		"passed_students_count": passedCount,
 	})
 }
 
