@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
     CheckCircle,
     XCircle,
@@ -34,6 +34,9 @@ export default function FeeVerificationDashboard({
     const { authFetch } = useAuth();
     const service = new AdminService(authFetch);
 
+    // Local copy of payments so we can refetch/filter from this component
+    const [localPayments, setLocalPayments] = useState<FeePayment[]>(payments || []);
+
     // Filters
     const [selectedInstitute, setSelectedInstitute] = useState<number | "all">("all");
     const [selectedCourse, setSelectedCourse] = useState<number | "all">("all");
@@ -45,13 +48,38 @@ export default function FeeVerificationDashboard({
 
     // Filter Logic
     const filteredData = useMemo(() => {
-        return payments.filter(payment => {
-            if (statusFilter !== "all" && (payment.status || 'pending').toLowerCase() !== statusFilter) return false;
+        return localPayments.filter(payment => {
+            if (statusFilter !== "all") {
+                const st = (payment.status || 'pending').toLowerCase();
+                if (statusFilter === 'pending') {
+                    if (!(st === 'pending' || st === 'needs_verification')) return false;
+                } else if (statusFilter === 'verified') {
+                    if (st !== 'verified') return false;
+                } else if (statusFilter === 'rejected') {
+                    if (st !== 'rejected') return false;
+                } else {
+                    if (st !== statusFilter) return false;
+                }
+            }
 
-            const student = students.find(s => s.enrollment_number == (payment.student_id as any) || s.user_id == (payment.student_id as any));
+            const student = students.find(s =>
+                s.enrollment_number == (payment.student_id as any)
+                || s.user_id == (payment.student_id as any)
+                || s.enrollment_number == (payment as any).enrollment_number
+                || s.user_id == (payment as any).enrollment_number
+            );
 
             if (selectedInstitute !== "all") {
-                if (!student || student.institute_id !== selectedInstitute) return false;
+                // If we have a student record, use its institute_id
+                if (student && student.institute_id !== undefined) {
+                    if (student.institute_id !== selectedInstitute) return false;
+                } else {
+                    // fall back to matching payment.institute_name against selected institute name
+                    const inst = institutes.find(i => i.institute_id === selectedInstitute);
+                    const selName = (inst?.institute_name ?? inst?.name ?? '').trim().toLowerCase();
+                    const payName = (payment.institute_name ?? '').toString().trim().toLowerCase();
+                    if (!selName || !payName || selName !== payName) return false;
+                }
             }
 
             if (selectedCourse !== "all") {
@@ -61,19 +89,58 @@ export default function FeeVerificationDashboard({
             if (searchTerm) {
                 const term = searchTerm.toLowerCase();
                 const matchesName = (student?.full_name || payment.student_name || '').toLowerCase().includes(term);
-                const matchesTrans = (payment.transaction_number || '').toLowerCase().includes(term);
-                return matchesName || matchesTrans;
+                const matchesTrans = ((payment.transaction_number || payment.transactionNumber || '') as string).toLowerCase().includes(term);
+                const matchesEnroll = String(payment.enrollment_number ?? payment.student_id ?? '').toLowerCase().includes(term);
+                return matchesName || matchesTrans || matchesEnroll;
             }
 
             return true;
         });
-    }, [payments, students, selectedInstitute, selectedCourse, statusFilter, searchTerm]);
+    }, [localPayments, students, institutes, courses, selectedInstitute, selectedCourse, statusFilter, searchTerm]);
+
+    // Keep localPayments in sync with incoming prop updates
+    useEffect(() => {
+        setLocalPayments(payments || []);
+    }, [payments]);
+
+    // Fetch from backend when institute or status changes so server-side mapping is used
+    useEffect(() => {
+        const run = async () => {
+            try {
+                // if no filters selected, just use provided payments
+                if (selectedInstitute === 'all' && statusFilter === 'all') {
+                    setLocalPayments(payments || []);
+                    return;
+                }
+
+                const filters: any = {};
+                if (selectedInstitute !== 'all') {
+                    const inst = institutes.find(i => i.institute_id === selectedInstitute);
+                    if (inst) filters.institute_name = inst.institute_name ?? inst.name ?? '';
+                }
+                if (statusFilter !== 'all') {
+                    // backend uses display_status like 'verified' or 'needs_verification'
+                    filters.status = statusFilter === 'pending' ? 'needs_verification' : statusFilter;
+                }
+
+                const res = await service.getFeePayments(1, 100, filters);
+                setLocalPayments(res.payments || []);
+            } catch (err) {
+                console.error('Failed fetching filtered payments', err);
+            }
+        };
+        run();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedInstitute, statusFilter]);
 
     // Derived Stats
     const stats = useMemo(() => {
         const total = filteredData.reduce((acc, curr) => acc + (Number(curr.amount_paid) || 0), 0);
-        const pendingCount = filteredData.filter(p => (p.status || 'pending') === 'pending').length;
-        const verifiedCount = filteredData.filter(p => p.status === 'verified').length;
+        const pendingCount = filteredData.filter(p => {
+            const s = (p.status || 'pending').toLowerCase();
+            return s === 'pending' || s === 'needs_verification' || s === 'needs-verification';
+        }).length;
+        const verifiedCount = filteredData.filter(p => (p.status || '').toLowerCase() === 'verified').length;
         return { total, pendingCount, verifiedCount };
     }, [filteredData]);
 

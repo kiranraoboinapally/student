@@ -340,9 +340,13 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 	// Apply institute filter (after enrichment)
 	if instituteFilter != "" {
 		filtered := make([]UnifiedPayment, 0, len(results))
+		needle := strings.ToLower(strings.TrimSpace(instituteFilter))
 		for _, r := range results {
-			if r.InstituteName != nil && strings.EqualFold(strings.TrimSpace(*r.InstituteName), instituteFilter) {
-				filtered = append(filtered, r)
+			if r.InstituteName != nil {
+				hay := strings.ToLower(strings.TrimSpace(*r.InstituteName))
+				if hay == needle || strings.Contains(hay, needle) || strings.Contains(needle, hay) {
+					filtered = append(filtered, r)
+				}
 			}
 		}
 		results = filtered
