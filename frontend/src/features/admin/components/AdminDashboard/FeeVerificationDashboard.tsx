@@ -268,6 +268,7 @@ export default function FeeVerificationDashboard({
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-gray-900">{payment.student_name || student?.full_name || 'Unknown Student'}</div>
                                             <div className="text-xs text-gray-500 font-mono">{payment.transaction_number || 'NO-REF'}</div>
+                                            <div className="text-xs text-gray-500">Enroll: {payment.enrollment_number ?? payment.student_id ?? student?.enrollment_number ?? '—'}</div>
                                         </td>
                                         <td className="px-6 py-4">
                                                     {student?.institute_id || payment.institute_name ? (
@@ -291,8 +292,11 @@ export default function FeeVerificationDashboard({
                                                 </td>
                                         <td className="px-6 py-4">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
-                                                {payment.payment_method || 'Online'}
+                                                {payment.source ? (payment.source.charAt(0).toUpperCase() + payment.source.slice(1)) : (payment.payment_method || 'Online')}
                                             </span>
+                                            {payment.payment_note && (
+                                                <div className="text-xs text-gray-400 mt-1">{payment.payment_note}</div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 font-bold text-gray-900">
                                             ₹{(payment.amount_paid || payment.paid_amount || 0).toLocaleString()}

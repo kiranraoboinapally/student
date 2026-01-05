@@ -100,6 +100,7 @@ export interface Student {
 export interface FeePayment {
   payment_id?: number;
   student_id?: number;
+  enrollment_number?: number;
   amount_paid?: number;
   paid_amount?: number;
   payment_method?: string;
@@ -400,6 +401,7 @@ class AdminService {
     const payments: FeePayment[] = rawPayments.map(p => ({
       payment_id: p.payment_id ?? p.payment_detail_id ?? p.paymentId,
       student_id: (p.enrollment_number ?? p.student_id ?? p.enrollmentNo) !== null ? Number(p.enrollment_number ?? p.student_id ?? p.enrollmentNo) : undefined,
+      enrollment_number: (p.enrollment_number ?? p.enrollmentNo ?? p.student_id) !== null ? Number(p.enrollment_number ?? p.enrollmentNo ?? p.student_id) : undefined,
       amount_paid: p.fee_amount ?? p.amount_paid ?? p.total_amount ?? p.paid_amount ?? 0,
       paid_amount: p.fee_amount ?? p.amount_paid ?? p.total_amount ?? p.paid_amount ?? 0,
       payment_method: p.payment_method ?? p.payment_method,
