@@ -78,11 +78,11 @@ export default function FeeVerificationDashboard({
     }, [filteredData]);
 
     // Handlers
-    const handleVerify = async (id: number) => {
+    const handleVerify = async (id: number, source?: string) => {
         if (!window.confirm("Verify this payment?")) return;
         setProcessingId(id);
         try {
-            await service.updateFeePaymentStatus(id, 'verified');
+            await service.verifyPayment(id, source || 'registration', 'verify');
             onRefresh();
         } catch (err) {
             console.error(err);
@@ -92,11 +92,11 @@ export default function FeeVerificationDashboard({
         }
     };
 
-    const handleReject = async (id: number) => {
+    const handleReject = async (id: number, source?: string) => {
         if (!window.confirm("Reject this payment?")) return;
         setProcessingId(id);
         try {
-            await service.updateFeePaymentStatus(id, 'rejected');
+            await service.verifyPayment(id, source || 'registration', 'reject');
             onRefresh();
         } catch (err) {
             console.error(err);
@@ -315,7 +315,7 @@ export default function FeeVerificationDashboard({
                                             {isPending && (
                                                 <div className="flex justify-end gap-2">
                                                     <button
-                                                        onClick={() => handleVerify(payment.payment_id!)}
+                                                        onClick={() => handleVerify(payment.payment_id!, (payment as any).source)}
                                                         disabled={processingId === payment.payment_id}
                                                         className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
                                                         title="Verify Payment"
@@ -323,7 +323,7 @@ export default function FeeVerificationDashboard({
                                                         <CheckCircle size={18} />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleReject(payment.payment_id!)}
+                                                        onClick={() => handleReject(payment.payment_id!, (payment as any).source)}
                                                         disabled={processingId === payment.payment_id}
                                                         className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
                                                         title="Reject Payment"

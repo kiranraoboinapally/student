@@ -112,6 +112,7 @@ export interface FeePayment {
   course_name?: string | null;
   semester?: number | null;
   program_pattern?: string | null;
+  source?: string | null;
 }
 
 class AdminService {
@@ -382,8 +383,15 @@ class AdminService {
   }
 
   // Fee Payments
-  async getFeePayments(page: number = 1, limit: number = 20): Promise<{ payments: FeePayment[]; total: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/fees/payments?page=${page}&limit=${limit}`);
+  async getFeePayments(page: number = 1, limit: number = 20, filters?: { institute_name?: string; status?: string; source?: string; search?: string }): Promise<{ payments: FeePayment[]; total: number }> {
+    const q = new URLSearchParams();
+    q.set('page', String(page));
+    q.set('limit', String(limit));
+    if (filters?.institute_name) q.set('institute_name', filters.institute_name);
+    if (filters?.status) q.set('status', filters.status);
+    if (filters?.source) q.set('source', filters.source);
+    if (filters?.search) q.set('search', filters.search);
+    const res = await this.authFetch(`${apiBase}/admin/fees/payments?${q.toString()}`);
     if (!res.ok) return { payments: [], total: 0 };
     const data = await res.json();
 
@@ -391,13 +399,14 @@ class AdminService {
     const rawPayments: any[] = data.payments || [];
     const payments: FeePayment[] = rawPayments.map(p => ({
       payment_id: p.payment_id ?? p.payment_detail_id ?? p.paymentId,
-      student_id: (p.enrollment_number ?? p.student_id ?? p.enrollmentNo ?? null) !== null ? Number(p.enrollment_number ?? p.student_id ?? p.enrollmentNo) : null,
+      student_id: (p.enrollment_number ?? p.student_id ?? p.enrollmentNo) !== null ? Number(p.enrollment_number ?? p.student_id ?? p.enrollmentNo) : undefined,
       amount_paid: p.fee_amount ?? p.amount_paid ?? p.total_amount ?? p.paid_amount ?? 0,
       paid_amount: p.fee_amount ?? p.amount_paid ?? p.total_amount ?? p.paid_amount ?? 0,
       payment_method: p.payment_method ?? p.payment_method,
       payment_note: p.payment_note ?? p.payment_note,
       paid_at: p.payment_date ?? p.paid_at ?? p.transaction_date ?? p.paid_at,
-      status: (p.status ?? p.payment_status ?? 'pending'),
+      status: (p.display_status ?? p.status ?? p.payment_status ?? 'pending'),
+      source: p.source ?? p.Source ?? null,
       transaction_number: p.transaction_number ?? p.transaction_no ?? p.transactionNumber ?? null,
       student_name: p.student_name ?? p.studentName ?? null,
       institute_name: p.institute_name ?? p.instituteName ?? p.InstituteName ?? null,
@@ -419,6 +428,16 @@ class AdminService {
       body: JSON.stringify({ status }),
     });
     if (!res.ok) throw new Error("Failed to update payment status");
+    return res.json();
+  }
+
+  async verifyPayment(paymentId: number, source: string, action: 'verify' | 'reject' = 'verify'): Promise<{ success: boolean; message: string }> {
+    const res = await this.authFetch(`${apiBase}/admin/fees/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payment_id: paymentId, source, action: action === 'verify' ? 'verify' : 'reject' }),
+    });
+    if (!res.ok) throw new Error('Failed to verify/reject payment');
     return res.json();
   }
 

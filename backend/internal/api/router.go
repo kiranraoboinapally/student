@@ -40,6 +40,7 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		admin.POST("/approve-registration", controllers.ApproveRegistration)
 
 		admin.GET("/fees/payments", controllers.GetAllFeePaymentHistory)
+		admin.POST("/fees/verify", controllers.VerifyPayment)
 		admin.POST("/marks/upload", controllers.UploadStudentMarks)
 
 		// Institutes, courses, subjects, notices, faculty (delegated)

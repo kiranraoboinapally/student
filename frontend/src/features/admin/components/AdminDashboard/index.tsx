@@ -618,6 +618,7 @@ export default function AdminDashboard() {
                                         setActiveTab(tab as TabType);
                                     }
                                 }}
+                                onRefresh={loadAllData}
                             />
                         )}
 

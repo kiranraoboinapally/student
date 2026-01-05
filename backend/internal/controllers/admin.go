@@ -205,7 +205,6 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 	offset := (page - 1) * limit
 
 	db := config.DB
-	enrollment := c.Query("enrollment_number")
 	// Aggregate payments from registration_fees, examination_fees and miscellaneous_fees
 	type UnifiedPayment struct {
 		PaymentID       int64    `json:"payment_id"`
@@ -215,6 +214,7 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		TransactionNo   *string  `json:"transaction_number"`
 		TransactionDate *string  `json:"transaction_date"`
 		Status          *string  `json:"status"`
+		DisplayStatus   string   `json:"display_status"`
 		Source          string   `json:"source"`
 		InstituteName   *string  `json:"institute_name"`
 		CourseName      *string  `json:"course_name"`
@@ -222,27 +222,54 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		ProgramPattern  *string  `json:"program_pattern"`
 	}
 
-	// Read optional enrollment filter
-	hasFilter := false
+	// Read optional filters
+	enrollmentFilter := c.Query("enrollment_number")
+	instituteFilter := strings.TrimSpace(c.Query("institute_name"))
+	statusFilter := strings.TrimSpace(c.Query("status")) // expected: verified|needs_verification|pending etc.
+	sourceFilter := strings.TrimSpace(c.Query("source")) // registration|examination|miscellaneous
+
+	// helper to determine display status
+	mapDisplayStatus := func(s *string) string {
+		if s == nil {
+			return "unknown"
+		}
+		v := strings.ToLower(strings.TrimSpace(*s))
+		if strings.Contains(v, "success") || strings.Contains(v, "verified") {
+			return "verified"
+		}
+		if strings.Contains(v, "paid") {
+			return "needs_verification"
+		}
+		if strings.Contains(v, "pending") {
+			return "pending"
+		}
+		if strings.Contains(v, "failed") || strings.Contains(v, "error") {
+			return "failed"
+		}
+		return v
+	}
+
+	// If enrollment supplied, validate
+	hasEnrollmentFilter := false
 	var enNum int64
-	if enrollment != "" {
-		val, err := strconv.ParseInt(enrollment, 10, 64)
+	if enrollmentFilter != "" {
+		val, err := strconv.ParseInt(enrollmentFilter, 10, 64)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid enrollment number"})
 			return
 		}
 		enNum = val
-		hasFilter = true
+		hasEnrollmentFilter = true
 	}
-
-	// Instead of using a complex UNION SQL (which can behave differently across DBs),
-	// query each fee table separately and merge results in Go. This is simpler and
-	// avoids SQL compatibility/unexpected errors.
 
 	var results []UnifiedPayment
 
 	// Helper to fetch from a table into UnifiedPayment
 	fetchFrom := func(table string, idCol string, nameCol string, amountCol string, txnCol string, dateCol string, statusCol string, source string) error {
+		// apply source filter early
+		if sourceFilter != "" && sourceFilter != source {
+			return nil
+		}
 		rows, err := db.Table(table).Select(idCol+" AS payment_id", "enrollment_number", nameCol+" AS student_name", amountCol+" AS fee_amount", txnCol+" AS transaction_number", dateCol+" AS transaction_date", statusCol+" AS status").Rows()
 		if err != nil {
 			return err
@@ -251,28 +278,31 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		for rows.Next() {
 			var up UnifiedPayment
 			if err := rows.Scan(&up.PaymentID, &up.EnrollmentNo, &up.StudentName, &up.FeeAmount, &up.TransactionNo, &up.TransactionDate, &up.Status); err != nil {
-				// ignore row parse errors
 				continue
 			}
 			up.Source = source
+			up.DisplayStatus = mapDisplayStatus(up.Status)
+			// apply status filter early
+			if statusFilter != "" && strings.ToLower(statusFilter) != up.DisplayStatus {
+				continue
+			}
+			// if enrollment filter present, skip mismatches
+			if hasEnrollmentFilter && (up.EnrollmentNo == nil || *up.EnrollmentNo != enNum) {
+				continue
+			}
 			results = append(results, up)
 		}
 		return nil
 	}
 
-	// If filter present, build a where clause to apply using GORM chaining
-	// We'll fetch all records and filter by enrollment in-memory to keep queries simple.
-	// Fetch registration fees
 	if err := fetchFrom("registration_fees", "regn_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "registration"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
 		return
 	}
-	// Fetch examination fees
 	if err := fetchFrom("examination_fees", "exam_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "examination"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
 		return
 	}
-	// Fetch miscellaneous fees
 	if err := fetchFrom("miscellaneous_fees", "misc_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "miscellaneous"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
 		return
@@ -302,17 +332,16 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 					results[i].InstituteName = m.InstituteName
 					results[i].CourseName = m.CourseName
 					results[i].ProgramPattern = m.ProgramPattern
-					// if semester not present in payment, try to leave empty; semester often exists in fee record
 				}
 			}
 		}
 	}
 
-	// If enrollment filter present, filter results
-	if hasFilter {
+	// Apply institute filter (after enrichment)
+	if instituteFilter != "" {
 		filtered := make([]UnifiedPayment, 0, len(results))
 		for _, r := range results {
-			if r.EnrollmentNo != nil && *r.EnrollmentNo == enNum {
+			if r.InstituteName != nil && strings.EqualFold(strings.TrimSpace(*r.InstituteName), instituteFilter) {
 				filtered = append(filtered, r)
 			}
 		}
@@ -326,7 +355,6 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		if !di.IsZero() && !dj.IsZero() {
 			return di.After(dj)
 		}
-		// fallback string compare
 		si := ""
 		sj := ""
 		if results[i].TransactionDate != nil {
@@ -360,6 +388,55 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 			"total_pages": (total + int64(limit) - 1) / int64(limit),
 		},
 	})
+}
+
+// POST /api/admin/payments/verify
+func VerifyPayment(c *gin.Context) {
+	var req struct {
+		PaymentID int64  `json:"payment_id" binding:"required"`
+		Source    string `json:"source" binding:"required"` // registration|examination|miscellaneous
+		Action    string `json:"action" binding:"required"` // verify
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Action != "verify" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported action"})
+		return
+	}
+
+	db := config.DB
+	newStatus := "Verified"
+	if req.Action == "reject" {
+		newStatus = "Rejected"
+	}
+
+	var table string
+	var idCol string
+	switch req.Source {
+	case "registration":
+		table = "registration_fees"
+		idCol = "regn_fee_id"
+	case "examination":
+		table = "examination_fees"
+		idCol = "exam_fee_id"
+	case "miscellaneous":
+		table = "miscellaneous_fees"
+		idCol = "misc_fee_id"
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid source"})
+		return
+	}
+
+	if err := db.Table(table).Where(idCol+" = ?", req.PaymentID).Update("payment_status", newStatus).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update payment status"})
+		return
+	}
+
+	SendAdminNotification("payment_verified", gin.H{"payment_id": req.PaymentID, "source": req.Source})
+
+	c.JSON(http.StatusOK, gin.H{"message": "payment marked as verified", "payment_id": req.PaymentID})
 }
 
 // parseDateString attempts to parse common date formats into time.Time
