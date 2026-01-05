@@ -108,6 +108,10 @@ export interface FeePayment {
   status?: string;
   transaction_number?: string;
   student_name?: string;
+  institute_name?: string | null;
+  course_name?: string | null;
+  semester?: number | null;
+  program_pattern?: string | null;
 }
 
 class AdminService {
@@ -382,9 +386,29 @@ class AdminService {
     const res = await this.authFetch(`${apiBase}/admin/fees/payments?page=${page}&limit=${limit}`);
     if (!res.ok) return { payments: [], total: 0 };
     const data = await res.json();
+
+    // Normalize backend payment records to frontend `FeePayment` shape
+    const rawPayments: any[] = data.payments || [];
+    const payments: FeePayment[] = rawPayments.map(p => ({
+      payment_id: p.payment_id ?? p.payment_detail_id ?? p.paymentId,
+      student_id: (p.enrollment_number ?? p.student_id ?? p.enrollmentNo ?? null) !== null ? Number(p.enrollment_number ?? p.student_id ?? p.enrollmentNo) : null,
+      amount_paid: p.fee_amount ?? p.amount_paid ?? p.total_amount ?? p.paid_amount ?? 0,
+      paid_amount: p.fee_amount ?? p.amount_paid ?? p.total_amount ?? p.paid_amount ?? 0,
+      payment_method: p.payment_method ?? p.payment_method,
+      payment_note: p.payment_note ?? p.payment_note,
+      paid_at: p.payment_date ?? p.paid_at ?? p.transaction_date ?? p.paid_at,
+      status: (p.status ?? p.payment_status ?? 'pending'),
+      transaction_number: p.transaction_number ?? p.transaction_no ?? p.transactionNumber ?? null,
+      student_name: p.student_name ?? p.studentName ?? null,
+      institute_name: p.institute_name ?? p.instituteName ?? p.InstituteName ?? null,
+      course_name: p.course_name ?? p.courseName ?? p.CourseName ?? null,
+      semester: p.semester ?? p.Semester ?? null,
+      program_pattern: p.program_pattern ?? p.programPattern ?? null,
+    }));
+
     return {
-      payments: data.payments || [],
-      total: data.pagination?.total || 0,
+      payments,
+      total: data.pagination?.total ?? data.total_records ?? 0,
     };
   }
 

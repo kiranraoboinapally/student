@@ -88,8 +88,8 @@ export default function AdminDashboard() {
     // Data States
     const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
     const [pendingTotal, setPendingTotal] = useState(0);
-    const [students] = useState<Student[]>([]);
-    const [studentsTotal] = useState(0);
+    const [students, setStudents] = useState<Student[]>([]);
+    const [studentsTotal, setStudentsTotal] = useState(0);
     const [adminStats, setAdminStats] = useState<any>(null);
     const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null);
     const [showActionModal, setShowActionModal] = useState(false);
@@ -154,14 +154,73 @@ export default function AdminDashboard() {
             setNotices(noticesData);
 
             // Pre-load lookup data for modals
-            const [instLook/*, courseLook*/] = await Promise.all([
+            const [instLook/*, courseLook*/, studLook] = await Promise.all([
                 service.getInstitutes(1, 1000),
-                //service.getCourses(1, 1000)
+                //service.getCourses(1, 1000),
+                service.getStudents(1, 1000),
             ]);
+
             setInstitutes(instLook.institutes);
             setInstitutesTotal(instLook.total);
-            //setCourses(courseLook.courses);
-            //setCoursesTotal(courseLook.total);
+
+            // Map raw master students into frontend `Student` shape
+            const rawStudents: any[] = studLook.students || studLook.data || [];
+            const mappedStudents: Student[] = rawStudents.map((s: any) => {
+                const instituteName = s.institute_name ?? s.InstituteName ?? s.instituteName ?? '';
+                const courseName = s.course_name ?? s.CourseName ?? s.courseName ?? '';
+                const enrollment = s.enrollment_number ?? s.EnrollmentNumber ?? s.EnrollmentNo ?? null;
+                return {
+                    student_id: s.student_id ?? s.StudentID ?? null,
+                    enrollment_number: enrollment ? Number(enrollment) : undefined,
+                    full_name: s.full_name ?? s.StudentName ?? s.student_name ?? '',
+                    father_name: s.father_name ?? s.FatherName,
+                    email: s.email ?? s.StudentEmailID ?? s.student_email_id ?? undefined,
+                    phone: s.phone ?? s.StudentPhoneNumber ?? s.student_phone_number ?? undefined,
+                    institute_name: instituteName,
+                    course_name: courseName,
+                    status: s.status ?? s.StudentStatus ?? s.student_status ?? undefined,
+                    session: s.session ?? s.Session,
+                    batch: s.batch ?? s.Batch,
+                    program_pattern: s.program_pattern ?? s.ProgramPattern,
+                    program_duration: s.duration_years ?? s.ProgramDuration ?? s.program_duration,
+                    user_id: enrollment ? Number(enrollment) : undefined,
+                    institute_id: undefined,
+                    course_id: undefined,
+                } as Student;
+            });
+
+            // Derive courses from master students (group by institute + course name)
+            const courseMap = new Map<string, Course>();
+            let nextCourseId = 1;
+            const instByName = new Map<string, Institute>();
+            (instLook.institutes || []).forEach(i => instByName.set((i.institute_name ?? i.name ?? '').trim(), i));
+
+            mappedStudents.forEach(ms => {
+                const inst = instByName.get((ms.institute_name ?? '').trim());
+                const instId = inst?.institute_id ?? undefined;
+                ms.institute_id = instId;
+
+                const cname = (ms.course_name ?? '').trim();
+                if (!cname) return;
+                const key = `${instId || 'noinst'}::${cname}`;
+                if (!courseMap.has(key)) {
+                    courseMap.set(key, {
+                        course_id: nextCourseId++,
+                        name: cname,
+                        institute_id: instId,
+                        duration_years: ms.program_duration ?? 0,
+                    } as Course);
+                }
+                const cobj = courseMap.get(key)!;
+                ms.course_id = cobj.course_id;
+            });
+
+            const derivedCourses = Array.from(courseMap.values());
+            setCourses(derivedCourses);
+            setCoursesTotal(derivedCourses.length);
+
+            setStudents(mappedStudents);
+            setStudentsTotal(studLook.total || 0);
 
             setLoading(false);
         } catch (err) {

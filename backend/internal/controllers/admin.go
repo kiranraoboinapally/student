@@ -2,7 +2,9 @@ package controllers
 
 import (
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -204,30 +206,153 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 
 	db := config.DB
 	enrollment := c.Query("enrollment_number")
+	// Aggregate payments from registration_fees, examination_fees and miscellaneous_fees
+	type UnifiedPayment struct {
+		PaymentID       int64    `json:"payment_id"`
+		EnrollmentNo    *int64   `json:"enrollment_number"`
+		StudentName     *string  `json:"student_name"`
+		FeeAmount       *float64 `json:"fee_amount"`
+		TransactionNo   *string  `json:"transaction_number"`
+		TransactionDate *string  `json:"transaction_date"`
+		Status          *string  `json:"status"`
+		Source          string   `json:"source"`
+		InstituteName   *string  `json:"institute_name"`
+		CourseName      *string  `json:"course_name"`
+		Semester        *int     `json:"semester"`
+		ProgramPattern  *string  `json:"program_pattern"`
+	}
 
-	var payments []models.FeePaymentDetail
-	query := db.Model(&models.FeePaymentDetail{}).Order("payment_id desc")
-
+	// Read optional enrollment filter
+	hasFilter := false
+	var enNum int64
 	if enrollment != "" {
-		enNum, err := strconv.ParseInt(enrollment, 10, 64)
+		val, err := strconv.ParseInt(enrollment, 10, 64)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid enrollment number"})
 			return
 		}
-		query = query.Where("enrollment_number = ?", enNum)
+		enNum = val
+		hasFilter = true
 	}
 
-	var total int64
-	query.Count(&total)
+	// Instead of using a complex UNION SQL (which can behave differently across DBs),
+	// query each fee table separately and merge results in Go. This is simpler and
+	// avoids SQL compatibility/unexpected errors.
 
-	if err := query.Limit(limit).Offset(offset).Find(&payments).Error; err != nil {
+	var results []UnifiedPayment
+
+	// Helper to fetch from a table into UnifiedPayment
+	fetchFrom := func(table string, idCol string, nameCol string, amountCol string, txnCol string, dateCol string, statusCol string, source string) error {
+		rows, err := db.Table(table).Select(idCol+" AS payment_id", "enrollment_number", nameCol+" AS student_name", amountCol+" AS fee_amount", txnCol+" AS transaction_number", dateCol+" AS transaction_date", statusCol+" AS status").Rows()
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var up UnifiedPayment
+			if err := rows.Scan(&up.PaymentID, &up.EnrollmentNo, &up.StudentName, &up.FeeAmount, &up.TransactionNo, &up.TransactionDate, &up.Status); err != nil {
+				// ignore row parse errors
+				continue
+			}
+			up.Source = source
+			results = append(results, up)
+		}
+		return nil
+	}
+
+	// If filter present, build a where clause to apply using GORM chaining
+	// We'll fetch all records and filter by enrollment in-memory to keep queries simple.
+	// Fetch registration fees
+	if err := fetchFrom("registration_fees", "regn_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "registration"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
+		return
+	}
+	// Fetch examination fees
+	if err := fetchFrom("examination_fees", "exam_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "examination"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
+		return
+	}
+	// Fetch miscellaneous fees
+	if err := fetchFrom("miscellaneous_fees", "misc_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "miscellaneous"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
 		return
 	}
 
+	// Populate institute/course info from master_students for enrollments we have
+	enrollSet := make(map[int64]struct{})
+	for _, r := range results {
+		if r.EnrollmentNo != nil {
+			enrollSet[*r.EnrollmentNo] = struct{}{}
+		}
+	}
+	if len(enrollSet) > 0 {
+		ids := make([]int64, 0, len(enrollSet))
+		for k := range enrollSet {
+			ids = append(ids, k)
+		}
+		var masters []models.MasterStudent
+		db.Where("enrollment_number IN ?", ids).Find(&masters)
+		masterMap := map[int64]models.MasterStudent{}
+		for _, m := range masters {
+			masterMap[m.EnrollmentNumber] = m
+		}
+		for i, r := range results {
+			if r.EnrollmentNo != nil {
+				if m, ok := masterMap[*r.EnrollmentNo]; ok {
+					results[i].InstituteName = m.InstituteName
+					results[i].CourseName = m.CourseName
+					results[i].ProgramPattern = m.ProgramPattern
+					// if semester not present in payment, try to leave empty; semester often exists in fee record
+				}
+			}
+		}
+	}
+
+	// If enrollment filter present, filter results
+	if hasFilter {
+		filtered := make([]UnifiedPayment, 0, len(results))
+		for _, r := range results {
+			if r.EnrollmentNo != nil && *r.EnrollmentNo == enNum {
+				filtered = append(filtered, r)
+			}
+		}
+		results = filtered
+	}
+
+	// Sort results by transaction_date (try parsing YYYY-MM-DD or datetime), fallback to as-string compare
+	sort.SliceStable(results, func(i, j int) bool {
+		di := parseDateString(results[i].TransactionDate)
+		dj := parseDateString(results[j].TransactionDate)
+		if !di.IsZero() && !dj.IsZero() {
+			return di.After(dj)
+		}
+		// fallback string compare
+		si := ""
+		sj := ""
+		if results[i].TransactionDate != nil {
+			si = *results[i].TransactionDate
+		}
+		if results[j].TransactionDate != nil {
+			sj = *results[j].TransactionDate
+		}
+		return si > sj
+	})
+
+	// Apply pagination in Go
+	start := offset
+	end := offset + limit
+	if start > len(results) {
+		start = len(results)
+	}
+	if end > len(results) {
+		end = len(results)
+	}
+	pageResults := results[start:end]
+
+	total := int64(len(results))
 	c.JSON(http.StatusOK, gin.H{
 		"total_records": total,
-		"payments":      payments,
+		"payments":      pageResults,
 		"pagination": gin.H{
 			"page":        page,
 			"limit":       limit,
@@ -235,6 +360,32 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 			"total_pages": (total + int64(limit) - 1) / int64(limit),
 		},
 	})
+}
+
+// parseDateString attempts to parse common date formats into time.Time
+func parseDateString(s *string) time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	str := strings.TrimSpace(*s)
+	if str == "" {
+		return time.Time{}
+	}
+
+	layouts := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+		time.RFC3339,
+		"2006-01-02 15:04",
+	}
+
+	for _, l := range layouts {
+		if t, err := time.Parse(l, str); err == nil {
+			return t
+		}
+	}
+
+	return time.Time{}
 }
 
 // ADMIN – UPLOAD / UPDATE STUDENT MARKS (UPSERT)

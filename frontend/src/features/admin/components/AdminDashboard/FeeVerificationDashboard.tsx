@@ -48,7 +48,7 @@ export default function FeeVerificationDashboard({
         return payments.filter(payment => {
             if (statusFilter !== "all" && (payment.status || 'pending').toLowerCase() !== statusFilter) return false;
 
-            const student = students.find(s => s.user_id === payment.student_id);
+            const student = students.find(s => s.enrollment_number == (payment.student_id as any) || s.user_id == (payment.student_id as any));
 
             if (selectedInstitute !== "all") {
                 if (!student || student.institute_id !== selectedInstitute) return false;
@@ -259,7 +259,7 @@ export default function FeeVerificationDashboard({
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {filteredData.length > 0 ? filteredData.map(payment => {
-                                const student = students.find(s => s.user_id === payment.student_id);
+                                const student = students.find(s => s.enrollment_number == (payment.student_id as any) || s.user_id == (payment.student_id as any));
                                 const status = (payment.status || 'pending').toLowerCase();
                                 const isPending = status === 'pending';
 
@@ -270,19 +270,25 @@ export default function FeeVerificationDashboard({
                                             <div className="text-xs text-gray-500 font-mono">{payment.transaction_number || 'NO-REF'}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            {student?.institute_id ? (
-                                                <div className="flex flex-col">
-                                                    <span className="text-gray-900 font-medium">
-                                                        {institutes.find(i => i.institute_id === student.institute_id)?.institute_name || 'Unknown Institute'}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500">
-                                                        {courses.find(c => c.course_id === student.course_id)?.name || 'Unknown Course'}
-                                                    </span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-gray-400 italic">No academic data</span>
-                                            )}
-                                        </td>
+                                                    {student?.institute_id || payment.institute_name ? (
+                                                        <div className="flex flex-col">
+                                                            <span className="text-gray-900 font-medium">
+                                                                {student?.institute_id ? (institutes.find(i => i.institute_id === student.institute_id)?.institute_name) : (payment.institute_name || 'Unknown Institute')}
+                                                            </span>
+                                                            <span className="text-xs text-gray-500">
+                                                                {student?.course_id ? (courses.find(c => c.course_id === student.course_id)?.name) : (payment.course_name || 'Unknown Course')}
+                                                            </span>
+                                                            {payment.semester !== undefined && payment.semester !== null && (
+                                                                <span className="text-xs text-gray-400">Sem: {payment.semester}</span>
+                                                            )}
+                                                            {payment.program_pattern && (
+                                                                <span className="text-xs text-gray-400">Pattern: {payment.program_pattern}</span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-gray-400 italic">No academic data</span>
+                                                    )}
+                                                </td>
                                         <td className="px-6 py-4">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
                                                 {payment.payment_method || 'Online'}
