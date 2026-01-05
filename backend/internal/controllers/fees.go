@@ -221,9 +221,10 @@ func VerifyPaymentAndRecord(c *gin.Context) {
 	var expected models.ExpectedFee
 	if err := db.Where("enrollment_number = ?", payload.Enrollment).First(&expected).Error; err == nil {
 		updates := map[string]interface{}{"total_paid": expected.TotalPaid + payload.Amount}
-		if payload.FeeHead == "Registration Fee" {
+		switch payload.FeeHead {
+		case "Registration Fee":
 			updates["registration_fee_paid"] = expected.RegistrationFeePaid + payload.Amount
-		} else if payload.FeeHead == "Examination Fee" {
+		case "Examination Fee":
 			updates["exam_fee_paid"] = expected.ExamFeePaid + payload.Amount
 		}
 		db.Model(&expected).Updates(updates)
