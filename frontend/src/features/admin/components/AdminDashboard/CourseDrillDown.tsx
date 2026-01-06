@@ -46,9 +46,18 @@ export default function CourseDrillDown({
 
   // --- Filter courses by selected institute ---
   const instituteCourses = useMemo(() => {
-    return courses.filter(
-      (course) => course.institute_id === selectedInstitute.institute_id
-    );
+    // Prefer direct institute_id linkage, but fall back to matching against students when absent
+    return courses.filter((course) => {
+      if (selectedInstitute == null) return false;
+      if (course.institute_id && selectedInstitute.institute_id && course.institute_id === selectedInstitute.institute_id) return true;
+      // fallback: check if any student at this institute is enrolled in this course name
+      const cname = (course.name || '').toLowerCase();
+      return students.some(s => {
+        const instMatch = (s.institute_id && selectedInstitute.institute_id && s.institute_id === selectedInstitute.institute_id) || ((s.institute_name || '').toLowerCase() === ((selectedInstitute.institute_name || selectedInstitute.name) || '').toLowerCase());
+        if (!instMatch) return false;
+        return (s.course_name || '').toLowerCase() === cname || (String(s.course_id || '') === String(course.course_id || ''));
+      });
+    });
   }, [courses, selectedInstitute]);
 
   // --- Add stats per course ---

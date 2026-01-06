@@ -231,15 +231,22 @@ class AdminService {
   }
 
   // Courses
-  // async getCourses(page: number = 1, limit: number = 10): Promise<{ courses: Course[]; total: number }> {
-  //   const res = await this.authFetch(`${apiBase}/admin/courses?page=${page}&limit=${limit}`);
-  //   if (!res.ok) return { courses: [], total: 0 };
-  //   const data = await res.json();
-  //   return {
-  //     courses: data.data || data.courses || [],
-  //     total: data.pagination?.total || 0,
-  //   };
-  // }
+  async getCourses(page: number = 1, limit: number = 1000): Promise<{ courses: Course[]; total: number }> {
+    const res = await this.authFetch(`${apiBase}/admin/courses?page=${page}&limit=${limit}`);
+    if (!res.ok) return { courses: [], total: 0 };
+    const data = await res.json();
+
+    // Normalize course-stream response into frontend Course shape
+    const raw: any[] = data.data || [];
+    const mapped: Course[] = raw.map(r => ({
+      course_id: Number(r.id ?? r.course_id ?? 0),
+      name: (r.full_name ?? r.course_name ?? '').toString(),
+      duration_years: r.program_duration ?? r.duration_years ?? 0,
+      // course streams do not have institute link; we'll enrich on the client using students
+    }));
+
+    return { courses: mapped, total: data.pagination?.total ?? raw.length };
+  }
 
   async createCourse(courseData: Course): Promise<{ success: boolean; message: string; id?: number }> {
     const res = await this.authFetch(`${apiBase}/admin/courses`, {

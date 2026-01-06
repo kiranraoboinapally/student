@@ -58,7 +58,7 @@ export default function StudentsByInstitute({ selectedInstitute, selectedCourse,
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `students-${selectedInstitute?.name || 'all'}.csv`;
+        a.download = `students-${((selectedInstitute?.institute_name ?? selectedInstitute?.name) || 'all')}.csv`;
         a.click();
     };
 
@@ -120,17 +120,32 @@ export default function StudentsByInstitute({ selectedInstitute, selectedCourse,
                                 className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent appearance-none bg-white"
                             >
                                 <option value="all">All Courses</option>
-                                {courses
-                                    .filter(c => {
-                                        // Hybrid filter for dropdown options
-                                        if (!selectedInstitute) return true;
-                                        return c.institute_id === selectedInstitute.institute_id || c.institute_name === selectedInstitute.institute_name;
-                                    })
-                                    .map(course => (
-                                        <option key={course.course_id || course.id} value={course.course_id || course.id}>
-                                            {course.name || course.course_name}
-                                        </option>
-                                    ))}
+                                                {(() => {
+                                                    // Build course options relevant to the selected institute by combining explicit course links and students data
+                                                    const options: Record<string, any> = {};
+                                                    if (!selectedInstitute) {
+                                                        courses.forEach(c => options[String(c.course_id || c.id)] = c);
+                                                    } else {
+                                                        // include courses that have institute_id matching
+                                                        courses.forEach(c => {
+                                                            if (c.institute_id && selectedInstitute.institute_id && c.institute_id === selectedInstitute.institute_id) options[String(c.course_id || c.id)] = c;
+                                                        });
+                                                        // also include unique course names derived from students of this institute
+                                                        students.forEach(s => {
+                                                            const instMatch = (s.institute_id && selectedInstitute.institute_id && s.institute_id === selectedInstitute.institute_id) || ((s.institute_name || '').toLowerCase() === ((selectedInstitute.institute_name || selectedInstitute.name) || '').toLowerCase());
+                                                            if (!instMatch) return;
+                                                            const key = `student::${(s.course_name || s.course || '').trim()}`;
+                                                            if (!options[key]) {
+                                                                options[key] = { course_id: key, name: s.course_name || s.course || s.course_name };
+                                                            }
+                                                        });
+                                                    }
+                                                    return Object.values(options).map((course: any) => (
+                                                        <option key={course.course_id || course.id} value={course.course_id || course.id}>
+                                                            {course.name || course.course_name}
+                                                        </option>
+                                                    ));
+                                                })()}
                             </select>
                         </div>
                     )}

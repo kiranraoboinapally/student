@@ -189,20 +189,29 @@ export default function AdminDashboard() {
                 } as Student;
             });
 
-            // Derive courses from master students (group by institute + course name)
-            const courseMap = new Map<string, Course>();
-            let nextCourseId = 1;
-            const instByName = new Map<string, Institute>();
-            (instLook.institutes || []).forEach(i => instByName.set((i.institute_name ?? i.name ?? '').trim(), i));
+            // Fetch canonical course streams from backend and also derive any institute-specific variants from students
+            const courseLook = await service.getCourses(1, 1000);
+            const fetchedCourses = courseLook.courses || [];
 
+            // Build a map: prefer fetched course entries, then supplement with derived entries from master students
+            const courseMap = new Map<string, Course>();
+            fetchedCourses.forEach(c => {
+                courseMap.set((c.name || '').trim().toLowerCase() || `fetched::${c.course_id}`, c);
+            });
+
+            // derive institute-specific course variants and ensure students link to a course_id where possible
+            const instByName = new Map<string, Institute>();
+            (instLook.institutes || []).forEach(i => instByName.set((i.institute_name ?? i.name ?? '').trim().toLowerCase(), i));
+
+            let nextCourseId = (fetchedCourses.length || 0) + 1;
             mappedStudents.forEach(ms => {
-                const inst = instByName.get((ms.institute_name ?? '').trim());
+                const inst = instByName.get((ms.institute_name ?? '').trim().toLowerCase());
                 const instId = inst?.institute_id ?? undefined;
                 ms.institute_id = instId;
 
                 const cname = (ms.course_name ?? '').trim();
                 if (!cname) return;
-                const key = `${instId || 'noinst'}::${cname}`;
+                const key = cname.toLowerCase();
                 if (!courseMap.has(key)) {
                     courseMap.set(key, {
                         course_id: nextCourseId++,
@@ -215,9 +224,9 @@ export default function AdminDashboard() {
                 ms.course_id = cobj.course_id;
             });
 
-            const derivedCourses = Array.from(courseMap.values());
-            setCourses(derivedCourses);
-            setCoursesTotal(derivedCourses.length);
+            const combinedCourses = Array.from(courseMap.values());
+            setCourses(combinedCourses);
+            setCoursesTotal(combinedCourses.length);
 
             setStudents(mappedStudents);
             setStudentsTotal(studLook.total || 0);

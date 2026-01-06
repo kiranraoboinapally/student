@@ -14,12 +14,16 @@ export default function InstituteDrillDown({ institutes, onSelectInstitute }: In
 
   // Filter and sort institutes safely
   const filteredInstitutes = useMemo(() => {
+    const q = searchTerm.toLowerCase();
     return institutes
-      .filter(inst =>
-        (inst.name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-        (inst.city?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
-      )
-      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+      .filter(inst => {
+        const name = inst.institute_name ?? inst.name ?? "";
+        const city = inst.city ?? "";
+        const nameMatch = name ? name.toLowerCase().includes(q) : false;
+        const cityMatch = city ? city.toLowerCase().includes(q) : false;
+        return nameMatch || cityMatch;
+      })
+      .sort((a, b) => ((a.institute_name ?? a.name ?? "").localeCompare(b.institute_name ?? b.name ?? "")));
   }, [institutes, searchTerm]);
 
   const totalPages = Math.ceil(filteredInstitutes.length / itemsPerPage);
@@ -60,9 +64,9 @@ export default function InstituteDrillDown({ institutes, onSelectInstitute }: In
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900 text-sm group-hover:text-[#650C08] transition-colors">
-                    {institute.name}
+                    {institute.institute_name ?? institute.name}
                   </h3>
-                  <p className="text-xs text-gray-500">{institute.code || 'N/A'}</p>
+                  <p className="text-xs text-gray-500">{institute.institute_code ?? institute.code ?? 'N/A'}</p>
                 </div>
               </div>
               <ChevronRight className="text-gray-400 group-hover:text-[#650C08] group-hover:translate-x-1 transition-all" size={16} />
