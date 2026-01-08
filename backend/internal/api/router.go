@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
+
 	controllers "github.com/kiranraoboinapally/student/backend/internal/controllers"
 	middleware "github.com/kiranraoboinapally/student/backend/internal/middleware"
 )
@@ -10,7 +11,7 @@ import (
 func RegisterAPIRoutes(r *gin.Engine) {
 	api := r.Group("/api")
 
-	// AUTH
+	// ================= AUTH =================
 	auth := api.Group("/auth")
 	{
 		auth.POST("/register", controllers.Register)
@@ -20,57 +21,76 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		auth.POST("/change-password", middleware.AuthRoleMiddleware(), controllers.ChangePassword)
 	}
 
-	// ADMIN
+	// ================= ADMIN =================
 	admin := api.Group("/admin")
 	admin.Use(middleware.AuthRoleMiddleware(1))
 	{
-		admin.GET("/students", controllers.GetStudents)
-
+		// 🔹 DASHBOARD
 		admin.GET("/stats", controllers.GetAdminStats)
-		admin.GET("/institutes/:id/detail", controllers.GetInstituteDetail)
-		admin.POST("/fee-structure", controllers.CreateFeeStructure)
-		admin.POST("/fees/due", controllers.CreateFeeDue)
-		admin.POST("/attendance/upload", controllers.UploadAttendance)
-		admin.GET("/attendance/summary", controllers.GetAttendanceSummary)
 
+		// 🔹 STUDENTS (FIXED: FILTERED + PAGINATED)
+		// Supports:
+		// ?page=&limit=&institute_id=&course_id=&search=
+		admin.GET("/students", controllers.GetStudents)
+		admin.GET("/institutes/:id/courses", controllers.GetCoursesByInstitute)
+		// 🔹 USERS
 		admin.POST("/users/create", controllers.CreateUserByAdmin)
 		admin.GET("/users", controllers.GetAllUsers)
 
+		// 🔹 REGISTRATIONS
 		admin.GET("/pending-registrations", controllers.GetPendingRegistrations)
 		admin.POST("/approve-registration", controllers.ApproveRegistration)
 
+		// 🔹 FEES
 		admin.GET("/fees/payments", controllers.GetAllFeePaymentHistory)
 		admin.POST("/fees/verify", controllers.VerifyPayment)
+		admin.POST("/fee-structure", controllers.CreateFeeStructure)
+		admin.POST("/fees/due", controllers.CreateFeeDue)
+
+		// 🔹 ATTENDANCE
+		admin.POST("/attendance/upload", controllers.UploadAttendance)
+		admin.GET("/attendance/summary", controllers.GetAttendanceSummary)
+
+		// 🔹 MARKS
 		admin.POST("/marks/upload", controllers.UploadStudentMarks)
 
-		// Institutes, courses, subjects, notices, faculty (delegated)
+		// ================= MASTER DATA =================
+
+		// 🔹 INSTITUTES
 		admin.GET("/institutes", controllers.GetInstitutes)
 		admin.POST("/institutes", controllers.CreateInstitute)
 		admin.PUT("/institutes/:id", controllers.UpdateInstitute)
 		admin.DELETE("/institutes/:id", controllers.DeleteInstitute)
 
+		// 🔹 COURSES
 		admin.GET("/courses", controllers.GetCourses)
 		admin.POST("/courses", controllers.CreateCourse)
 		admin.PUT("/courses/:id", controllers.UpdateCourse)
 		admin.DELETE("/courses/:id", controllers.DeleteCourse)
 
+		// 🔹 OPTIONAL (RECOMMENDED FOR DRILL-DOWN)
+		// admin.GET("/institutes/:id/courses", controllers.GetCoursesByInstitute)
+
+		// 🔹 SUBJECTS
 		admin.GET("/subjects", controllers.GetSubjects)
 		admin.POST("/subjects", controllers.CreateSubject)
 		admin.PUT("/subjects/:id", controllers.UpdateSubject)
 		admin.DELETE("/subjects/:id", controllers.DeleteSubject)
 
-		admin.GET("/notices", controllers.GetNotices)
-		admin.POST("/notices", controllers.CreateNotice)
-		admin.PUT("/notices/:id", controllers.UpdateNotice)
-		admin.DELETE("/notices/:id", controllers.DeleteNotice)
-
+		// 🔹 FACULTY
 		admin.GET("/faculty", controllers.GetFaculties)
 		admin.POST("/faculty", controllers.CreateFaculty)
 		admin.PUT("/faculty/:id", controllers.UpdateFaculty)
 		admin.DELETE("/faculty/:id", controllers.DeleteFaculty)
+
+		// 🔹 NOTICES
+		admin.GET("/notices", controllers.GetNotices)
+		admin.POST("/notices", controllers.CreateNotice)
+		admin.PUT("/notices/:id", controllers.UpdateNotice)
+		admin.DELETE("/notices/:id", controllers.DeleteNotice)
 	}
 
-	// STUDENT
+	// ================= STUDENT =================
 	student := api.Group("/student")
 	student.Use(middleware.AuthRoleMiddleware(5))
 	{
@@ -82,15 +102,13 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		student.POST("/fees/request-payment", controllers.RequestPayment)
 		student.POST("/fees/verify-payment", controllers.VerifyPaymentAndRecord)
 		student.POST("/fees/pay", controllers.PayFee)
-		student.GET("/fees/registration", controllers.GetStudentRegistrationFees)
-		student.GET("/fees/examination", controllers.GetStudentExaminationFees)
 
 		student.GET("/semester/current", controllers.GetCurrentSemester)
 		student.GET("/subjects/current", controllers.GetCurrentSemesterSubjects)
 		student.GET("/marks/current", controllers.GetCurrentSemesterMarks)
-		student.GET("/attendance", controllers.GetStudentAttendance)
-
 		student.GET("/marks/all", controllers.GetAllMarks)
+
+		student.GET("/attendance", controllers.GetStudentAttendance)
 		student.GET("/results/semester", controllers.GetSemesterResults)
 
 		student.GET("/notices", controllers.GetNotices)
@@ -99,7 +117,7 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		student.GET("/timetable", controllers.GetTimetable)
 	}
 
-	// PROFILE
+	// ================= PROFILE =================
 	profile := api.Group("/profile")
 	profile.Use(middleware.AuthRoleMiddleware())
 	{

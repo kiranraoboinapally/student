@@ -38,9 +38,8 @@ import AcademicUploads from "./AcademicUploads";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import UniversityOverview from "./UniversityOverview";
 
-
 const Pagination = ({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) => {
-    const totalPages = Math.ceil(total / 20); // assuming 20 limit
+    const totalPages = Math.ceil(total / 20);
     if (totalPages <= 1) return null;
     return (
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/30">
@@ -68,8 +67,6 @@ const Pagination = ({ current, total, onPageChange }: { current: number, total: 
 };
 
 type TabType = "overview" | "institutes" | "analytics" | "subjects" | "academics" | "faculty" | "notices" | "fees";
-
-// Breadcrumb navigation state
 type DrillDownLevel = "institutes" | "courses" | "students";
 
 export default function AdminDashboard() {
@@ -77,15 +74,12 @@ export default function AdminDashboard() {
     const navigate = useNavigate();
     const service = new AdminService(authFetch);
 
-    // Tabs
     const [activeTab, setActiveTab] = useState<TabType>("overview");
 
-    // Drill-down navigation state
     const [drillDownLevel, setDrillDownLevel] = useState<DrillDownLevel>("institutes");
     const [selectedInstitute, setSelectedInstitute] = useState<Institute | null>(null);
     const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
 
-    // Data States
     const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
     const [pendingTotal, setPendingTotal] = useState(0);
     const [students, setStudents] = useState<Student[]>([]);
@@ -106,7 +100,6 @@ export default function AdminDashboard() {
     const [feePayments, setFeePayments] = useState<FeePayment[]>([]);
     const [feesTotal, setFeesTotal] = useState(0);
 
-    // Pagination States
     const [pages, setPages] = useState<Record<string, number>>({
         students: 1,
         institutes: 1,
@@ -117,21 +110,18 @@ export default function AdminDashboard() {
         pending: 1
     });
 
-    // Modal States
     const [showInstituteModal, setShowInstituteModal] = useState(false);
     const [showCourseModal, setShowCourseModal] = useState(false);
     const [showSubjectModal, setShowSubjectModal] = useState(false);
     const [showFacultyModal, setShowFacultyModal] = useState(false);
     const [showNoticeModal, setShowNoticeModal] = useState(false);
 
-    // Form States
     const [instituteForm, setInstituteForm] = useState<Institute>({ institute_name: "", institute_code: "", address: "", city: "", state: "", contact_number: "", contact_email: "" } as any);
-    const [courseForm, setCourseForm] = useState<Course>({ name: "", code: "", duration: 0, institute_id: 0 } as any);
+    const [courseForm, setCourseForm] = useState<Course>({ name: "", code: "", duration_years: 0, institute_id: 0 } as any);
     const [subjectForm, setSubjectForm] = useState<Subject>({ subject_name: "", subject_code: "", credits: 0, semester: 0, course_id: 0 } as any);
     const [facultyForm, setFacultyForm] = useState<Faculty>({ faculty_name: "", email: "", phone: "", department: "", position: "" } as any);
     const [noticeForm, setNoticeForm] = useState<Notice>({ title: "", description: "", created_at: new Date().toISOString() });
 
-    // Loading States
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -139,106 +129,38 @@ export default function AdminDashboard() {
         loadDashboardBase();
     }, []);
 
-    // Load only base data for dashboard (stats + pending)
     async function loadDashboardBase() {
         try {
             setLoading(true);
-            const [statsData, pendingData, noticesData] = await Promise.all([
+
+            const [statsData, pendingData, instLook] = await Promise.all([
                 service.getAdminStats(),
                 service.getPendingUsers(1, 5),
-                service.getNotices()
-            ]);
-            setAdminStats(statsData || {});
-            setPendingUsers(pendingData.pending_registrations);
-            setPendingTotal(pendingData.total);
-            setNotices(noticesData);
-
-            // Pre-load lookup data for modals
-            const [instLook/*, courseLook*/, studLook] = await Promise.all([
                 service.getInstitutes(1, 1000),
-                //service.getCourses(1, 1000),
-                service.getStudents(1, 1000),
             ]);
 
-            setInstitutes(instLook.institutes);
-            setInstitutesTotal(instLook.total);
+            setAdminStats(statsData || {});
+            setPendingUsers(pendingData.pending_registrations || []);
+            setPendingTotal(pendingData.total || pendingData.pagination?.total || 0);
 
-            // Map raw master students into frontend `Student` shape
-            const rawStudents: any[] = studLook.students || studLook.data || [];
-            const mappedStudents: Student[] = rawStudents.map((s: any) => {
-                const instituteName = s.institute_name ?? s.InstituteName ?? s.instituteName ?? '';
-                const courseName = s.course_name ?? s.CourseName ?? s.courseName ?? '';
-                const enrollment = s.enrollment_number ?? s.EnrollmentNumber ?? s.EnrollmentNo ?? null;
-                return {
-                    student_id: s.student_id ?? s.StudentID ?? null,
-                    enrollment_number: enrollment ? Number(enrollment) : undefined,
-                    full_name: s.full_name ?? s.StudentName ?? s.student_name ?? '',
-                    father_name: s.father_name ?? s.FatherName,
-                    email: s.email ?? s.StudentEmailID ?? s.student_email_id ?? undefined,
-                    phone: s.phone ?? s.StudentPhoneNumber ?? s.student_phone_number ?? undefined,
-                    institute_name: instituteName,
-                    course_name: courseName,
-                    status: s.status ?? s.StudentStatus ?? s.student_status ?? undefined,
-                    session: s.session ?? s.Session,
-                    batch: s.batch ?? s.Batch,
-                    program_pattern: s.program_pattern ?? s.ProgramPattern,
-                    program_duration: s.duration_years ?? s.ProgramDuration ?? s.program_duration,
-                    user_id: enrollment ? Number(enrollment) : undefined,
-                    institute_id: undefined,
-                    course_id: undefined,
-                } as Student;
-            });
+            setInstitutes(instLook.institutes || instLook.data || []);
+            setInstitutesTotal(instLook.total || 0);
 
-            // Fetch canonical course streams from backend and also derive any institute-specific variants from students
-            const courseLook = await service.getCourses(1, 1000);
-            const fetchedCourses = courseLook.courses || [];
-
-            // Build a map: prefer fetched course entries, then supplement with derived entries from master students
-            const courseMap = new Map<string, Course>();
-            fetchedCourses.forEach(c => {
-                courseMap.set((c.name || '').trim().toLowerCase() || `fetched::${c.course_id}`, c);
-            });
-
-            // derive institute-specific course variants and ensure students link to a course_id where possible
-            const instByName = new Map<string, Institute>();
-            (instLook.institutes || []).forEach(i => instByName.set((i.institute_name ?? i.name ?? '').trim().toLowerCase(), i));
-
-            let nextCourseId = (fetchedCourses.length || 0) + 1;
-            mappedStudents.forEach(ms => {
-                const inst = instByName.get((ms.institute_name ?? '').trim().toLowerCase());
-                const instId = inst?.institute_id ?? undefined;
-                ms.institute_id = instId;
-
-                const cname = (ms.course_name ?? '').trim();
-                if (!cname) return;
-                const key = cname.toLowerCase();
-                if (!courseMap.has(key)) {
-                    courseMap.set(key, {
-                        course_id: nextCourseId++,
-                        name: cname,
-                        institute_id: instId,
-                        duration_years: ms.program_duration ?? 0,
-                    } as Course);
-                }
-                const cobj = courseMap.get(key)!;
-                ms.course_id = cobj.course_id;
-            });
-
-            const combinedCourses = Array.from(courseMap.values());
-            setCourses(combinedCourses);
-            setCoursesTotal(combinedCourses.length);
-
-            setStudents(mappedStudents);
-            setStudentsTotal(studLook.total || 0);
+            setCourses([]);
+            setCoursesTotal(0);
+            setStudents([]);
+            setStudentsTotal(0);
+            setNotices([]);
+            setSubjects([]);
+            setFaculty([]);
 
             setLoading(false);
         } catch (err) {
-            console.error(err);
+            console.error("Failed to load dashboard base data:", err);
             setLoading(false);
         }
     }
 
-    // Lazy load tab data
     useEffect(() => {
         if (activeTab === "overview") return;
         loadTabData(activeTab);
@@ -253,34 +175,43 @@ export default function AdminDashboard() {
             switch (tab) {
                 case "institutes":
                     const iData = await service.getInstitutes(page, limit);
-                    setInstitutes(iData.institutes);
-                    setInstitutesTotal(iData.total);
+                    setInstitutes(iData.institutes || iData.data || []);
+                    setInstitutesTotal(iData.total || 0);
                     break;
                 case "subjects":
-                    const subData = await service.getSubjects(page, limit);
-                    setSubjects(subData.subjects);
-                    setSubjectsTotal(subData.total);
+                    if (typeof service.getSubjects === "function") {
+                        const subData = await service.getSubjects(page, limit);
+                        setSubjects(subData.subjects || subData.data || []);
+                        setSubjectsTotal(subData.total || 0);
+                    }
                     break;
                 case "faculty":
-                    const fData = await service.getFaculty(page, limit);
-                    setFaculty(fData.faculty);
-                    setFacultyTotal(fData.total);
+                    if (typeof service.getFaculty === "function") {
+                        const fData = await service.getFaculty(page, limit);
+                        setFaculty(fData.faculty || fData.data || []);
+                        setFacultyTotal(fData.total || 0);
+                    }
                     break;
                 case "fees":
                     const feeData = await service.getFeePayments(page, limit);
-                    setFeePayments(feeData.payments);
-                    setFeesTotal(feeData.total);
+                    setFeePayments(feeData.payments || []);
+                    setFeesTotal(feeData.total || feeData.total_records || 0);
+                    break;
+                case "notices":
+                    if (typeof service.getNotices === "function") {
+                        const noticeData = await service.getNotices();
+                        setNotices(noticeData || []);
+                    }
                     break;
             }
         } catch (err) {
-            console.error(err);
+            console.error(`Failed to load ${tab} data:`, err);
         } finally {
             setRefreshing(false);
         }
     }
 
     async function loadAllData() {
-        // Legacy or refresh all
         loadDashboardBase();
         if (activeTab !== "overview") loadTabData(activeTab);
     }
@@ -292,7 +223,7 @@ export default function AdminDashboard() {
 
     const handleApproveUser = async (user: PendingUser) => {
         try {
-            await service.approveUser(user.user_id);
+            await service.approveRegistration(user.user_id, "approve");
             setPendingUsers(prev => prev.filter(u => u.user_id !== user.user_id));
             setShowActionModal(false);
             alert("User approved successfully");
@@ -304,7 +235,7 @@ export default function AdminDashboard() {
 
     const handleRejectUser = async (user: PendingUser) => {
         try {
-            await service.rejectUser(user.user_id);
+            await service.approveRegistration(user.user_id, "reject");
             setPendingUsers(prev => prev.filter(u => u.user_id !== user.user_id));
             setShowActionModal(false);
             alert("User rejected successfully");
@@ -314,10 +245,8 @@ export default function AdminDashboard() {
         }
     };
 
-    // Edit Mode States
     const [editingId, setEditingId] = useState<number | null>(null);
 
-    // --- GENERIC EDIT HANDLERS ---
     const startEdit = (type: 'institute' | 'course' | 'subject' | 'faculty' | 'notice', item: any) => {
         setEditingId(item.institute_id || item.course_id || item.subject_id || item.faculty_id || item.notice_id || item.id);
         if (type === 'institute') {
@@ -370,7 +299,7 @@ export default function AdminDashboard() {
             }
             setShowCourseModal(false);
             setEditingId(null);
-            setCourseForm({ name: "", code: "", duration: 0, institute_id: selectedInstitute?.institute_id || 0 } as any);
+            setCourseForm({ name: "", code: "", duration_years: 0, institute_id: selectedInstitute?.institute_id || 0 } as any);
             loadAllData();
         } catch (err) {
             console.error(err);
@@ -438,25 +367,27 @@ export default function AdminDashboard() {
         }
     };
 
-    // --- DELETE HANDLERS ---
     const handleDeleteCourse = async (id: number) => {
         if (window.confirm("Delete this course?")) {
             await service.deleteCourse(id);
             loadAllData();
         }
     };
+
     const handleDeleteSubject = async (id: number) => {
         if (window.confirm("Delete this subject?")) {
             await service.deleteSubject(id);
             loadAllData();
         }
     };
+
     const handleDeleteFaculty = async (id: number) => {
         if (window.confirm("Delete this faculty?")) {
             await service.deleteFaculty(id);
             loadAllData();
         }
     };
+
     const handleDeleteNotice = async (id: number) => {
         if (window.confirm("Delete this notice?")) {
             await service.deleteNotice(id);
@@ -469,26 +400,42 @@ export default function AdminDashboard() {
         navigate("/");
     };
 
-    // Drill-down handlers
-    const handleSelectInstitute = (institute: Institute) => {
-        setSelectedInstitute(institute);
+    // Updated handler: fetches courses when institute is selected
+ const handleSelectInstitute = async (institute: Institute) => {
+    setSelectedInstitute(institute);
+    setRefreshing(true);
+    try {
+        const data = await service.getCoursesByInstitute(institute.institute_id!);
+        // Ensure it's always an array, even if backend returns null
+        setCourses(data.courses || []);
         setDrillDownLevel("courses");
-    };
+    } catch (err) {
+        console.error("Error loading institute courses:", err);
+        alert("Could not load courses for this college.");
+        setCourses([]);  // Always reset to empty array on error too
+    } finally {
+        setRefreshing(false);
+    }
+};
+
+    // Updated handler: moves to students view when course is selected
     const handleSelectCourse = (course: Course) => {
         setSelectedCourse(course);
         setDrillDownLevel("students");
     };
+
     const handleBackToInstitutes = () => {
         setSelectedInstitute(null);
         setSelectedCourse(null);
         setDrillDownLevel("institutes");
+        setCourses([]);
     };
+
     const handleBackToCourses = () => {
         setSelectedCourse(null);
         setDrillDownLevel("courses");
     };
 
-    // Computed Stats for Overview
     const dashboardStats = {
         ...adminStats,
         total_pending: pendingTotal || pendingUsers.length,
@@ -558,11 +505,9 @@ export default function AdminDashboard() {
                 </div>
             </aside>
 
-            {/* MAIN CONTENT WRAPPER */}
+            {/* MAIN CONTENT */}
             <div className="flex-1 ml-64 min-w-0 flex flex-col">
-                {/* TOP HEADER */}
                 <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-8 py-4 flex justify-between items-center shadow-sm">
-                    {/* Breadcrumbs or Title */}
                     <div>
                         <h2 className="text-xl font-bold text-gray-800 capitalize">
                             {activeTab === 'overview' ? 'Admin Dashboard' :
@@ -610,10 +555,8 @@ export default function AdminDashboard() {
                     </div>
                 </header>
 
-                {/* CONTENT AREA */}
                 <main className="flex-1 p-8 overflow-y-auto">
                     <div className="max-w-7xl mx-auto">
-
                         {activeTab === "overview" && (
                             <UniversityOverview
                                 stats={dashboardStats}
@@ -622,7 +565,7 @@ export default function AdminDashboard() {
                                 onReviewUser={handleReviewUser}
                                 onNavigate={(tab) => {
                                     if (tab === 'students') {
-                                        setActiveTab('institutes'); // Redirect to institutes drill down
+                                        setActiveTab('institutes');
                                     } else {
                                         setActiveTab(tab as TabType);
                                     }
@@ -637,7 +580,7 @@ export default function AdminDashboard() {
                                     <InstituteDrillDown
                                         institutes={institutes}
                                         courses={courses}
-                                        students={students}
+                                        students={[]}
                                         onSelectInstitute={handleSelectInstitute}
                                     />
                                 )}
@@ -645,12 +588,12 @@ export default function AdminDashboard() {
                                     <CourseDrillDown
                                         selectedInstitute={selectedInstitute}
                                         courses={courses}
-                                        students={students}
+                                        students={[]}
                                         onSelectCourse={handleSelectCourse}
                                         onBack={handleBackToInstitutes}
                                         onAdd={() => {
                                             setEditingId(null);
-                                            setCourseForm({ name: "", code: "", duration: 0, institute_id: selectedInstitute.institute_id } as any);
+                                            setCourseForm({ name: "", code: "", duration_years: 0, institute_id: selectedInstitute.institute_id } as any);
                                             setShowCourseModal(true);
                                         }}
                                         onEdit={(c) => startEdit('course', c)}
@@ -661,7 +604,7 @@ export default function AdminDashboard() {
                                     <StudentsByInstitute
                                         selectedInstitute={selectedInstitute}
                                         selectedCourse={selectedCourse}
-                                        students={students}
+                                        students={[]}
                                         courses={courses}
                                         onBack={selectedCourse ? handleBackToCourses : handleBackToInstitutes}
                                     />
@@ -669,7 +612,7 @@ export default function AdminDashboard() {
                             </>
                         )}
 
-
+                        {/* Rest of the tabs unchanged */}
                         {activeTab === "analytics" && (
                             <AnalyticsDashboard
                                 institutes={institutes}
@@ -680,7 +623,6 @@ export default function AdminDashboard() {
                                 adminStats={adminStats}
                             />
                         )}
-
 
                         {activeTab === "academics" && (
                             <AcademicUploads
@@ -859,14 +801,14 @@ export default function AdminDashboard() {
                                                         <h3 className="text-lg font-bold text-gray-900 mb-2">{notice.title}</h3>
                                                         <p className="text-gray-600 text-sm leading-relaxed">{notice.description}</p>
                                                         <div className="mt-3 text-xs text-gray-400 flex items-center gap-2">
-                                                            <span>🕒 Posted {new Date(notice.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            <span>Posted {new Date(notice.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                             )) : (
                                                 <div className="text-center py-12">
                                                     <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                                        <span className="text-2xl">📢</span>
+                                                        <span className="text-2xl">Announcement</span>
                                                     </div>
                                                     <h3 className="text-lg font-medium text-gray-900">No Notices Yet</h3>
                                                     <p className="text-gray-500 mt-1">Create your first announcement to notify students and faculty.</p>
@@ -885,7 +827,7 @@ export default function AdminDashboard() {
                                                 <p className="text-red-200 text-sm">Active Notices</p>
                                             </div>
                                             <div className="absolute right-[-20px] top-[-20px] opacity-10">
-                                                <span className="text-[150px]">📢</span>
+                                                <span className="text-[150px]">Announcement</span>
                                             </div>
                                         </div>
                                     </div>
@@ -914,8 +856,7 @@ export default function AdminDashboard() {
                 </main>
             </div>
 
-            {/* MODALS */}
-            {/* Same modals as before, just kept for functionality */}
+            {/* MODALS - unchanged */}
             {showInstituteModal && (
                 <Modal onClose={() => setShowInstituteModal(false)} onSave={handleCreateOrUpdateInstitute} title={editingId ? "Edit College" : "Add College"}>
                     <div className="space-y-4">
@@ -993,7 +934,6 @@ export default function AdminDashboard() {
     );
 }
 
-// Confirm Action Modal Component
 function ConfirmActionModal({ user, onApprove, onReject, onClose }: { user: PendingUser; onApprove: () => void; onReject: () => void; onClose: () => void }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

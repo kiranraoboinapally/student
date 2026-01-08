@@ -14,17 +14,17 @@ import {
   TrendingUp
 } from "lucide-react";
 
-import type { Student, Course, Institute } from "../../services/adminService";
+import type { Institute, CourseFromStudents } from "../../services/adminService";
 
 interface CourseDrillDownProps {
   selectedInstitute: Institute;
-  courses: Course[];   // all courses from backend
-  students: Student[]; // all students from backend
-  onSelectCourse: (course: Course) => void;
+  courses: CourseFromStudents[];   // Derived from student data
+  onSelectCourse: (course: CourseFromStudents) => void;
   onBack: () => void;
   onAdd: () => void;
-  onEdit: (course: Course) => void;
-  onDelete: (id: number) => void;
+  // Edit/Delete not supported on derived courses (no course_id), but kept for future
+  onEdit?: (course: CourseFromStudents) => void;
+  onDelete?: (name: string) => void;
 }
 
 type SortKey = "name" | "studentCount" | "duration_years";
@@ -33,7 +33,6 @@ type SortOrder = "asc" | "desc";
 export default function CourseDrillDown({
   selectedInstitute,
   courses,
-  students,
   onSelectCourse,
   onBack,
   onAdd,
@@ -44,56 +43,48 @@ export default function CourseDrillDown({
   const [sortKey, setSortKey] = useState<SortKey>("studentCount");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
-  // --- Filter courses by selected institute ---
-  const instituteCourses = useMemo(() => {
-    // Prefer direct institute_id linkage, but fall back to matching against students when absent
-    return courses.filter((course) => {
-      if (selectedInstitute == null) return false;
-      if (course.institute_id && selectedInstitute.institute_id && course.institute_id === selectedInstitute.institute_id) return true;
-      // fallback: check if any student at this institute is enrolled in this course name
-      const cname = (course.name || '').toLowerCase();
-      return students.some(s => {
-        const instMatch = (s.institute_id && selectedInstitute.institute_id && s.institute_id === selectedInstitute.institute_id) || ((s.institute_name || '').toLowerCase() === ((selectedInstitute.institute_name || selectedInstitute.name) || '').toLowerCase());
-        if (!instMatch) return false;
-        return (s.course_name || '').toLowerCase() === cname || (String(s.course_id || '') === String(course.course_id || ''));
-      });
-    });
-  }, [courses, selectedInstitute]);
-
-  // --- Add stats per course ---
+  // --- Add stats per course (from backend data) ---
   const courseStats = useMemo(() => {
-    return instituteCourses.map((course) => {
-      const enrolledStudents = students.filter(
-        (s) => s.course_id === course.course_id || s.course_name === course.name
-      );
-      const enrolled = enrolledStudents.length;
-      const active = enrolledStudents.filter((s) => s.status === "active").length;
-      const completionRate = enrolled > 0 ? Math.round((active / enrolled) * 100) : 0;
+    return courses.map((course) => {
+      const enrolled = course.student_count;
+      // Assuming all enrolled are active (since we don't have status in derived data)
+      const active = enrolled;
+      const completionRate = enrolled > 0 ? 100 : 0; // Placeholder - can improve later
 
       return {
         ...course,
         studentCount: enrolled,
         activeStudents: active,
         totalSemesters: course.duration_years || 2,
-        completionRate
+        completionRate,
+        // Fake ID for key (since no real course_id)
+        course_id: course.name // temporary stable key
       };
     });
-  }, [instituteCourses, students]);
+  }, [courses]);
 
   // --- Sorting ---
   const sortedCourses = useMemo(() => {
     return [...courseStats].sort((a, b) => {
-      if (a[sortKey] < b[sortKey]) return sortOrder === "asc" ? -1 : 1;
-      if (a[sortKey] > b[sortKey]) return sortOrder === "asc" ? 1 : -1;
+      let av = a[sortKey];
+      let bv = b[sortKey];
+
+      // Handle nulls
+      if (av == null) av = sortKey === "name" ? "" : 0;
+      if (bv == null) bv = sortKey === "name" ? "" : 0;
+
+      if (av < bv) return sortOrder === "asc" ? -1 : 1;
+      if (av > bv) return sortOrder === "asc" ? 1 : -1;
       return 0;
     });
   }, [courseStats, sortKey, sortOrder]);
 
   // --- Search filter ---
   const filteredCourses = useMemo(() => {
+    if (!searchTerm) return sortedCourses;
+    const q = searchTerm.toLowerCase();
     return sortedCourses.filter((course) =>
-      (course.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (course.code || "").toLowerCase().includes(searchTerm.toLowerCase())
+      course.name.toLowerCase().includes(q)
     );
   }, [searchTerm, sortedCourses]);
 
@@ -122,7 +113,9 @@ export default function CourseDrillDown({
           <div className="flex items-center gap-4">
             <Building2 className="text-[#650C08]" size={28} />
             <div>
-              <h2 className="text-xl font-bold text-gray-900">{selectedInstitute.institute_name ?? selectedInstitute.name}</h2>
+              <h2 className="text-xl font-bold text-gray-900">
+                {selectedInstitute.institute_name ?? selectedInstitute.name}
+              </h2>
               <p className="text-sm text-gray-500">Courses Overview</p>
             </div>
           </div>
@@ -142,13 +135,16 @@ export default function CourseDrillDown({
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
-            placeholder="Search courses by name or code..."
+            placeholder="Search courses by name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent transition-shadow"
           />
         </div>
-        <button onClick={() => toggleSort("studentCount")} className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50">
+        <button
+          onClick={() => toggleSort("studentCount")}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
+        >
           <ArrowUpDown size={16} />
           Sort by Students {sortOrder.toUpperCase()}
         </button>
@@ -160,12 +156,14 @@ export default function CourseDrillDown({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredCourses.map((course) => (
               <div
-                key={course.course_id}
+                key={course.course_id || course.name}
                 onClick={() => onSelectCourse(course)}
                 className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer transition-all border border-transparent hover:border-[#650C08] group"
               >
                 <div className="flex justify-between items-start mb-3">
-                  <h4 className="font-bold text-gray-900 group-hover:text-[#650C08] line-clamp-1">{course.name}</h4>
+                  <h4 className="font-bold text-gray-900 group-hover:text-[#650C08] line-clamp-1">
+                    {course.name}
+                  </h4>
                   <ChevronRight className="text-gray-400 group-hover:text-[#650C08] group-hover:translate-x-1 transition-all flex-shrink-0" size={20} />
                 </div>
 
@@ -178,7 +176,9 @@ export default function CourseDrillDown({
                   </div>
                   <div className="bg-green-50 rounded-lg p-2 text-center">
                     <Clock className="mx-auto mb-1 text-green-600" size={16} />
-                    <p className="text-sm font-bold text-green-900">{course.duration_years || 1}Y</p>
+                    <p className="text-sm font-bold text-green-900">
+                      {course.duration_years || 1}Y
+                    </p>
                     <p className="text-xs text-green-600">Duration</p>
                   </div>
                   <div className="bg-purple-50 rounded-lg p-2 text-center">
@@ -190,18 +190,28 @@ export default function CourseDrillDown({
 
                 {/* Actions */}
                 <div className="flex justify-end gap-2 pt-3 border-t border-gray-100 mt-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onEdit(course); }}
-                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(course.course_id); }}
-                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {onEdit && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(course);
+                      }}
+                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                    >
+                      <Edit size={16} />
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(course.name);
+                      }}
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

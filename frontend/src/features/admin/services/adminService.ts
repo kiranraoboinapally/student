@@ -1,20 +1,30 @@
 import { apiBase } from "../../auth/AuthProvider";
 
+// ======================= CORE INTERFACES =======================
+export interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
 export interface PendingUser {
   user_id: number;
   username: string;
   email: string;
   full_name: string;
+  status: string;
   created_at: string;
 }
 
-// Enhanced interfaces for real-world data linking
 export interface User {
   user_id: number;
   username: string;
   email: string;
   full_name: string;
   role_id: number;
+  status: string;
+  created_at?: string;
 }
 
 export interface Institute {
@@ -34,37 +44,44 @@ export interface Institute {
   created_at?: string;
 }
 
+// Original Course interface (for future use when you have a real courses table)
 export interface Course {
   course_id?: number;
   name: string;
-  duration?: number;
+  code?: string;
   duration_years?: number;
   institute_id?: number;
   status?: string;
-  code?: string;
+}
+
+// NEW: Interface matching the actual backend response from GetCoursesByInstitute
+export interface CourseFromStudents {
+  name: string;
+  student_count: number;
+  program_pattern?: string | null;
+  duration_years?: number | null;
 }
 
 export interface Subject {
   subject_id?: number;
-  subject_code?: string;
+  subject_code: string;
   subject_name: string;
   subject_type?: string;
   credits?: number;
   semester?: number;
-  course_name?: string;
-  is_active?: boolean;
   course_id?: number;
+  is_active?: boolean;
 }
 
 export interface Faculty {
   faculty_id?: number;
   user_id?: number;
-  department?: string;
-  position?: string;
   faculty_name?: string;
   name?: string;
   email?: string;
   phone?: string;
+  department?: string;
+  position?: string;
 }
 
 export interface Notice {
@@ -76,46 +93,56 @@ export interface Notice {
 }
 
 export interface Student {
-  student_id: number;
+  student_id?: number;
   enrollment_number: number;
   full_name: string;
+  student_name?: string;
   father_name?: string;
   email?: string;
+  student_email_id?: string;
   phone?: string;
+  institute_id?: number;
   institute_name?: string;
+  course_id?: number;
   course_name?: string;
   status?: string;
+  student_status?: string;
   session?: string;
   batch?: string;
   program_pattern?: string;
   program_duration?: number;
-
-  // Frontend helpers
-  user_id?: number;
   username?: string;
-  institute_id?: number;
-  course_id?: number;
+  user_id?: number;
 }
 
 export interface FeePayment {
-  payment_id?: number;
-  student_id?: number;
+  payment_id: number;
   enrollment_number?: number;
-  amount_paid?: number;
-  paid_amount?: number;
-  payment_method?: string;
-  payment_note?: string;
-  paid_at?: string;
-  status?: string;
-  transaction_number?: string;
   student_name?: string;
-  institute_name?: string | null;
-  course_name?: string | null;
-  semester?: number | null;
-  program_pattern?: string | null;
-  source?: string | null;
+  fee_amount?: number;
+  transaction_number?: string;
+  transaction_date?: string;
+  status?: string;
+  display_status: string;
+  source: string;
+  institute_name?: string;
+  course_name?: string;
+  semester?: number;
+  program_pattern?: string;
 }
 
+export interface AdminStats {
+  total_institutes: number;
+  total_students: number;
+  total_active_students: number;
+  total_courses: number;
+  passed_students_count: number;
+  total_fees_paid: number;
+  total_expected_fees: number;
+  total_pending_fees: number;
+}
+
+// ======================= ADMIN SERVICE =======================
 class AdminService {
   private authFetch: (url: string, options?: RequestInit) => Promise<Response>;
 
@@ -123,359 +150,250 @@ class AdminService {
     this.authFetch = authFetch;
   }
 
-  // Pending Users
-  async getPendingUsers(page: number = 1, limit: number = 10): Promise<{ pending_registrations: PendingUser[]; total: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/pending-registrations?page=${page}&limit=${limit}`);
-    if (!res.ok) return { pending_registrations: [], total: 0 };
+  // ======================= PENDING REGISTRATIONS =======================
+  async getPendingUsers(page: number = 1, limit: number = 10) {
+    const res = await this.authFetch(
+      `${apiBase}/admin/pending-registrations?page=${page}&limit=${limit}`
+    );
+    if (!res.ok) return { pending_registrations: [], pagination: { page, limit, total: 0, total_pages: 0 } };
+
     const data = await res.json();
     return {
       pending_registrations: data.pending_registrations || [],
-      total: data.pagination?.total || 0,
+      pagination: data.pagination,
     };
   }
 
-  async approveUser(userId: number): Promise<{ success: boolean; message: string }> {
+  async approveRegistration(userId: number, action: "approve" | "reject") {
     const res = await this.authFetch(`${apiBase}/admin/approve-registration`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, action: "approve" }),
+      body: JSON.stringify({ user_id: userId, action }),
     });
-    if (!res.ok) throw new Error("Failed to approve user");
+
+    if (!res.ok) {
+      const error = await res.text();
+      throw new Error(`Failed to ${action} registration: ${error}`);
+    }
+
     return res.json();
   }
 
-  async rejectUser(userId: number): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/approve-registration`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, action: "reject" }),
-    });
-    if (!res.ok) throw new Error("Failed to reject user");
+  // ======================= STUDENTS =======================
+  async getStudents(params: {
+    page?: number;
+    limit?: number;
+    institute_id?: number;
+    course_id?: number;
+    search?: string;
+  }) {
+    const query = new URLSearchParams();
+    if (params.page) query.append("page", String(params.page));
+    if (params.limit) query.append("limit", String(params.limit));
+    if (params.institute_id) query.append("institute_id", String(params.institute_id));
+    if (params.course_id) query.append("course_id", String(params.course_id));
+    if (params.search) query.append("search", params.search);
+
+    const res = await this.authFetch(`${apiBase}/admin/students?${query.toString()}`);
+    if (!res.ok) {
+      return { students: [], pagination: { page: 1, limit: 50, total: 0, total_pages: 0 } };
+    }
     return res.json();
   }
 
-  // Students
-  async getStudents(page: number = 1, limit: number = 10): Promise<{ students: Student[]; total: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/students?page=${page}&limit=${limit}`);
-    if (!res.ok) return { students: [], total: 0 };
-    const data = await res.json();
-    return {
-      students: data.data || data.students || [],
-      total: data.pagination?.total || 0,
-    };
-  }
-
-  // Users
-  async getAllUsers(page: number = 1, limit: number = 10): Promise<{ users: User[]; total: number }> {
+  // ======================= USERS =======================
+  async getAllUsers(page: number = 1, limit: number = 20) {
     const res = await this.authFetch(`${apiBase}/admin/users?page=${page}&limit=${limit}`);
-    if (!res.ok) return { users: [], total: 0 };
-    const data = await res.json();
-    return {
-      users: data.data || data.users || [],
-      total: data.pagination?.total || 0,
-    };
+    if (!res.ok) return { data: [], pagination: { page, limit, total: 0, total_pages: 0 } };
+
+    return res.json();
   }
 
-  async createUser(userData: {
-    username: string;
+  async createStudentLogin(data: {
+    enrollment_number: string;
     email: string;
-    full_name: string;
-    role_id: number;
-  }): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/users/create`, {
+    temp_password: string;
+  }) {
+    const res = await this.authFetch(`${apiBase}/admin/users/create-student`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(userData),
+      body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error("Failed to create user");
+
+    if (!res.ok) throw new Error("Failed to create student login");
     return res.json();
   }
 
-  // Institutes
-  async getInstitutes(page: number = 1, limit: number = 10): Promise<{ institutes: Institute[]; total: number }> {
+  // ======================= INSTITUTES =======================
+  async getInstitutes(page: number = 1, limit: number = 20) {
     const res = await this.authFetch(`${apiBase}/admin/institutes?page=${page}&limit=${limit}`);
-    if (!res.ok) return { institutes: [], total: 0 };
+    if (!res.ok) return { data: [], pagination: { page, limit, total: 0, total_pages: 0 } };
+    return res.json();
+  }
+
+  async getInstituteDetail(id: number) {
+    const res = await this.authFetch(`${apiBase}/admin/institutes/${id}/detail`);
+    if (!res.ok) throw new Error("Failed to fetch institute details");
+    return res.json();
+  }
+
+  // Updated to return derived courses from student data
+  async getCoursesByInstitute(instituteId: number): Promise<{ courses: CourseFromStudents[] }> {
+    const res = await this.authFetch(`${apiBase}/admin/institutes/${instituteId}/courses`);
+    if (!res.ok) throw new Error("Failed to fetch courses for this institute");
+
+    const data = await res.json();
+    return { courses: data.courses || [] };
+  }
+
+  // ======================= FEE PAYMENTS =======================
+  async getFeePayments(
+    page: number = 1,
+    limit: number = 20,
+    filters?: {
+      enrollment_number?: string;
+      institute_name?: string;
+      status?: string;
+      source?: string;
+    }
+  ) {
+    const query = new URLSearchParams();
+    query.set("page", String(page));
+    query.set("limit", String(limit));
+    if (filters?.enrollment_number) query.set("enrollment_number", filters.enrollment_number);
+    if (filters?.institute_name) query.set("institute_name", filters.institute_name);
+    if (filters?.status) query.set("status", filters.status);
+    if (filters?.source) query.set("source", filters.source);
+
+    const res = await this.authFetch(`${apiBase}/admin/payments/history?${query.toString()}`);
+    if (!res.ok) return { payments: [], total_records: 0, pagination: { page, limit, total: 0, total_pages: 0 } };
+
     const data = await res.json();
     return {
-      institutes: data.data || data.institutes || [],
-      total: data.pagination?.total || 0,
+      payments: data.payments || [],
+      total_records: data.total_records || 0,
+      pagination: data.pagination,
     };
   }
 
-  async createInstitute(instituteData: Institute): Promise<{ success: boolean; message: string; id?: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/institutes`, {
+  async verifyPayment(
+    paymentId: number,
+    source: "registration" | "examination" | "miscellaneous",
+    action: "verify" | "reject" = "verify"
+  ) {
+    const res = await this.authFetch(`${apiBase}/admin/payments/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(instituteData),
+      body: JSON.stringify({
+        payment_id: paymentId,
+        source,
+        action,
+      }),
     });
-    if (!res.ok) throw new Error("Failed to create institute");
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to ${action} payment: ${err}`);
+    }
+
     return res.json();
   }
 
-  async updateInstitute(id: number, instituteData: Institute): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/institutes/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(instituteData),
-    });
-    if (!res.ok) throw new Error("Failed to update institute");
-    return res.json();
-  }
-
-  async deleteInstitute(id: number): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/institutes/${id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) throw new Error("Failed to delete institute");
-    return res.json();
-  }
-
-  // Courses
-  async getCourses(page: number = 1, limit: number = 1000): Promise<{ courses: Course[]; total: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/courses?page=${page}&limit=${limit}`);
-    if (!res.ok) return { courses: [], total: 0 };
-    const data = await res.json();
-
-    // Normalize course-stream response into frontend Course shape
-    const raw: any[] = data.data || [];
-    const mapped: Course[] = raw.map(r => ({
-      course_id: Number(r.id ?? r.course_id ?? 0),
-      name: (r.full_name ?? r.course_name ?? '').toString(),
-      duration_years: r.program_duration ?? r.duration_years ?? 0,
-      // course streams do not have institute link; we'll enrich on the client using students
-    }));
-
-    return { courses: mapped, total: data.pagination?.total ?? raw.length };
-  }
-
-  async createCourse(courseData: Course): Promise<{ success: boolean; message: string; id?: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/courses`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(courseData),
-    });
-    if (!res.ok) throw new Error("Failed to create course");
-    return res.json();
-  }
-
-  async updateCourse(id: number, courseData: Course): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/courses/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(courseData),
-    });
-    if (!res.ok) throw new Error("Failed to update course");
-    return res.json();
-  }
-
-  async deleteCourse(id: number): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/courses/${id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) throw new Error("Failed to delete course");
-    return res.json();
-  }
-
-  // Subjects
-  async getSubjects(page: number = 1, limit: number = 10): Promise<{ subjects: Subject[]; total: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/subjects?page=${page}&limit=${limit}`);
-    if (!res.ok) return { subjects: [], total: 0 };
-    const data = await res.json();
-    return {
-      subjects: data.data || data.subjects || [],
-      total: data.pagination?.total || 0,
-    };
-  }
-
-  async createSubject(subjectData: Subject): Promise<{ success: boolean; message: string; id?: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/subjects`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(subjectData),
-    });
-    if (!res.ok) throw new Error("Failed to create subject");
-    return res.json();
-  }
-
-  async updateSubject(id: number, subjectData: Subject): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/subjects/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(subjectData),
-    });
-    if (!res.ok) throw new Error("Failed to update subject");
-    return res.json();
-  }
-
-  async deleteSubject(id: number): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/subjects/${id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) throw new Error("Failed to delete subject");
-    return res.json();
-  }
-
-  // Faculty
-  async getFaculty(page: number = 1, limit: number = 10): Promise<{ faculty: Faculty[]; total: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/faculty?page=${page}&limit=${limit}`);
-    if (!res.ok) return { faculty: [], total: 0 };
-    const data = await res.json();
-    return {
-      faculty: data.data || data.faculty || [],
-      total: data.pagination?.total || 0,
-    };
-  }
-
-  async createFaculty(facultyData: Faculty): Promise<{ success: boolean; message: string; id?: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/faculty`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(facultyData),
-    });
-    if (!res.ok) throw new Error("Failed to create faculty");
-    return res.json();
-  }
-
-  async updateFaculty(id: number, facultyData: Faculty): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/faculty/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(facultyData),
-    });
-    if (!res.ok) throw new Error("Failed to update faculty");
-    return res.json();
-  }
-
-  async deleteFaculty(id: number): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/faculty/${id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) throw new Error("Failed to delete faculty");
-    return res.json();
-  }
-
-  // Notices
-  async getNotices(): Promise<Notice[]> {
-    const res = await this.authFetch(`${apiBase}/admin/notices`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data) ? data : data.data || data.notices || [];
-  }
-
-  async createNotice(noticeData: Notice): Promise<{ success: boolean; message: string; id?: number }> {
-    const res = await this.authFetch(`${apiBase}/admin/notices`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(noticeData),
-    });
-    if (!res.ok) throw new Error("Failed to create notice");
-    return res.json();
-  }
-
-  async updateNotice(id: number, noticeData: Notice): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/notices/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(noticeData),
-    });
-    if (!res.ok) throw new Error("Failed to update notice");
-    return res.json();
-  }
-
-  async deleteNotice(id: number): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/notices/${id}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) throw new Error("Failed to delete notice");
-    return res.json();
-  }
-
-  // Fee Payments
-  async getFeePayments(page: number = 1, limit: number = 20, filters?: { institute_name?: string; status?: string; source?: string; search?: string }): Promise<{ payments: FeePayment[]; total: number }> {
-    const q = new URLSearchParams();
-    q.set('page', String(page));
-    q.set('limit', String(limit));
-    if (filters?.institute_name) q.set('institute_name', filters.institute_name);
-    if (filters?.status) q.set('status', filters.status);
-    if (filters?.source) q.set('source', filters.source);
-    if (filters?.search) q.set('search', filters.search);
-    const res = await this.authFetch(`${apiBase}/admin/fees/payments?${q.toString()}`);
-    if (!res.ok) return { payments: [], total: 0 };
-    const data = await res.json();
-
-    // Normalize backend payment records to frontend `FeePayment` shape
-    const rawPayments: any[] = data.payments || [];
-    const payments: FeePayment[] = rawPayments.map(p => ({
-      payment_id: p.payment_id ?? p.payment_detail_id ?? p.paymentId,
-      student_id: (p.enrollment_number ?? p.student_id ?? p.enrollmentNo) !== null ? Number(p.enrollment_number ?? p.student_id ?? p.enrollmentNo) : undefined,
-      enrollment_number: (p.enrollment_number ?? p.enrollmentNo ?? p.student_id) !== null ? Number(p.enrollment_number ?? p.enrollmentNo ?? p.student_id) : undefined,
-      amount_paid: p.fee_amount ?? p.amount_paid ?? p.total_amount ?? p.paid_amount ?? 0,
-      paid_amount: p.fee_amount ?? p.amount_paid ?? p.total_amount ?? p.paid_amount ?? 0,
-      payment_method: p.payment_method ?? p.payment_method,
-      payment_note: p.payment_note ?? p.payment_note,
-      paid_at: p.payment_date ?? p.paid_at ?? p.transaction_date ?? p.paid_at,
-      status: (p.display_status ?? p.status ?? p.payment_status ?? 'pending'),
-      source: p.source ?? p.Source ?? null,
-      transaction_number: p.transaction_number ?? p.transaction_no ?? p.transactionNumber ?? null,
-      student_name: p.student_name ?? p.studentName ?? null,
-      institute_name: p.institute_name ?? p.instituteName ?? p.InstituteName ?? null,
-      course_name: p.course_name ?? p.courseName ?? p.CourseName ?? null,
-      semester: p.semester ?? p.Semester ?? null,
-      program_pattern: p.program_pattern ?? p.programPattern ?? null,
-    }));
-
-    return {
-      payments,
-      total: data.pagination?.total ?? data.total_records ?? 0,
-    };
-  }
-
-  async updateFeePaymentStatus(paymentId: number, status: 'verified' | 'rejected'): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/fees/payments/${paymentId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    if (!res.ok) throw new Error("Failed to update payment status");
-    return res.json();
-  }
-
-  async verifyPayment(paymentId: number, source: string, action: 'verify' | 'reject' = 'verify'): Promise<{ success: boolean; message: string }> {
-    const res = await this.authFetch(`${apiBase}/admin/fees/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payment_id: paymentId, source, action: action === 'verify' ? 'verify' : 'reject' }),
-    });
-    if (!res.ok) throw new Error('Failed to verify/reject payment');
-    return res.json();
-  }
-
-  // Admin aggregated stats
-  async getAdminStats(): Promise<any> {
-    const res = await this.authFetch(`${apiBase}/admin/stats`);
-    if (!res.ok) return {};
-    return res.json();
-  }
-
-  // Marks Upload
-  async uploadMarks(marksData: any[]): Promise<{ success: boolean; message: string }> {
+  // ======================= MARKS & ATTENDANCE =======================
+  async uploadMarks(marks: Array<{
+    enrollment_number: number;
+    subject_code: string;
+    semester: number;
+    marks_obtained: number;
+    grade?: string;
+    status: "internal" | "external";
+  }>) {
     const res = await this.authFetch(`${apiBase}/admin/marks/upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ marks: marksData }),
+      body: JSON.stringify({ marks }),
     });
+
     if (!res.ok) throw new Error("Failed to upload marks");
     return res.json();
   }
 
-  // Attendance Upload
-  async uploadAttendance(attendanceData: any[]): Promise<{ success: boolean; message: string }> {
+  async uploadAttendance(records: Array<{
+    enrollment_number: number;
+    date: string;
+    present: boolean;
+    subject_code?: string;
+  }>) {
     const res = await this.authFetch(`${apiBase}/admin/attendance/upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ attendance: attendanceData }),
+      body: JSON.stringify({ records }),
     });
+
     if (!res.ok) throw new Error("Failed to upload attendance");
+    return res.json();
+  }
+
+  async getAttendanceSummary(filters?: { institute_id?: string; institute_name?: string }) {
+    const query = new URLSearchParams();
+    if (filters?.institute_id) query.set("institute_id", filters.institute_id);
+    if (filters?.institute_name) query.set("institute_name", filters.institute_name);
+
+    const res = await this.authFetch(`${apiBase}/admin/attendance/summary?${query.toString()}`);
+    if (!res.ok) return { total_records: 0, present: 0, absent: 0, attendance_percent: 0 };
+    return res.json();
+  }
+
+  // ======================= FEE STRUCTURE & DUE =======================
+  async createFeeStructure(data: {
+    course_name?: string;
+    session?: string;
+    batch?: string;
+    program_pattern?: string;
+    fee_amount: number;
+    effective_from?: string;
+    effective_to?: string;
+  }) {
+    const res = await this.authFetch(`${apiBase}/admin/fee-structure`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) throw new Error("Failed to create fee structure");
+    return res.json();
+  }
+
+  async createFeeDue(data: {
+    enrollment_number: number;
+    fee_head: string;
+    original_amount: number;
+    due_date?: string;
+  }) {
+    const res = await this.authFetch(`${apiBase}/admin/fees/due`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) throw new Error("Failed to create fee due");
+    return res.json();
+  }
+
+  // ======================= ADMIN STATS =======================
+  async getAdminStats(): Promise<AdminStats> {
+    const res = await this.authFetch(`${apiBase}/admin/stats`);
+    if (!res.ok) return {
+      total_institutes: 0,
+      total_students: 0,
+      total_active_students: 0,
+      total_courses: 0,
+      passed_students_count: 0,
+      total_fees_paid: 0,
+      total_expected_fees: 0,
+      total_pending_fees: 0,
+    };
+
     return res.json();
   }
 }

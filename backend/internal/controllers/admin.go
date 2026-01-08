@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,91 +17,146 @@ import (
 	"github.com/kiranraoboinapally/student/backend/internal/utils"
 )
 
-// ADMIN - AGGREGATED STATS FOR DASHBOARD
-// ADMIN - AGGREGATED STATS FOR DASHBOARD
+// ======================== ADMIN DASHBOARD STATS ========================
 func GetAdminStats(c *gin.Context) {
 	db := config.DB
 
+	var (
+		totalInstitutes             int64
+		totalStudents               int64
+		totalActiveStudents         int64
+		totalCourses                int64
+		passedCount                 int64
+		regPaid, examPaid, miscPaid float64
+		totalExpected, totalPaidExp float64
+	)
+
 	// Total Institutes
-	var totalInstitutes int64
 	db.Model(&models.Institute{}).Count(&totalInstitutes)
 
 	// Total Students
-	var totalStudents int64
 	db.Model(&models.MasterStudent{}).Count(&totalStudents)
 
-	// Total Active Students
-	var totalActiveStudents int64
+	// Active Students
 	db.Model(&models.MasterStudent{}).
 		Where("student_status = ?", "active").
 		Count(&totalActiveStudents)
 
-	// Total Courses
-	var totalCourses int64
+	// Unique Courses
 	db.Raw(`
 		SELECT COUNT(DISTINCT course_name)
 		FROM master_students
 		WHERE course_name IS NOT NULL AND course_name != ''
 	`).Scan(&totalCourses)
 
-	// Passed/Graduated Students Count
-	var passedCount int64
+	// Passed/Graduated Students
 	db.Model(&models.MasterStudent{}).
 		Where("LOWER(student_status) IN (?)", []string{"passed", "completed", "graduated", "passed out"}).
 		Count(&passedCount)
 
 	// Fees Paid
-	var regPaid, examPaid, miscPaid float64
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM registration_fees WHERE payment_status = ?", "Paid").Scan(&regPaid)
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM examination_fees WHERE payment_status = ?", "Paid").Scan(&examPaid)
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM miscellaneous_fees WHERE payment_status = ?", "Paid").Scan(&miscPaid)
 	totalFeesPaid := regPaid + examPaid + miscPaid
 
-	// Expected and Pending Fees
-	var totalExpected, totalPaid float64
+	// Expected vs Pending Fees
 	db.Raw("SELECT COALESCE(SUM(total_expected_fee),0) FROM expected_fee_collections").Scan(&totalExpected)
-	db.Raw("SELECT COALESCE(SUM(total_paid),0) FROM expected_fee_collections").Scan(&totalPaid)
-	totalPending := totalExpected - totalPaid
+	db.Raw("SELECT COALESCE(SUM(total_paid),0) FROM expected_fee_collections").Scan(&totalPaidExp)
+	totalPending := totalExpected - totalPaidExp
 
-	// Pending Users Count
-	var pendingCount int64
-	db.Model(&models.User{}).Where("status = ?", "pending").Count(&pendingCount)
-
-	// Return JSON with new field total_active_students
 	c.JSON(http.StatusOK, gin.H{
 		"total_institutes":      totalInstitutes,
 		"total_students":        totalStudents,
-		"total_active_students": totalActiveStudents, // <-- NEW
+		"total_active_students": totalActiveStudents,
 		"total_courses":         totalCourses,
+		"passed_students_count": passedCount,
 		"total_fees_paid":       totalFeesPaid,
 		"total_expected_fees":   totalExpected,
 		"total_pending_fees":    totalPending,
-		"passed_students_count": passedCount,
 	})
 }
 
-// ADMIN – STUDENT LIST (FROM EXISTING TABLES)
-
 func GetStudents(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	offset := (page - 1) * limit
-
 	db := config.DB
 
-	var students []models.MasterStudent
+	// Pagination
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
+
+	// Filters
+	instituteIDStr := c.Query("institute_id")
+	courseName := strings.TrimSpace(c.Query("course_id")) // now treated as course_name
+	search := strings.TrimSpace(c.Query("search"))
+
+	query := db.Model(&models.MasterStudent{})
+
+	// 1. Institute filter: lookup institute_name from institute_id
+	if instituteIDStr != "" {
+		if instituteID, err := strconv.ParseInt(instituteIDStr, 10, 64); err == nil && instituteID > 0 {
+			var instituteName string
+			err := db.Table("institutes").
+				Select("institute_name").
+				Where("institute_id = ?", instituteID).
+				Scan(&instituteName).Error
+
+			if err != nil || instituteName == "" {
+				// Invalid institute → return empty result early
+				c.JSON(http.StatusOK, gin.H{
+					"students": []models.MasterStudent{},
+					"pagination": gin.H{
+						"page":        page,
+						"limit":       limit,
+						"total":       0,
+						"total_pages": 0,
+					},
+				})
+				return
+			}
+
+			query = query.Where("institute_name = ?", instituteName)
+		}
+	}
+
+	// 2. Course filter: now it's course_name (string), not course_id
+	if courseName != "" {
+		// URL-decode the course name (since spaces become +)
+		decodedCourseName, _ := url.QueryUnescape(courseName)
+		query = query.Where("course_name = ?", decodedCourseName)
+	}
+
+	// 3. Search filter
+	if search != "" {
+		like := "%" + strings.ToLower(search) + "%"
+		query = query.Where(`
+			LOWER(student_name) LIKE ? OR
+			LOWER(student_email_id) LIKE ? OR
+			LOWER(CAST(enrollment_number AS CHAR)) LIKE ?
+		`, like, like, like)
+	}
+
+	// Count total
 	var total int64
+	query.Count(&total)
 
-	db.Model(&models.MasterStudent{}).Count(&total)
+	// Fetch students
+	var students []models.MasterStudent = []models.MasterStudent{} // ← initialize to avoid nil → null
 
-	db.
-		Order("created_at desc").
+	query.
+		Order("student_name ASC").
 		Limit(limit).
 		Offset(offset).
 		Find(&students)
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": students,
+		"students": students, // now always [] if empty, never null
 		"pagination": gin.H{
 			"page":        page,
 			"limit":       limit,
@@ -108,8 +165,72 @@ func GetStudents(c *gin.Context) {
 		},
 	})
 }
+func GetCoursesByInstitute(c *gin.Context) {
+	idStr := c.Param("id")
+	if idStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "institute_id required"})
+		return
+	}
 
-// ADMIN – CREATE LOGIN ACCOUNT FOR STUDENT
+	instituteID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || instituteID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid institute_id"})
+		return
+	}
+
+	db := config.DB
+
+	type CourseSummary struct {
+		Name           string  `json:"name"`
+		StudentCount   int64   `json:"student_count"`
+		ProgramPattern *string `json:"program_pattern,omitempty"`
+		DurationYears  *int    `json:"duration_years,omitempty"`
+	}
+
+	// First: Get the institute_name from institutes table using institute_id
+	var instituteName string
+	err = db.Table("institutes").
+		Select("institute_name").
+		Where("institute_id = ?", instituteID).
+		Scan(&instituteName).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "institute not found or DB error"})
+		return
+	}
+
+	if instituteName == "" {
+		// Institute exists but name is empty? Or not found
+		c.JSON(http.StatusOK, gin.H{"courses": []CourseSummary{}})
+		return
+	}
+
+	// Now query master_students using the string institute_name
+	var courses []CourseSummary = []CourseSummary{}
+
+	err = db.Table("master_students").
+		Select(`
+			course_name AS name,
+			COUNT(*) AS student_count,
+			MAX(program_pattern) AS program_pattern,
+			MAX(program_duration) AS duration_years
+		`).
+		Where("institute_name = ? AND course_name IS NOT NULL AND TRIM(course_name) != ''", instituteName).
+		Group("course_name").
+		Order("course_name ASC").
+		Scan(&courses).Error
+
+	if err != nil {
+		// Log this in production! But for now, just return empty
+		fmt.Printf("Error scanning courses for institute %d (%s): %v\n", instituteID, instituteName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch courses"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"courses": courses, // Will be [] if no courses
+	})
+}
 
 type AdminCreateStudentUserRequest struct {
 	EnrollmentNumber string `json:"enrollment_number" binding:"required"`
@@ -125,38 +246,34 @@ func CreateUserByAdmin(c *gin.Context) {
 	}
 
 	db := config.DB
-
-	// 1️⃣ Verify student exists
 	var student models.MasterStudent
-	if err := db.Where("enrollment_number = ?", req.EnrollmentNumber).
-		First(&student).Error; err != nil {
+
+	if err := db.Where("enrollment_number = ?", req.EnrollmentNumber).First(&student).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "student not found"})
 		return
 	}
 
-	// 2️⃣ Check if user already exists
 	var existing models.User
-	if err := db.Where("username = ?", req.EnrollmentNumber).
-		First(&existing).Error; err == nil {
+	if db.Where("username = ?", req.EnrollmentNumber).First(&existing).Error == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "login already exists"})
 		return
 	}
 
-	// 3️⃣ Create user
 	hashed, _ := utils.HashPassword(req.TempPassword)
-
 	user := models.User{
 		Username:       req.EnrollmentNumber,
 		Email:          req.Email,
 		FullName:       student.StudentName,
 		PasswordHash:   hashed,
-		RoleID:         5, // STUDENT
+		RoleID:         5, // Student
 		Status:         "active",
 		IsTempPassword: true,
-		CreatedAt:      nil,
 	}
 
-	db.Create(&user)
+	if err := db.Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		return
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message":  "student login created",
@@ -165,23 +282,18 @@ func CreateUserByAdmin(c *gin.Context) {
 	})
 }
 
-// ADMIN – LIST ALL USERS (PAGINATED)
-
 func GetAllUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset := (page - 1) * limit
 
 	db := config.DB
-
 	var users []models.User
 	var total int64
 
 	db.Model(&models.User{}).Count(&total)
-
-	db.
-		Select("user_id, username, email, full_name, role_id, status, created_at").
-		Order("created_at desc").
+	db.Select("user_id, username, email, full_name, role_id, status, created_at").
+		Order("created_at DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&users)
@@ -197,7 +309,21 @@ func GetAllUsers(c *gin.Context) {
 	})
 }
 
-// ADMIN – FEE PAYMENT HISTORY
+// ======================== FEE PAYMENT HISTORY ========================
+type UnifiedPayment struct {
+	PaymentID       int64    `json:"payment_id"`
+	EnrollmentNo    *int64   `json:"enrollment_number"`
+	StudentName     *string  `json:"student_name"`
+	FeeAmount       *float64 `json:"fee_amount"`
+	TransactionNo   *string  `json:"transaction_number"`
+	TransactionDate *string  `json:"transaction_date"`
+	Status          *string  `json:"status"`
+	DisplayStatus   string   `json:"display_status"`
+	Source          string   `json:"source"`
+	InstituteName   *string  `json:"institute_name"`
+	CourseName      *string  `json:"course_name"`
+	ProgramPattern  *string  `json:"program_pattern"`
+}
 
 func GetAllFeePaymentHistory(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -205,154 +331,145 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 	offset := (page - 1) * limit
 
 	db := config.DB
-	// Aggregate payments from registration_fees, examination_fees and miscellaneous_fees
-	type UnifiedPayment struct {
-		PaymentID       int64    `json:"payment_id"`
-		EnrollmentNo    *int64   `json:"enrollment_number"`
-		StudentName     *string  `json:"student_name"`
-		FeeAmount       *float64 `json:"fee_amount"`
-		TransactionNo   *string  `json:"transaction_number"`
-		TransactionDate *string  `json:"transaction_date"`
-		Status          *string  `json:"status"`
-		DisplayStatus   string   `json:"display_status"`
-		Source          string   `json:"source"`
-		InstituteName   *string  `json:"institute_name"`
-		CourseName      *string  `json:"course_name"`
-		Semester        *int     `json:"semester"`
-		ProgramPattern  *string  `json:"program_pattern"`
-	}
 
-	// Read optional filters
+	// Filters
 	enrollmentFilter := c.Query("enrollment_number")
 	instituteFilter := strings.TrimSpace(c.Query("institute_name"))
-	statusFilter := strings.TrimSpace(c.Query("status")) // expected: verified|needs_verification|pending etc.
-	sourceFilter := strings.TrimSpace(c.Query("source")) // registration|examination|miscellaneous
+	statusFilter := strings.TrimSpace(c.Query("status"))
+	sourceFilter := strings.TrimSpace(c.Query("source"))
 
-	// helper to determine display status
-	mapDisplayStatus := func(s *string) string {
-		if s == nil {
-			return "unknown"
-		}
-		v := strings.ToLower(strings.TrimSpace(*s))
-		if strings.Contains(v, "success") || strings.Contains(v, "verified") {
-			return "verified"
-		}
-		if strings.Contains(v, "paid") {
-			return "needs_verification"
-		}
-		if strings.Contains(v, "pending") {
-			return "pending"
-		}
-		if strings.Contains(v, "failed") || strings.Contains(v, "error") {
-			return "failed"
-		}
-		return v
-	}
-
-	// If enrollment supplied, validate
-	hasEnrollmentFilter := false
 	var enNum int64
-	if enrollmentFilter != "" {
+	hasEnrollmentFilter := enrollmentFilter != ""
+	if hasEnrollmentFilter {
 		val, err := strconv.ParseInt(enrollmentFilter, 10, 64)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid enrollment number"})
 			return
 		}
 		enNum = val
-		hasEnrollmentFilter = true
+	}
+
+	mapDisplayStatus := func(s *string) string {
+		if s == nil {
+			return "unknown"
+		}
+		v := strings.ToLower(strings.TrimSpace(*s))
+		switch {
+		case strings.Contains(v, "success") || strings.Contains(v, "verified"):
+			return "verified"
+		case strings.Contains(v, "paid"):
+			return "needs_verification"
+		case strings.Contains(v, "pending"):
+			return "pending"
+		case strings.Contains(v, "failed") || strings.Contains(v, "error"):
+			return "failed"
+		default:
+			return v
+		}
 	}
 
 	var results []UnifiedPayment
 
-	// Helper to fetch from a table into UnifiedPayment
-	fetchFrom := func(table string, idCol string, nameCol string, amountCol string, txnCol string, dateCol string, statusCol string, source string) error {
-		// apply source filter early
+	fetchFrom := func(table, idCol, nameCol, amountCol, txnCol, dateCol, statusCol, source string) error {
 		if sourceFilter != "" && sourceFilter != source {
 			return nil
 		}
-		rows, err := db.Table(table).Select(idCol+" AS payment_id", "enrollment_number", nameCol+" AS student_name", amountCol+" AS fee_amount", txnCol+" AS transaction_number", dateCol+" AS transaction_date", statusCol+" AS status").Rows()
+
+		rows, err := db.Table(table).
+			Select(idCol + " AS payment_id, enrollment_number, " + nameCol + " AS student_name, " +
+				amountCol + " AS fee_amount, " + txnCol + " AS transaction_number, " +
+				dateCol + " AS transaction_date, " + statusCol + " AS status").
+			Rows()
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
+
 		for rows.Next() {
 			var up UnifiedPayment
-			if err := rows.Scan(&up.PaymentID, &up.EnrollmentNo, &up.StudentName, &up.FeeAmount, &up.TransactionNo, &up.TransactionDate, &up.Status); err != nil {
+			if err := rows.Scan(&up.PaymentID, &up.EnrollmentNo, &up.StudentName, &up.FeeAmount,
+				&up.TransactionNo, &up.TransactionDate, &up.Status); err != nil {
 				continue
 			}
+
 			up.Source = source
 			up.DisplayStatus = mapDisplayStatus(up.Status)
-			// apply status filter early
+
 			if statusFilter != "" && strings.ToLower(statusFilter) != up.DisplayStatus {
 				continue
 			}
-			// if enrollment filter present, skip mismatches
 			if hasEnrollmentFilter && (up.EnrollmentNo == nil || *up.EnrollmentNo != enNum) {
 				continue
 			}
+
 			results = append(results, up)
 		}
 		return nil
 	}
 
-	if err := fetchFrom("registration_fees", "regn_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "registration"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
-		return
-	}
-	if err := fetchFrom("examination_fees", "exam_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "examination"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
-		return
-	}
-	if err := fetchFrom("miscellaneous_fees", "misc_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "miscellaneous"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
-		return
+	tables := []struct {
+		table, idCol, nameCol, amountCol, txnCol, dateCol, statusCol, source string
+	}{
+		{"registration_fees", "regn_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "registration"},
+		{"examination_fees", "exam_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "examination"},
+		{"miscellaneous_fees", "misc_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "miscellaneous"},
 	}
 
-	// Populate institute/course info from master_students for enrollments we have
-	enrollSet := make(map[int64]struct{})
-	for _, r := range results {
-		if r.EnrollmentNo != nil {
-			enrollSet[*r.EnrollmentNo] = struct{}{}
+	for _, t := range tables {
+		if err := fetchFrom(t.table, t.idCol, t.nameCol, t.amountCol, t.txnCol, t.dateCol, t.statusCol, t.source); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
+			return
 		}
 	}
-	if len(enrollSet) > 0 {
-		ids := make([]int64, 0, len(enrollSet))
-		for k := range enrollSet {
-			ids = append(ids, k)
-		}
-		var masters []models.MasterStudent
-		db.Where("enrollment_number IN ?", ids).Find(&masters)
-		masterMap := map[int64]models.MasterStudent{}
-		for _, m := range masters {
-			masterMap[m.EnrollmentNumber] = m
-		}
-		for i, r := range results {
+
+	// Enrich with master student data
+	if len(results) > 0 {
+		enrollSet := make(map[int64]struct{})
+		for _, r := range results {
 			if r.EnrollmentNo != nil {
-				if m, ok := masterMap[*r.EnrollmentNo]; ok {
-					results[i].InstituteName = m.InstituteName
-					results[i].CourseName = m.CourseName
-					results[i].ProgramPattern = m.ProgramPattern
+				enrollSet[*r.EnrollmentNo] = struct{}{}
+			}
+		}
+
+		if len(enrollSet) > 0 {
+			ids := make([]int64, 0, len(enrollSet))
+			for id := range enrollSet {
+				ids = append(ids, id)
+			}
+
+			var masters []models.MasterStudent
+			db.Where("enrollment_number IN ?", ids).Find(&masters)
+
+			masterMap := make(map[int64]models.MasterStudent)
+			for _, m := range masters {
+				masterMap[m.EnrollmentNumber] = m
+			}
+
+			for i := range results {
+				if results[i].EnrollmentNo != nil {
+					if m, ok := masterMap[*results[i].EnrollmentNo]; ok {
+						results[i].InstituteName = m.InstituteName
+						results[i].CourseName = m.CourseName
+						results[i].ProgramPattern = m.ProgramPattern
+					}
 				}
 			}
 		}
 	}
 
-	// Apply institute filter (after enrichment)
+	// Institute filter
 	if instituteFilter != "" {
-		filtered := make([]UnifiedPayment, 0, len(results))
 		needle := strings.ToLower(strings.TrimSpace(instituteFilter))
+		filtered := results[:0]
 		for _, r := range results {
-			if r.InstituteName != nil {
-				hay := strings.ToLower(strings.TrimSpace(*r.InstituteName))
-				if hay == needle || strings.Contains(hay, needle) || strings.Contains(needle, hay) {
-					filtered = append(filtered, r)
-				}
+			if r.InstituteName != nil && (strings.Contains(strings.ToLower(*r.InstituteName), needle)) {
+				filtered = append(filtered, r)
 			}
 		}
 		results = filtered
 	}
 
-	// Sort results by transaction_date (try parsing YYYY-MM-DD or datetime), fallback to as-string compare
+	// Sort by date descending
 	sort.SliceStable(results, func(i, j int) bool {
 		di := parseDateString(results[i].TransactionDate)
 		dj := parseDateString(results[j].TransactionDate)
@@ -360,117 +477,112 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 			return di.After(dj)
 		}
 		si := ""
-		sj := ""
 		if results[i].TransactionDate != nil {
 			si = *results[i].TransactionDate
 		}
+		sj := ""
 		if results[j].TransactionDate != nil {
 			sj = *results[j].TransactionDate
 		}
 		return si > sj
 	})
 
-	// Apply pagination in Go
+	// Pagination
+	total := int(len(results))
 	start := offset
-	end := offset + limit
-	if start > len(results) {
-		start = len(results)
+	if start > total {
+		start = total
 	}
-	if end > len(results) {
-		end = len(results)
+	end := start + limit
+	if end > total {
+		end = total
 	}
-	pageResults := results[start:end]
 
-	total := int64(len(results))
 	c.JSON(http.StatusOK, gin.H{
 		"total_records": total,
-		"payments":      pageResults,
+		"payments":      results[start:end],
 		"pagination": gin.H{
 			"page":        page,
 			"limit":       limit,
 			"total":       total,
-			"total_pages": (total + int64(limit) - 1) / int64(limit),
+			"total_pages": (total + int(limit) - 1) / int(limit),
 		},
 	})
 }
 
-// POST /api/admin/payments/verify
 func VerifyPayment(c *gin.Context) {
 	var req struct {
 		PaymentID int64  `json:"payment_id" binding:"required"`
-		Source    string `json:"source" binding:"required"` // registration|examination|miscellaneous
-		Action    string `json:"action" binding:"required"` // verify
+		Source    string `json:"source" binding:"required"`
+		Action    string `json:"action" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
 	if req.Action != "verify" && req.Action != "reject" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported action"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action must be 'verify' or 'reject'"})
 		return
 	}
 
-	db := config.DB
 	newStatus := "Verified"
 	if req.Action == "reject" {
 		newStatus = "Rejected"
 	}
 
-	var table string
-	var idCol string
+	var table, idCol string
 	switch req.Source {
 	case "registration":
-		table = "registration_fees"
-		idCol = "regn_fee_id"
+		table, idCol = "registration_fees", "regn_fee_id"
 	case "examination":
-		table = "examination_fees"
-		idCol = "exam_fee_id"
+		table, idCol = "examination_fees", "exam_fee_id"
 	case "miscellaneous":
-		table = "miscellaneous_fees"
-		idCol = "misc_fee_id"
+		table, idCol = "miscellaneous_fees", "misc_fee_id"
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid source"})
 		return
 	}
 
-	if err := db.Table(table).Where(idCol+" = ?", req.PaymentID).Update("payment_status", newStatus).Error; err != nil {
+	db := config.DB
+	if err := db.Table(table).Where(idCol+" = ?", req.PaymentID).
+		Update("payment_status", newStatus).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update payment status"})
 		return
 	}
 
-	SendAdminNotification("payment_verified", gin.H{"payment_id": req.PaymentID, "source": req.Source})
+	SendAdminNotification("payment_status_updated", gin.H{
+		"payment_id": req.PaymentID,
+		"source":     req.Source,
+		"status":     newStatus,
+	})
 
-	c.JSON(http.StatusOK, gin.H{"message": "payment marked as verified", "payment_id": req.PaymentID})
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "payment status updated",
+		"payment_id": req.PaymentID,
+		"status":     newStatus,
+	})
 }
 
-// parseDateString attempts to parse common date formats into time.Time
 func parseDateString(s *string) time.Time {
-	if s == nil {
+	if s == nil || strings.TrimSpace(*s) == "" {
 		return time.Time{}
 	}
-	str := strings.TrimSpace(*s)
-	if str == "" {
-		return time.Time{}
-	}
-
 	layouts := []string{
 		"2006-01-02 15:04:05",
 		"2006-01-02",
 		time.RFC3339,
 		"2006-01-02 15:04",
 	}
-
-	for _, l := range layouts {
-		if t, err := time.Parse(l, str); err == nil {
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, strings.TrimSpace(*s)); err == nil {
 			return t
 		}
 	}
-
 	return time.Time{}
 }
 
-// ADMIN – UPLOAD / UPDATE STUDENT MARKS (UPSERT)
-
+// ======================== MARKS UPLOAD ========================
 type UploadMarksRequest struct {
 	Marks []struct {
 		EnrollmentNumber int64   `json:"enrollment_number" binding:"required"`
@@ -478,7 +590,7 @@ type UploadMarksRequest struct {
 		Semester         int     `json:"semester" binding:"required"`
 		MarksObtained    float64 `json:"marks_obtained" binding:"required"`
 		Grade            *string `json:"grade"`
-		Status           string  `json:"status" binding:"required"` // internal/external
+		Status           string  `json:"status" binding:"required"`
 	} `json:"marks" binding:"required"`
 }
 
@@ -493,16 +605,9 @@ func UploadStudentMarks(c *gin.Context) {
 	var records []models.StudentMark
 
 	for _, m := range req.Marks {
-
-		// ✅ DECLARE subject
 		var subject models.SubjectMaster
-
-		// ✅ FETCH subject details
-		if err := db.Where("subject_code = ?", m.SubjectCode).
-			First(&subject).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "subject not found: " + m.SubjectCode,
-			})
+		if err := db.Where("subject_code = ?", m.SubjectCode).First(&subject).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "subject not found: " + m.SubjectCode})
 			return
 		}
 
@@ -510,35 +615,26 @@ func UploadStudentMarks(c *gin.Context) {
 			EnrollmentNumber: m.EnrollmentNumber,
 			Semester:         m.Semester,
 			SubjectCode:      m.SubjectCode,
-			SubjectName:      subject.SubjectName, // ✅ now defined
-			SubjectType:      subject.SubjectType, // ✅ now defined
-			MarksObtained:    m.MarksObtained,     // FIXED: Added this
+			SubjectName:      subject.SubjectName,
+			SubjectType:      subject.SubjectType,
+			MarksObtained:    m.MarksObtained,
 			Grade:            m.Grade,
 			Status:           m.Status,
 			CreatedAt:        time.Now(),
 		})
 	}
 
-	err := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{
-			{Name: "enrollment_number"},
-			{Name: "semester"},
-			{Name: "subject_code"},
-		},
-		DoUpdates: clause.AssignmentColumns(
-			[]string{"marks_obtained", "grade", "status"}, // FIXED: Added marks_obtained
-		),
-	}).Create(&records).Error
-
-	if err != nil {
+	if err := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "enrollment_number"}, {Name: "semester"}, {Name: "subject_code"}},
+		DoUpdates: clause.AssignmentColumns([]string{"marks_obtained", "grade", "status"}),
+	}).Create(&records).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Notify connected admins in real-time
 	SendAdminNotification("marks_uploaded", gin.H{
 		"total_records": len(records),
-		"summary":       "Marks uploaded/updated",
+		"summary":       "Marks uploaded/updated successfully",
 	})
 
 	c.JSON(http.StatusOK, gin.H{
@@ -547,43 +643,37 @@ func UploadStudentMarks(c *gin.Context) {
 	})
 }
 
-// ================= ADMIN – PENDING REGISTRATIONS =================
-
-// GET /api/admin/pending-registrations
+// ======================== PENDING REGISTRATIONS ========================
 func GetPendingRegistrations(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset := (page - 1) * limit
 
 	db := config.DB
-
 	var users []models.User
 	var total int64
 
 	query := db.Model(&models.User{}).Where("status = ? AND role_id = ?", "inactive", 5)
 	query.Count(&total)
 
-	if err := query.
-		Order("created_at DESC").
+	if err := query.Order("created_at DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to fetch inactive registrations",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch pending registrations"})
 		return
 	}
 
-	response := make([]gin.H, 0)
-	for _, u := range users {
-		response = append(response, gin.H{
+	response := make([]gin.H, len(users))
+	for i, u := range users {
+		response[i] = gin.H{
 			"user_id":    u.UserID,
 			"username":   u.Username,
 			"email":      u.Email,
 			"full_name":  u.FullName,
 			"status":     u.Status,
 			"created_at": u.CreatedAt,
-		})
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -597,24 +687,18 @@ func GetPendingRegistrations(c *gin.Context) {
 	})
 }
 
-// ================= ADMIN – APPROVE / REJECT REGISTRATION =================
-
-// POST /api/admin/approve-registration
 func ApproveRegistration(c *gin.Context) {
 	var req struct {
 		UserID int64  `json:"user_id" binding:"required"`
-		Action string `json:"action" binding:"required"` // approve | reject
+		Action string `json:"action" binding:"required"`
 	}
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	if req.Action != "approve" && req.Action != "reject" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "action must be approve or reject",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action must be 'approve' or 'reject'"})
 		return
 	}
 
@@ -627,13 +711,10 @@ func ApproveRegistration(c *gin.Context) {
 	if err := db.Model(&models.User{}).
 		Where("user_id = ? AND status = ?", req.UserID, "inactive").
 		Update("status", newStatus).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to update user status",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update status"})
 		return
 	}
 
-	// Notify admins about approve/reject action
 	SendAdminNotification("registration_status_changed", gin.H{
 		"user_id": req.UserID,
 		"status":  newStatus,
@@ -646,7 +727,7 @@ func ApproveRegistration(c *gin.Context) {
 	})
 }
 
-// GET /api/admin/institutes/:id/detail
+// ======================== INSTITUTE DETAILS ========================
 func GetInstituteDetail(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -664,30 +745,30 @@ func GetInstituteDetail(c *gin.Context) {
 
 	instName := inst.InstituteName
 
-	// total students
+	// Total students
 	var totalStudents int64
 	db.Model(&models.MasterStudent{}).Where("institute_name = ?", instName).Count(&totalStudents)
 
-	// students per branch/course
+	// Students per course/branch
 	type BranchCount struct {
 		CourseName string `json:"course_name"`
 		Count      int64  `json:"count"`
 	}
 	var branches []BranchCount
 	db.Model(&models.MasterStudent{}).
-		Select("COALESCE(course_name,'') as course_name, COUNT(*) as count").
+		Select("COALESCE(course_name,'Unknown') as course_name, COUNT(*) as count").
 		Where("institute_name = ?", instName).
 		Group("course_name").
 		Scan(&branches)
 
-	// fees paid & pending for this institute
+	// Fees paid
 	var regPaid, examPaid, miscPaid float64
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM registration_fees WHERE payment_status = ? AND enrollment_number IN (SELECT enrollment_number FROM master_students WHERE institute_name = ?)", "Paid", instName).Scan(&regPaid)
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM examination_fees WHERE payment_status = ? AND enrollment_number IN (SELECT enrollment_number FROM master_students WHERE institute_name = ?)", "Paid", instName).Scan(&examPaid)
 	db.Raw("SELECT COALESCE(SUM(fee_amount),0) FROM miscellaneous_fees WHERE payment_status = ? AND enrollment_number IN (SELECT enrollment_number FROM master_students WHERE institute_name = ?)", "Paid", instName).Scan(&miscPaid)
 	totalPaid := regPaid + examPaid + miscPaid
 
-	// pending via expected_fee_collections
+	// Expected & pending
 	var totalExpected, totalPaidExp float64
 	db.Raw("SELECT COALESCE(SUM(total_expected_fee),0) FROM expected_fee_collections WHERE enrollment_number IN (SELECT enrollment_number FROM master_students WHERE institute_name = ?)", instName).Scan(&totalExpected)
 	db.Raw("SELECT COALESCE(SUM(total_paid),0) FROM expected_fee_collections WHERE enrollment_number IN (SELECT enrollment_number FROM master_students WHERE institute_name = ?)", instName).Scan(&totalPaidExp)
@@ -703,7 +784,7 @@ func GetInstituteDetail(c *gin.Context) {
 	})
 }
 
-// POST /api/admin/fee-structure
+// ======================== FEE STRUCTURE & DUE ========================
 func CreateFeeStructure(c *gin.Context) {
 	var payload struct {
 		CourseName     *string `json:"course_name"`
@@ -727,18 +808,24 @@ func CreateFeeStructure(c *gin.Context) {
 		FeeAmount:      payload.FeeAmount,
 		Status:         "active",
 	}
+
 	db := config.DB
 	if err := db.Create(&fs).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create fee structure"})
 		return
 	}
 
-	SendAdminNotification("fee_structure_created", gin.H{"id": fs.FeeStructureID, "fee_amount": fs.FeeAmount})
+	SendAdminNotification("fee_structure_created", gin.H{
+		"id":         fs.FeeStructureID,
+		"fee_amount": fs.FeeAmount,
+	})
 
-	c.JSON(http.StatusCreated, gin.H{"message": "fee structure created", "id": fs.FeeStructureID})
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "fee structure created",
+		"id":      fs.FeeStructureID,
+	})
 }
 
-// POST /api/admin/fees/due
 func CreateFeeDue(c *gin.Context) {
 	var payload struct {
 		EnrollmentNumber int64   `json:"enrollment_number" binding:"required"`
@@ -759,18 +846,25 @@ func CreateFeeDue(c *gin.Context) {
 		Status:         "Pending",
 		CreatedAt:      time.Now(),
 	}
+
 	db := config.DB
 	if err := db.Create(&fd).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create fee due"})
 		return
 	}
 
-	SendAdminNotification("fee_due_created", gin.H{"fee_due_id": fd.FeeDueID, "enrollment": payload.EnrollmentNumber})
+	SendAdminNotification("fee_due_created", gin.H{
+		"fee_due_id": fd.FeeDueID,
+		"enrollment": payload.EnrollmentNumber,
+	})
 
-	c.JSON(http.StatusCreated, gin.H{"message": "fee due created", "fee_due_id": fd.FeeDueID})
+	c.JSON(http.StatusCreated, gin.H{
+		"message":    "fee due created",
+		"fee_due_id": fd.FeeDueID,
+	})
 }
 
-// POST /api/admin/attendance/upload
+// ======================== ATTENDANCE ========================
 func UploadAttendance(c *gin.Context) {
 	var payload struct {
 		Records []struct {
@@ -787,12 +881,19 @@ func UploadAttendance(c *gin.Context) {
 
 	db := config.DB
 	var records []models.Attendance
+
 	for _, r := range payload.Records {
-		parsed, _ := time.Parse("2006-01-02", r.Date)
-		var sc *string
+		parsed, err := time.Parse("2006-01-02", r.Date)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format"})
+			return
+		}
+
+		sc := (*string)(nil)
 		if r.SubjectCode != "" {
 			sc = &r.SubjectCode
 		}
+
 		records = append(records, models.Attendance{
 			EnrollmentNumber: r.EnrollmentNumber,
 			Date:             parsed,
@@ -807,43 +908,54 @@ func UploadAttendance(c *gin.Context) {
 		return
 	}
 
-	SendAdminNotification("attendance_uploaded", gin.H{"count": len(records)})
+	SendAdminNotification("attendance_uploaded", gin.H{
+		"count": len(records),
+	})
 
-	c.JSON(http.StatusOK, gin.H{"message": "attendance uploaded", "count": len(records)})
+	c.JSON(http.StatusOK, gin.H{
+		"message": "attendance uploaded",
+		"count":   len(records),
+	})
 }
 
-// GET /api/admin/attendance/summary
 func GetAttendanceSummary(c *gin.Context) {
 	instituteID := c.Query("institute_id")
 	instituteName := c.Query("institute_name")
 
 	db := config.DB
-
 	var where string
 	var args []interface{}
+
 	if instituteName != "" {
-		where = "institute_name = ?"
+		where = "master_students.institute_name = ?"
 		args = append(args, instituteName)
 	} else if instituteID != "" {
-		where = "institute_id = ?"
-		args = append(args, instituteID)
+		id, _ := strconv.Atoi(instituteID)
+		where = "master_students.institute_id = ?"
+		args = append(args, id)
 	}
 
-	// total attendance records, present, absent
 	var total, present int64
+	queryBase := db.Table("attendance").
+		Joins("JOIN master_students ON attendance.enrollment_number = master_students.enrollment_number")
+
 	if where != "" {
-		db.Table("attendance").Joins("JOIN master_students ON attendance.enrollment_number = master_students.enrollment_number").Where(where, args...).Count(&total)
-		db.Table("attendance").Joins("JOIN master_students ON attendance.enrollment_number = master_students.enrollment_number").Where(where+" AND attendance.present = ?", append(args, true)...).Count(&present)
-	} else {
-		db.Model(&models.Attendance{}).Count(&total)
-		db.Model(&models.Attendance{}).Where("present = ?", true).Count(&present)
+		queryBase = queryBase.Where(where, args...)
 	}
+
+	queryBase.Count(&total)
+	queryBase.Where("attendance.present = ?", true).Count(&present)
 
 	absent := total - present
-	var percent float64
+	percent := 0.0
 	if total > 0 {
 		percent = (float64(present) / float64(total)) * 100
 	}
 
-	c.JSON(http.StatusOK, gin.H{"total_records": total, "present": present, "absent": absent, "attendance_percent": percent})
+	c.JSON(http.StatusOK, gin.H{
+		"total_records":      total,
+		"present":            present,
+		"absent":             absent,
+		"attendance_percent": percent,
+	})
 }
