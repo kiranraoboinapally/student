@@ -27,6 +27,7 @@ import {
     Edit,
     Trash2,
     BookOpen,
+    UserPlus,
     ChevronLeft
 } from "lucide-react";
 import Modal from "../../../../shared/components/Modal";
@@ -37,6 +38,7 @@ import FeeVerificationDashboard from "./FeeVerificationDashboard";
 import AcademicUploads from "./AcademicUploads";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import UniversityOverview from "./UniversityOverview";
+import InstituteUserManagement from "./InstituteUserManagement";
 
 const Pagination = ({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) => {
     const totalPages = Math.ceil(total / 20);
@@ -66,7 +68,7 @@ const Pagination = ({ current, total, onPageChange }: { current: number, total: 
     );
 };
 
-type TabType = "overview" | "institutes" | "analytics" | "subjects" | "academics" | "faculty" | "notices" | "fees";
+type TabType = "overview" | "institutes" | "analytics" | "subjects" | "academics" | "faculty" | "notices" | "fees" | "users";
 type DrillDownLevel = "institutes" | "courses" | "students";
 
 export default function AdminDashboard() {
@@ -401,22 +403,22 @@ export default function AdminDashboard() {
     };
 
     // Updated handler: fetches courses when institute is selected
- const handleSelectInstitute = async (institute: Institute) => {
-    setSelectedInstitute(institute);
-    setRefreshing(true);
-    try {
-        const data = await service.getCoursesByInstitute(institute.institute_id!);
-        // Ensure it's always an array, even if backend returns null
-        setCourses(data.courses || []);
-        setDrillDownLevel("courses");
-    } catch (err) {
-        console.error("Error loading institute courses:", err);
-        alert("Could not load courses for this college.");
-        setCourses([]);  // Always reset to empty array on error too
-    } finally {
-        setRefreshing(false);
-    }
-};
+    const handleSelectInstitute = async (institute: Institute) => {
+        setSelectedInstitute(institute);
+        setRefreshing(true);
+        try {
+            const data = await service.getCoursesByInstitute(institute.institute_id!);
+            // Ensure it's always an array, even if backend returns null
+            setCourses(data.courses || []);
+            setDrillDownLevel("courses");
+        } catch (err) {
+            console.error("Error loading institute courses:", err);
+            alert("Could not load courses for this college.");
+            setCourses([]);  // Always reset to empty array on error too
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     // Updated handler: moves to students view when course is selected
     const handleSelectCourse = (course: Course) => {
@@ -490,6 +492,7 @@ export default function AdminDashboard() {
 
                     <div className="space-y-1 mt-8">
                         <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</p>
+                        <SidebarItem id="users" label="User Management" icon={UserPlus} />
                         <SidebarItem id="fees" label="Fee Payments" icon={DollarSign} />
                         <SidebarItem id="academics" label="Academics" icon={FileIcon} />
                         <SidebarItem id="notices" label="Holidays & Notices" icon={Bell} />
@@ -623,6 +626,8 @@ export default function AdminDashboard() {
                                 adminStats={adminStats}
                             />
                         )}
+
+                        {activeTab === "users" && <InstituteUserManagement />}
 
                         {activeTab === "academics" && (
                             <AcademicUploads

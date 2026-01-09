@@ -175,6 +175,18 @@ export default function FeeVerificationDashboard({
             setProcessingId(null);
         }
     };
+const uniqueInstitutes = useMemo(() => {
+  const map = new Map<number, Institute>();
+
+  institutes.forEach(inst => {
+    const id = inst.institute_id ?? inst.id;
+    if (id != null && !map.has(id)) {
+      map.set(id, inst);
+    }
+  });
+
+  return Array.from(map.values());
+}, [institutes]);
 
     return (
         <div className="space-y-6">
@@ -232,85 +244,93 @@ export default function FeeVerificationDashboard({
                     </div>
                 </div>
             </div>
+{/* Advanced Filters */}
+<div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center">
+  <div className="flex items-center gap-2 text-gray-700 font-medium">
+    <Filter size={20} />
+    <span>Filters:</span>
+  </div>
 
-            {/* Advanced Filters */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center">
-                <div className="flex items-center gap-2 text-gray-700 font-medium">
-                    <Filter size={20} />
-                    <span>Filters:</span>
-                </div>
+  {/* Institute Filter */}
+  <div className="relative">
+    <select
+      className="pl-9 pr-4 py-2 border rounded-lg appearance-none bg-gray-50 hover:bg-white transition-colors focus:ring-2 focus:ring-[#650C08] focus:border-transparent min-w-[200px]"
+      value={selectedInstitute}
+      onChange={e => {
+        setSelectedInstitute(e.target.value === "all" ? "all" : Number(e.target.value));
+        setSelectedCourse("all");
+      }}
+    >
+      <option value="all">All Institutes</option>
+      {uniqueInstitutes
+        .slice()
+        .sort((a, b) =>
+          (a.institute_name ?? a.name ?? '').localeCompare(
+            b.institute_name ?? b.name ?? ''
+          )
+        )
+        .map(inst => {
+          const id = inst.institute_id ?? inst.id;
+          const name = inst.institute_name ?? inst.name;
 
-                {/* Institute Filter */}
-                <div className="relative">
-                    <select
-                        className="pl-9 pr-4 py-2 border rounded-lg appearance-none bg-gray-50 hover:bg-white transition-colors focus:ring-2 focus:ring-[#650C08] focus:border-transparent min-w-[200px]"
-                        value={selectedInstitute}
-                        onChange={e => {
-                            setSelectedInstitute(e.target.value === "all" ? "all" : Number(e.target.value));
-                            setSelectedCourse("all");
-                        }}
-                    >
-                        <option value="all">All Institutes</option>
-                        {institutes
-                            .sort((a, b) => (a.institute_name ?? a.name ?? '').localeCompare(b.institute_name ?? b.name ?? ''))
-                            .map(inst => {
-                                const id = inst.institute_id ?? inst.id;
-                                const name = inst.institute_name ?? inst.name;
-                                return (
-                                    <option key={id} value={id}>
-                                        {name}
-                                    </option>
-                                );
-                            })}
-                    </select>
-                    <Building2 className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                </div>
+          return (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          );
+        })}
+    </select>
+    <Building2 className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+  </div>
 
-                {/* Course Filter */}
-                <div className="relative">
-                    <select
-                        className="pl-9 pr-4 py-2 border rounded-lg appearance-none bg-gray-50 hover:bg-white transition-colors focus:ring-2 focus:ring-[#650C08] focus:border-transparent min-w-[200px]"
-                        value={selectedCourse}
-                        onChange={e => setSelectedCourse(e.target.value === "all" ? "all" : Number(e.target.value))}
-                        disabled={selectedInstitute === "all"}
-                    >
-                        <option value="all">All Courses</option>
-                        {courses
-                            .filter(c => selectedInstitute === "all" || c.institute_id === selectedInstitute)
-                            .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
-                            .map(course => (
-                                <option key={course.course_id} value={course.course_id}>
-                                    {course.name}
-                                </option>
-                            ))}
-                    </select>
-                    <BookOpen className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                </div>
+  {/* Course Filter */}
+  <div className="relative">
+    <select
+      className="pl-9 pr-4 py-2 border rounded-lg appearance-none bg-gray-50 hover:bg-white transition-colors focus:ring-2 focus:ring-[#650C08] focus:border-transparent min-w-[200px]"
+      value={selectedCourse}
+      onChange={e =>
+        setSelectedCourse(e.target.value === "all" ? "all" : Number(e.target.value))
+      }
+      disabled={selectedInstitute === "all"}
+    >
+      <option value="all">All Courses</option>
+      {courses
+        .filter(c => selectedInstitute === "all" || c.institute_id === selectedInstitute)
+        .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+        .map(course => (
+          <option key={course.course_id} value={course.course_id}>
+            {course.name}
+          </option>
+        ))}
+    </select>
+    <BookOpen className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+  </div>
 
-                {/* Status Filter */}
-                <select
-                    className="px-4 py-2 border rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-[#650C08]"
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value as any)}
-                >
-                    <option value="all">All Statuses</option>
-                    <option value="pending">Pending</option>
-                    <option value="verified">Verified</option>
-                    <option value="rejected">Rejected</option>
-                </select>
+  {/* Status Filter */}
+  <select
+    className="px-4 py-2 border rounded-lg bg-gray-50 hover:bg-white focus:ring-2 focus:ring-[#650C08]"
+    value={statusFilter}
+    onChange={e => setStatusFilter(e.target.value as any)}
+  >
+    <option value="all">All Statuses</option>
+    <option value="pending">Pending</option>
+    <option value="verified">Verified</option>
+    <option value="rejected">Rejected</option>
+  </select>
 
-                {/* Search */}
-                <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Search student or transaction ID..."
-                        className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
-                </div>
-            </div>
+  {/* Search */}
+  <div className="relative flex-1 min-w-[200px]">
+    <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+    <input
+      type="text"
+      placeholder="Search student or transaction ID..."
+      className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
+      value={searchTerm}
+      onChange={e => setSearchTerm(e.target.value)}
+    />
+  </div>
+</div>
+
 
             {/* Data Table */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -334,7 +354,11 @@ export default function FeeVerificationDashboard({
                                 const isPending = status === 'pending';
 
                                 return (
-                                    <tr key={payment.payment_id} className="hover:bg-gray-50/50 transition-colors">
+                                    <tr
+  key={`${payment.payment_id}-${payment.source}-${payment.enrollment_number}`}
+  className="hover:bg-gray-50/50 transition-colors"
+>
+
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-gray-900">{payment.student_name || student?.full_name || 'Unknown Student'}</div>
                                             <div className="text-xs text-gray-500 font-mono">{payment.transaction_number || 'NO-REF'}</div>

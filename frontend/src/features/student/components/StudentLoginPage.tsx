@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth, apiBase } from "../../auth/AuthProvider";
 import { LogIn, Eye, EyeOff } from "lucide-react";
 
-export default function StudentLoginPage(): JSX.Element {
+export default function StudentLoginPage(): React.ReactNode {
   const { login } = useAuth();
   const navigate = useNavigate();
 

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, apiBase } from "../AuthProvider";
 
-export default function ChangePasswordPage(): JSX.Element {
+export default function ChangePasswordPage(): React.ReactNode {
   const { authFetch } = useAuth();
   const navigate = useNavigate();
 

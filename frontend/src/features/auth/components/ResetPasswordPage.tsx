@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiBase } from "../AuthProvider";
 
-export default function ResetPasswordPage(): JSX.Element {
+export default function ResetPasswordPage(): React.ReactNode {
   const navigate = useNavigate();
   const [token, setToken] = useState("");
   const [newPassword, setNewPassword] = useState("");

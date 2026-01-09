@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth, apiBase } from "../../auth/AuthProvider";
 import { LogIn, Eye, EyeOff } from "lucide-react";
 
-export default function AdminLoginPage(): JSX.Element {
+export default function AdminLoginPage(): React.ReactNode {
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -56,7 +56,16 @@ export default function AdminLoginPage(): JSX.Element {
       if (data.force_password_change) {
         navigate("/change-password");
       } else {
-        navigate("/admin/dashboard");
+        // Redirect based on Role ID
+        if (data.role_id === 1) {
+          navigate("/admin/dashboard");
+        } else if (data.role_id === 2) {
+          navigate("/faculty/dashboard");
+        } else if (data.role_id === 3) {
+          navigate("/institute/dashboard");
+        } else {
+          navigate("/admin/dashboard"); // Default
+        }
       }
     } catch {
       setError("Connection error. Please try again.");

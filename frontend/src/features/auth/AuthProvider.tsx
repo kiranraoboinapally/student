@@ -40,22 +40,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return v ? Number(v) : null;
   });
 
-  const logout = () => {
+  const logout = React.useCallback(() => {
     setToken(null);
     setExpiresAt(null);
     setRoleId(null);
     localStorage.removeItem(STORAGE_TOKEN_KEY);
     localStorage.removeItem(STORAGE_EXP_KEY);
     localStorage.removeItem(STORAGE_ROLE_KEY);
-  };
+  }, []);
 
   useEffect(() => {
     if (expiresAt && Date.now() > expiresAt) {
       logout();
     }
-  }, [expiresAt]);
+  }, [expiresAt, logout]);
 
-  const login = (tok: string, rId: number, expiresInHours?: number) => {
+  const login = React.useCallback((tok: string, rId: number, expiresInHours?: number) => {
     setToken(tok);
     setRoleId(rId);
     localStorage.setItem(STORAGE_TOKEN_KEY, tok);
@@ -67,14 +67,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setExpiresAt(exp);
       localStorage.setItem(STORAGE_EXP_KEY, String(exp));
     }
-  };
+  }, []);
 
-  const authFetch = async (input: RequestInfo, init: RequestInit = {}): Promise<Response> => {
+  const authFetch = React.useCallback(async (input: RequestInfo, init: RequestInit = {}): Promise<Response> => {
     const headers = new Headers(init.headers || {});
     if (token) headers.set("Authorization", `Bearer ${token}`);
     if (!headers.has("Accept")) headers.set("Accept", "application/json");
     return fetch(input, { ...init, headers });
-  };
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{ token, expiresAt, roleId, login, logout, authFetch }}>

@@ -1,3 +1,4 @@
+import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./features/auth/AuthProvider";
 
@@ -8,13 +9,15 @@ import AdminLoginPage from "./features/admin/components/AdminLoginPage";
 
 import StudentDashboard from "./features/student/components/StudentDashboard";
 import AdminDashboard from "./features/admin/components/AdminDashboard";
+import FacultyDashboard from "./features/faculty/components/FacultyDashboard";
+import InstituteDashboard from "./features/institute/components/InstituteDashboard";
 import ChangePasswordPage from "./features/auth/components/ChangePasswordPage";
 import ForgotPasswordPage from "./features/auth/components/ForgotPasswordPage";
 import ResetPasswordPage from "./features/auth/components/ResetPasswordPage";
 
 
 
-function Protected({ children, allowedRole }: { children: JSX.Element; allowedRole: number }) {
+function Protected({ children, allowedRole }: { children: React.ReactNode; allowedRole: number }) {
   const { token, roleId } = useAuth();
   if (!token) return <Navigate to="/" replace />;
   if (roleId !== allowedRole) return <Navigate to="/" replace />;
@@ -45,6 +48,7 @@ export default function App() {
               </Protected>
             }
           />
+
           <Route
             path="/admin/dashboard"
             element={
@@ -53,8 +57,25 @@ export default function App() {
               </Protected>
             }
           />
+          <Route
+            path="/faculty/dashboard"
+            element={
+              <Protected allowedRole={2}>
+                <FacultyDashboard />
+              </Protected>
+            }
+          />
 
 
+
+          <Route
+            path="/institute/dashboard"
+            element={
+              <Protected allowedRole={3}>
+                <InstituteDashboard />
+              </Protected>
+            }
+          />
           <Route
             path="/change-password"
             element={

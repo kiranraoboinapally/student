@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth, apiBase } from "../../auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import StudentService from "../services/studentService";
@@ -94,9 +94,11 @@ export default function StudentDashboard(): React.ReactElement {
   const [loadingAllMarks, setLoadingAllMarks] = useState(true);
   const [loadingSemesterResults, setLoadingSemesterResults] = useState(true);
 
-  const [active, setActive] = useState<"profile" | "fees" | "subjects" | "marks" | "attendance" | "notices" | "leaves" | "timetable" | "all-marks" | "results">("profile");
+  const [active, setActive] = useState<"profile" | "fees" | "subjects" | "marks" | "attendance" | "notices" | "leaves" | "timetable" | "all-marks" | "results" | "assignments">("profile");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedFeeForPayment, setSelectedFeeForPayment] = useState<FeeItem | null>(null);
+  const [myAssignments, setMyAssignments] = useState<any[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [customAmount, setCustomAmount] = useState<number>(0);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [leaveForm, setLeaveForm] = useState({ leave_type: "sick", from_date: "", to_date: "", reason: "" });
@@ -251,6 +253,29 @@ export default function StudentDashboard(): React.ReactElement {
     }
   }, [service]);
 
+  const loadAssignments = useCallback(async () => {
+    if (!profile) return;
+    setLoadingAssignments(true);
+    try {
+      // 1. Find Course ID
+      const coursesRes = await authFetch(`${apiBase}/admin/courses?limit=100`);
+      const coursesData = await coursesRes.json();
+      const myCourseName = profile.master_student?.course_name || profile.act_student?.CourseName;
+      // specific stream matching might be needed
+      const matchedCourse = coursesData.data?.find((c: any) => c.course_name === myCourseName);
+
+      if (matchedCourse) {
+        const assignRes = await authFetch(`${apiBase}/student/assignments/course/${matchedCourse.id}`);
+        const assignData = await assignRes.json();
+        setMyAssignments(assignData.data || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  }, [authFetch, profile]);
+
   useEffect(() => {
     loadProfile();
     loadFees();
@@ -263,6 +288,12 @@ export default function StudentDashboard(): React.ReactElement {
     loadAllMarks();
     loadSemesterResults();
   }, [loadProfile, loadFees, loadAttendance, loadSubjects, loadMarks, loadNotices, loadLeaves, loadTimetable, loadAllMarks, loadSemesterResults]);
+
+  useEffect(() => {
+    if (active === 'assignments') {
+      loadAssignments();
+    }
+  }, [active, loadAssignments]);
 
   // Updated handlePayment to accept custom amount
   const handlePayment = useCallback(async (fee: FeeItem, amountToPay: number = fee.balance ?? 0) => {
@@ -399,7 +430,7 @@ export default function StudentDashboard(): React.ReactElement {
   const master = profile?.master_student ?? {};
   const act = profile?.act_student ?? {};
 
-  const tabs: { key: "profile" | "fees" | "subjects" | "marks" | "attendance" | "notices" | "leaves" | "timetable" | "all-marks" | "results"; label: string }[] = [
+  const tabs: { key: "profile" | "fees" | "subjects" | "marks" | "attendance" | "notices" | "leaves" | "timetable" | "all-marks" | "results" | "assignments"; label: string }[] = [
     { key: "profile", label: "Personal Details" },
     { key: "fees", label: "Fee Details" },
     { key: "subjects", label: "Subjects" },
@@ -410,6 +441,7 @@ export default function StudentDashboard(): React.ReactElement {
     { key: "timetable", label: "Timetable" },
     { key: "notices", label: "Notices" },
     { key: "leaves", label: "Leaves" },
+    { key: "assignments", label: "Assignments" },
   ];
 
   return (
@@ -1051,6 +1083,57 @@ export default function StudentDashboard(): React.ReactElement {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ASSIGNMENTS */}
+        {active === "assignments" && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Assignments</h2>
+            {loadingAssignments ? (
+              <div className="text-center py-8 text-gray-500">Loading assignments...</div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {myAssignments.map((a: any) => (
+                  <div key={a.assignment_id} className="border p-4 rounded shadow-sm hover:shadow-md transition">
+                    <h3 className="font-bold">{a.title}</h3>
+                    <p className="text-sm text-gray-600 mb-2">{a.description}</p>
+                    <div className="text-xs text-gray-500 mb-4">
+                      Due: {new Date(a.due_date).toLocaleDateString()}
+                    </div>
+                    <div className="mt-2">
+                      <button
+                        onClick={async () => {
+                          const path = prompt("Enter file URL/Path for submission:");
+                          if (!path) return;
+                          alert("Submitting...");
+                          try {
+                            const res = await authFetch(`${apiBase}/student/assignments/${a.assignment_id}/submit`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ file_path: path })
+                            });
+                            if (res.ok) alert("Submitted successfully!");
+                            else alert("Submission failed.");
+                          } catch (e) { console.error(e); alert("Submisison failed"); }
+                        }}
+                        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                      >
+                        Submit Work
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {myAssignments.length === 0 && (
+                  <div className="col-span-full text-center text-gray-500 py-10">
+                    No active assignments found for your course.
+                    {(profile?.master_student?.course_name || profile?.act_student?.CourseName) ?
+                      ` (Course: ${profile?.master_student?.course_name || profile?.act_student?.CourseName})` :
+                      ""}
+                  </div>
+                )}
               </div>
             )}
           </div>

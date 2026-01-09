@@ -59,6 +59,7 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		// 🔹 INSTITUTES
 		admin.GET("/institutes", controllers.GetInstitutes)
 		admin.POST("/institutes", controllers.CreateInstitute)
+		admin.POST("/institutes/users", controllers.CreateInstituteUser) // <--- New Route
 		admin.PUT("/institutes/:id", controllers.UpdateInstitute)
 		admin.DELETE("/institutes/:id", controllers.DeleteInstitute)
 
@@ -90,6 +91,16 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		admin.DELETE("/notices/:id", controllers.DeleteNotice)
 	}
 
+	// ================= FACULTY =================
+	faculty := api.Group("/faculty")
+	faculty.Use(middleware.AuthRoleMiddleware(2))
+	{
+		faculty.POST("/assignments", controllers.CreateAssignment)
+		faculty.GET("/assignments/course/:course_id", controllers.GetAssignmentsByCourse)
+		faculty.GET("/assignments/:id/submissions", controllers.GetSubmissionsByAssignment)
+		faculty.POST("/submissions/:id/grade", controllers.GradeSubmission)
+	}
+
 	// ================= STUDENT =================
 	student := api.Group("/student")
 	student.Use(middleware.AuthRoleMiddleware(5))
@@ -115,6 +126,10 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		student.POST("/leaves/apply", controllers.ApplyLeave)
 		student.GET("/leaves", controllers.GetStudentLeaves)
 		student.GET("/timetable", controllers.GetTimetable)
+
+		// Assignments
+		student.GET("/assignments/course/:course_id", controllers.GetAssignmentsByCourse)
+		student.POST("/assignments/:id/submit", controllers.SubmitAssignment)
 	}
 
 	// ================= PROFILE =================
@@ -123,5 +138,14 @@ func RegisterAPIRoutes(r *gin.Engine) {
 	{
 		profile.GET("/me", controllers.GetMyProfile)
 		profile.GET("/:id", controllers.GetStudentByID)
+	}
+	// ================= INSTITUTE ADMIN =================
+	institute := api.Group("/institute")
+	institute.Use(middleware.AuthRoleMiddleware(3))
+	{
+		institute.GET("/dashboard/stats", controllers.GetInstituteDashboardStats)
+		institute.GET("/students", controllers.GetInstituteStudents)
+		institute.GET("/courses", controllers.GetInstituteCourses)
+		institute.GET("/faculty", controllers.GetInstituteFaculty)
 	}
 }

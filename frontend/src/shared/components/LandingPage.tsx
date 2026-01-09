@@ -1,4 +1,4 @@
-import { GraduationCap, User, ArrowRight } from "lucide-react"
+import { GraduationCap, User, ArrowRight, School } from "lucide-react"
 
 export default function LandingPage() {
   const openInNewTab = (path: string) => {
@@ -58,54 +58,80 @@ export default function LandingPage() {
               ERP LOGIN
             </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {/* Student Card */}
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => openInNewTab("/login")}
                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInNewTab("/login")}
-                className="group bg-white/95 backdrop-blur-sm rounded-2xl p-8 text-center 
+                className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 text-center 
                            cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-white 
                            hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-white/30"
               >
-                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-[#650C08] flex items-center justify-center
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#650C08] flex items-center justify-center
                                 transition-all duration-400 group-hover:bg-white group-hover:ring-8 group-hover:ring-[#650C08]/30">
-                  <GraduationCap className="w-12 h-12 text-white transition-all duration-400 
+                  <GraduationCap className="w-10 h-10 text-white transition-all duration-400 
                                             group-hover:text-[#650C08] group-hover:scale-110" strokeWidth={2.5} />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Student Login</h3>
-                <p className="text-sm text-gray-600 mb-6">
-                  Access dashboard, results, fees & attendance
+                <h3 className="text-xl font-bold text-gray-900 mb-1">Student</h3>
+                <p className="text-xs text-gray-600 mb-4">
+                  Results, Fees & Attendance
                 </p>
-                <div className="flex items-center justify-center gap-2 text-[#650C08] font-bold">
-                  <span>Enter Portal</span>
-                  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-2" />
+                <div className="flex items-center justify-center gap-2 text-[#650C08] font-bold text-sm">
+                  <span>Login</span>
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-2" />
                 </div>
               </div>
 
-              {/* Faculty Card */}
+              {/* Institute Card */}
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => openInNewTab("/admin/login")}
                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInNewTab("/admin/login")}
-                className="group bg-white/95 backdrop-blur-sm rounded-2xl p-8 text-center 
+                className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 text-center 
                            cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-white 
                            hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-white/30"
               >
-                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-[#650C08] flex items-center justify-center
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#650C08] flex items-center justify-center
                                 transition-all duration-400 group-hover:bg-white group-hover:ring-8 group-hover:ring-[#650C08]/30">
-                  <User className="w-12 h-12 text-white transition-all duration-400 
+                  <School className="w-10 h-10 text-white transition-all duration-400 
                                    group-hover:text-[#650C08] group-hover:scale-110" strokeWidth={2.5} />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Faculty Login</h3>
-                <p className="text-sm text-gray-600 mb-6">
-                  Manage attendance, marks & student records
+                <h3 className="text-xl font-bold text-gray-900 mb-1">Institute</h3>
+                <p className="text-xs text-gray-600 mb-4">
+                  Manage College Data
                 </p>
-                <div className="flex items-center justify-center gap-2 text-[#650C08] font-bold">
-                  <span>Enter Portal</span>
-                  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-2" />
+                <div className="flex items-center justify-center gap-2 text-[#650C08] font-bold text-sm">
+                  <span>Login</span>
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-2" />
+                </div>
+              </div>
+
+              {/* University Admin Card */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => openInNewTab("/admin/login")}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInNewTab("/admin/login")}
+                className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 text-center 
+                           cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-white 
+                           hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-white/30"
+              >
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[#650C08] flex items-center justify-center
+                                transition-all duration-400 group-hover:bg-white group-hover:ring-8 group-hover:ring-[#650C08]/30">
+                  <User className="w-10 h-10 text-white transition-all duration-400 
+                                   group-hover:text-[#650C08] group-hover:scale-110" strokeWidth={2.5} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-1">University</h3>
+                <p className="text-xs text-gray-600 mb-4">
+                  Super Admin Controls
+                </p>
+                <div className="flex items-center justify-center gap-2 text-[#650C08] font-bold text-sm">
+                  <span>Login</span>
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-2" />
                 </div>
               </div>
             </div>

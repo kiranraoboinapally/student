@@ -282,6 +282,71 @@ func CreateUserByAdmin(c *gin.Context) {
 	})
 }
 
+// ======================== INSTITUTE USER CREATION ========================
+type AdminCreateInstituteUserRequest struct {
+	InstituteID  int    `json:"institute_id" binding:"required"`
+	Username     string `json:"username" binding:"required"`
+	Email        string `json:"email" binding:"required,email"`
+	FullName     string `json:"full_name" binding:"required"`
+	RoleID       int    `json:"role_id" binding:"required"` // 3=Institute Admin, 2=Faculty
+	TempPassword string `json:"temp_password" binding:"required,min=6"`
+}
+
+func CreateInstituteUser(c *gin.Context) {
+	var req AdminCreateInstituteUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate Role (Only allow Institute Admin or Faculty for now)
+	if req.RoleID != 3 && req.RoleID != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role. Use 3 for Institute Admin, 2 for Faculty."})
+		return
+	}
+
+	db := config.DB
+	
+	// Check Institute Exists
+	var institute models.Institute
+	if err := db.First(&institute, req.InstituteID).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Institute not found"})
+		return
+	}
+
+	// Check Username Exists
+	var existing models.User
+	if db.Where("username = ?", req.Username).First(&existing).Error == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username already exists"})
+		return
+	}
+
+	hashed, _ := utils.HashPassword(req.TempPassword)
+	user := models.User{
+		Username:       req.Username,
+		Email:          req.Email,
+		FullName:       req.FullName,
+		PasswordHash:   hashed,
+		RoleID:         req.RoleID,
+		InstituteID:    &req.InstituteID,
+		Status:         "active",
+		IsTempPassword: true,
+	}
+
+	if err := db.Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "Institute user created successfully",
+		"user_id":  user.UserID,
+		"username": user.Username,
+		"role_id":  user.RoleID,
+		"institute": institute.InstituteName,
+	})
+}
+
 func GetAllUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))

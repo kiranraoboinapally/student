@@ -85,6 +85,17 @@ func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 			}
 		}
 
+		// Allow Institute Admin (3) if it wasn't explicitly forbidden (assuming logic intent)
+		// Actually best to just rely on allowedRoles passing in 3.
+		// But if we want to add special logic for role 3:
+		if result.RoleID == 3 {
+			// Check if we want to allow role 3 for specific routes even if not in allowedRoles?
+			// The user requirement implies we should just use allowedRoles properly in router.go.
+			// Let's stick to the standard logic but ensure we pass 3 in router.
+			// However, the previous plan mentioned modifying this file.
+			// Let's just ensure no logic blocks ID 3.
+		}
+
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden: insufficient role permissions"})
 	}
 }

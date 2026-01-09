@@ -11,6 +11,7 @@ type User struct {
 	EmployeeID     *string    `gorm:"column:employee_id" json:"employee_id"`
 	Mobile         *string    `gorm:"column:mobile" json:"mobile"`
 	RoleID         int        `gorm:"column:role_id" json:"role_id"`
+	Role           Role       `gorm:"foreignKey:RoleID" json:"role"`
 	InstituteID    *int       `gorm:"column:institute_id" json:"institute_id"`
 	Status         string     `gorm:"column:status" json:"status"`
 	LastLogin      *time.Time `gorm:"column:last_login" json:"last_login"`
@@ -18,6 +19,38 @@ type User struct {
 	CreatedAt      *time.Time `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt      *time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
+
+type Role struct {
+	RoleID   int    `gorm:"column:role_id;primaryKey;autoIncrement" json:"role_id"`
+	RoleName string `gorm:"column:role_name;unique" json:"role_name"`
+}
+
+func (Role) TableName() string { return "roles" }
+
+type Assignment struct {
+	AssignmentID int64     `gorm:"column:assignment_id;primaryKey;autoIncrement" json:"assignment_id"`
+	CourseID     int       `gorm:"column:course_id" json:"course_id"`
+	FacultyID    int64     `gorm:"column:faculty_id" json:"faculty_id"`
+	Title        string    `gorm:"column:title" json:"title"`
+	Description  string    `gorm:"column:description" json:"description"`
+	DueDate      time.Time `gorm:"column:due_date" json:"due_date"`
+	FilePath     *string   `gorm:"column:file_path" json:"file_path"`
+	CreatedAt    time.Time `gorm:"column:created_at" json:"created_at"`
+}
+
+func (Assignment) TableName() string { return "assignments" }
+
+type Submission struct {
+	SubmissionID int64     `gorm:"column:submission_id;primaryKey;autoIncrement" json:"submission_id"`
+	AssignmentID int64     `gorm:"column:assignment_id" json:"assignment_id"`
+	StudentID    int64     `gorm:"column:student_id" json:"student_id"`
+	FilePath     string    `gorm:"column:file_path" json:"file_path"`
+	Grade        *string   `gorm:"column:grade" json:"grade"`
+	Feedback     *string   `gorm:"column:feedback" json:"feedback"`
+	SubmittedAt  time.Time `gorm:"column:submitted_at" json:"submitted_at"`
+}
+
+func (Submission) TableName() string { return "submissions" }
 
 func (User) TableName() string { return "users" }
 
