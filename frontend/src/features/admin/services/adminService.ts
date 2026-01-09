@@ -247,57 +247,67 @@ class AdminService {
   }
 
   // ======================= FEE PAYMENTS =======================
-  async getFeePayments(
-    page: number = 1,
-    limit: number = 20,
-    filters?: {
-      enrollment_number?: string;
-      institute_name?: string;
-      status?: string;
-      source?: string;
-    }
-  ) {
-    const query = new URLSearchParams();
-    query.set("page", String(page));
-    query.set("limit", String(limit));
-    if (filters?.enrollment_number) query.set("enrollment_number", filters.enrollment_number);
-    if (filters?.institute_name) query.set("institute_name", filters.institute_name);
-    if (filters?.status) query.set("status", filters.status);
-    if (filters?.source) query.set("source", filters.source);
+async getFeePayments(
+  page: number = 1,
+  limit: number = 20,
+  filters?: {
+    enrollment_number?: string;
+    institute_name?: string;
+    status?: string;
+    source?: string;
+  }
+) {
+  const query = new URLSearchParams();
+  query.set("page", String(page));
+  query.set("limit", String(limit));
+  if (filters?.enrollment_number) query.set("enrollment_number", filters.enrollment_number);
+  if (filters?.institute_name) query.set("institute_name", filters.institute_name);
+  if (filters?.status) query.set("status", filters.status);
+  if (filters?.source) query.set("source", filters.source);
 
-    const res = await this.authFetch(`${apiBase}/admin/payments/history?${query.toString()}`);
-    if (!res.ok) return { payments: [], total_records: 0, pagination: { page, limit, total: 0, total_pages: 0 } };
+  const res = await this.authFetch(
+    `${apiBase}/admin/fees/payments?${query.toString()}`
+  );
 
-    const data = await res.json();
+  if (!res.ok) {
     return {
-      payments: data.payments || [],
-      total_records: data.total_records || 0,
-      pagination: data.pagination,
+      payments: [],
+      total_records: 0,
+      pagination: { page, limit, total: 0, total_pages: 0 },
     };
   }
 
-  async verifyPayment(
-    paymentId: number,
-    source: "registration" | "examination" | "miscellaneous",
-    action: "verify" | "reject" = "verify"
-  ) {
-    const res = await this.authFetch(`${apiBase}/admin/payments/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        payment_id: paymentId,
-        source,
-        action,
-      }),
-    });
+  const data = await res.json();
+  return {
+    payments: data.payments || [],
+    total_records: data.total_records || 0,
+    pagination: data.pagination,
+  };
+}
 
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Failed to ${action} payment: ${err}`);
-    }
+async verifyPayment(
+  paymentId: number,
+  source: "registration" | "examination" | "miscellaneous",
+  action: "verify" | "reject" = "verify"
+) {
+  const res = await this.authFetch(`${apiBase}/admin/fees/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      payment_id: paymentId,
+      source,
+      action,
+    }),
+  });
 
-    return res.json();
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Failed to ${action} payment: ${err}`);
   }
+
+  return res.json();
+}
+
 
   // ======================= MARKS & ATTENDANCE =======================
   async uploadMarks(marks: Array<{

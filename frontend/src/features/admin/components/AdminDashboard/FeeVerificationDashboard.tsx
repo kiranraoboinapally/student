@@ -135,7 +135,10 @@ export default function FeeVerificationDashboard({
 
     // Derived Stats
     const stats = useMemo(() => {
-        const total = filteredData.reduce((acc, curr) => acc + (Number(curr.amount_paid) || 0), 0);
+        const total = filteredData.reduce(
+  (acc, curr) => acc + (Number(curr.fee_amount) || 0),
+  0
+);
         const pendingCount = filteredData.filter(p => {
             const s = (p.status || 'pending').toLowerCase();
             return s === 'pending' || s === 'needs_verification' || s === 'needs-verification';
@@ -366,7 +369,7 @@ export default function FeeVerificationDashboard({
                                             )}
                                         </td>
                                         <td className="px-6 py-4 font-bold text-gray-900">
-                                            ₹{(payment.amount_paid || payment.paid_amount || 0).toLocaleString()}
+                                           ₹{(payment.fee_amount ?? 0).toLocaleString("en-IN")}
                                         </td>
                                         <td className="px-6 py-4 text-gray-600">
                                             {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString() : '-'}
