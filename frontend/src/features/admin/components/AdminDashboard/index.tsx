@@ -35,10 +35,11 @@ import InstituteDrillDown from "./InstituteDrillDown";
 import CourseDrillDown from "./CourseDrillDown";
 import StudentsByInstitute from "./StudentsByInstitute";
 import FeeVerificationDashboard from "./FeeVerificationDashboard";
-import AcademicUploads from "./AcademicUploads";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import UniversityOverview from "./UniversityOverview";
 import InstituteUserManagement from "./InstituteUserManagement";
+import ApprovalQueue from "./ApprovalQueue";
+import MarksLockPanel from "./MarksLockPanel";
 
 const Pagination = ({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) => {
     const totalPages = Math.ceil(total / 20);
@@ -68,7 +69,7 @@ const Pagination = ({ current, total, onPageChange }: { current: number, total: 
     );
 };
 
-type TabType = "overview" | "institutes" | "analytics" | "subjects" | "academics" | "faculty" | "notices" | "fees" | "users";
+type TabType = "overview" | "institutes" | "analytics" | "subjects" | "approvals" | "marks" | "faculty" | "notices" | "fees" | "users";
 type DrillDownLevel = "institutes" | "courses" | "students";
 
 export default function AdminDashboard() {
@@ -491,10 +492,15 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="space-y-1 mt-8">
+                        <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Approvals</p>
+                        <SidebarItem id="approvals" label="Pending Approvals" icon={UserPlus} />
+                        <SidebarItem id="marks" label="Marks Management" icon={FileIcon} />
+                    </div>
+
+                    <div className="space-y-1 mt-8">
                         <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</p>
                         <SidebarItem id="users" label="User Management" icon={UserPlus} />
                         <SidebarItem id="fees" label="Fee Payments" icon={DollarSign} />
-                        <SidebarItem id="academics" label="Academics" icon={FileIcon} />
                         <SidebarItem id="notices" label="Holidays & Notices" icon={Bell} />
                         <SidebarItem id="subjects" label="Subjects" icon={BookOpen} />
                     </div>
@@ -629,13 +635,12 @@ export default function AdminDashboard() {
 
                         {activeTab === "users" && <InstituteUserManagement />}
 
-                        {activeTab === "academics" && (
-                            <AcademicUploads
-                                institutes={institutes}
-                                courses={courses}
-                                subjects={subjects}
-                                students={students}
-                            />
+                        {activeTab === "approvals" && (
+                            <ApprovalQueue />
+                        )}
+
+                        {activeTab === "marks" && (
+                            <MarksLockPanel />
                         )}
 
                         {activeTab === "subjects" && (

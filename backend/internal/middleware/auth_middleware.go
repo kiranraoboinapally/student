@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,6 +11,15 @@ import (
 	"github.com/kiranraoboinapally/student/backend/internal/config"
 )
 
+// Role constants for clarity
+const (
+	RoleUniversityAdmin = 1
+	RoleFaculty         = 2
+	RoleInstituteAdmin  = 3
+	RoleStudent         = 5
+)
+
+// AuthRoleMiddleware validates JWT and optionally checks if user has one of the allowed roles
 func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
@@ -70,9 +80,10 @@ func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 		}
 
 		var result struct {
-			RoleID int `gorm:"column:role_id"`
+			RoleID      int  `gorm:"column:role_id"`
+			InstituteID *int `gorm:"column:institute_id"`
 		}
-		if err := config.DB.Table("users").Select("role_id").Where("user_id = ?", userID).Scan(&result).Error; err != nil {
+		if err := config.DB.Table("users").Select("role_id, institute_id").Where("user_id = ?", userID).Scan(&result).Error; err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not fetch user role"})
 			return
 		}
@@ -80,22 +91,114 @@ func AuthRoleMiddleware(allowedRoles ...int) gin.HandlerFunc {
 		for _, r := range allowedRoles {
 			if r == result.RoleID {
 				c.Set("role_id", result.RoleID)
+				if result.InstituteID != nil {
+					c.Set("institute_id", *result.InstituteID)
+				}
 				c.Next()
 				return
 			}
 		}
 
-		// Allow Institute Admin (3) if it wasn't explicitly forbidden (assuming logic intent)
-		// Actually best to just rely on allowedRoles passing in 3.
-		// But if we want to add special logic for role 3:
-		if result.RoleID == 3 {
-			// Check if we want to allow role 3 for specific routes even if not in allowedRoles?
-			// The user requirement implies we should just use allowedRoles properly in router.go.
-			// Let's stick to the standard logic but ensure we pass 3 in router.
-			// However, the previous plan mentioned modifying this file.
-			// Let's just ensure no logic blocks ID 3.
-		}
-
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden: insufficient role permissions"})
 	}
 }
+
+// RequireRole is an alias for AuthRoleMiddleware for clarity
+func RequireRole(allowedRoles ...int) gin.HandlerFunc {
+	return AuthRoleMiddleware(allowedRoles...)
+}
+
+// RequireInstitute ensures user belongs to an institute and sets institute_id in context
+func RequireInstitute() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+
+		var user struct {
+			InstituteID *int `gorm:"column:institute_id"`
+		}
+		if err := config.DB.Table("users").
+			Select("institute_id").
+			Where("user_id = ?", userID).
+			Scan(&user).Error; err != nil || user.InstituteID == nil {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "user not linked to any institute"})
+			return
+		}
+
+		c.Set("institute_id", *user.InstituteID)
+		c.Next()
+	}
+}
+
+// RequireApprovedFaculty ensures faculty account is approved before accessing routes
+func RequireApprovedFaculty() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+
+		var faculty struct {
+			ApprovalStatus string `gorm:"column:approval_status"`
+			InstituteID    int    `gorm:"column:institute_id"`
+		}
+		if err := config.DB.Table("faculty").
+			Select("approval_status, institute_id").
+			Where("user_id = ?", userID).
+			Scan(&faculty).Error; err != nil {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "faculty record not found"})
+			return
+		}
+
+		if faculty.ApprovalStatus != "approved" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "faculty account pending university approval"})
+			return
+		}
+
+		// Set faculty's institute_id for use in controllers
+		c.Set("faculty_institute_id", faculty.InstituteID)
+		c.Next()
+	}
+}
+
+// CollegeBelongsToUser ensures user can only access their own college data
+func CollegeBelongsToUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		instituteID, exists := c.Get("institute_id")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "institute context required"})
+			return
+		}
+
+		// If request has institute_id param, verify it matches user's institute
+		requestedInstID := c.Param("institute_id")
+		if requestedInstID != "" {
+			reqID, err := strconv.Atoi(requestedInstID)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid institute_id parameter"})
+				return
+			}
+			if reqID != instituteID.(int) {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "access denied to this institute"})
+				return
+			}
+		}
+
+		// Also check query param
+		queryInstID := c.Query("institute_id")
+		if queryInstID != "" {
+			reqID, err := strconv.Atoi(queryInstID)
+			if err == nil && reqID != instituteID.(int) {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "access denied to this institute"})
+				return
+			}
+		}
+
+		c.Next()
+	}
+}
+

@@ -55,10 +55,16 @@ func (Submission) TableName() string { return "submissions" }
 func (User) TableName() string { return "users" }
 
 type Faculty struct {
-	FacultyID  int64  `gorm:"column:faculty_id;primaryKey;autoIncrement" json:"faculty_id"`
-	UserID     int64  `gorm:"column:user_id" json:"user_id"`
-	Department string `gorm:"column:department" json:"department"`
-	Position   string `gorm:"column:position" json:"position"`
+	FacultyID      int64      `gorm:"column:faculty_id;primaryKey;autoIncrement" json:"faculty_id"`
+	UserID         int64      `gorm:"column:user_id" json:"user_id"`
+	User           User       `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Department     string     `gorm:"column:department" json:"department"`
+	Position       string     `gorm:"column:position" json:"position"`
+	InstituteID    int        `gorm:"column:institute_id" json:"institute_id"`
+	Institute      Institute  `gorm:"foreignKey:InstituteID" json:"institute,omitempty"`
+	ApprovalStatus string     `gorm:"column:approval_status;default:'pending'" json:"approval_status"` // pending, approved, rejected
+	ApprovedBy     *int64     `gorm:"column:approved_by" json:"approved_by"`
+	ApprovedAt     *time.Time `gorm:"column:approved_at" json:"approved_at"`
 }
 
 func (Faculty) TableName() string { return "faculty" }
@@ -430,7 +436,64 @@ type Attendance struct {
 	Date             time.Time `gorm:"column:date" json:"date"`
 	Present          bool      `gorm:"column:present" json:"present"`
 	SubjectCode      *string   `gorm:"column:subject_code" json:"subject_code"`
+	MarkedBy         int64     `gorm:"column:marked_by" json:"marked_by"`       // Faculty user_id who marked
+	InstituteID      int       `gorm:"column:institute_id" json:"institute_id"` // Institute where attendance was marked
 	CreatedAt        time.Time `gorm:"column:created_at" json:"created_at"`
 }
 
 func (Attendance) TableName() string { return "attendance" }
+
+// ======================== NEW MODELS FOR WORKFLOW ========================
+
+// InternalMark represents faculty-entered internal marks with approval workflow
+type InternalMark struct {
+	InternalMarkID   int64      `gorm:"column:internal_mark_id;primaryKey;autoIncrement" json:"internal_mark_id"`
+	EnrollmentNumber int64      `gorm:"column:enrollment_number" json:"enrollment_number"`
+	InstituteID      int        `gorm:"column:institute_id" json:"institute_id"`
+	Semester         int        `gorm:"column:semester" json:"semester"`
+	SubjectCode      string     `gorm:"column:subject_code" json:"subject_code"`
+	SubjectName      string     `gorm:"column:subject_name" json:"subject_name"`
+	MarkType         string     `gorm:"column:mark_type" json:"mark_type"`               // MSE1, MSE2, Assignment, Practical
+	MarksObtained    float64    `gorm:"column:marks_obtained" json:"marks_obtained"`
+	MaxMarks         float64    `gorm:"column:max_marks;default:100" json:"max_marks"`
+	Status           string     `gorm:"column:status;default:'draft'" json:"status"`     // draft, submitted, locked, published
+	EnteredBy        int64      `gorm:"column:entered_by" json:"entered_by"`             // Faculty user_id
+	SubmittedAt      *time.Time `gorm:"column:submitted_at" json:"submitted_at"`
+	LockedBy         *int64     `gorm:"column:locked_by" json:"locked_by"`               // University admin user_id
+	LockedAt         *time.Time `gorm:"column:locked_at" json:"locked_at"`
+	PublishedAt      *time.Time `gorm:"column:published_at" json:"published_at"`
+	CreatedAt        time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (InternalMark) TableName() string { return "internal_marks" }
+
+// CollegeCourseApproval tracks which colleges can offer which course-streams
+type CollegeCourseApproval struct {
+	ApprovalID     int64       `gorm:"column:approval_id;primaryKey;autoIncrement" json:"approval_id"`
+	InstituteID    int         `gorm:"column:institute_id" json:"institute_id"`
+	Institute      Institute   `gorm:"foreignKey:InstituteID" json:"institute,omitempty"`
+	CourseStreamID int         `gorm:"column:course_stream_id" json:"course_stream_id"`
+	CourseStream   CourseStream `gorm:"foreignKey:CourseStreamID;references:ID" json:"course_stream,omitempty"`
+	Status         string      `gorm:"column:status;default:'pending'" json:"status"` // pending, approved, rejected
+	RequestedAt    time.Time   `gorm:"column:requested_at" json:"requested_at"`
+	RequestedBy    int64       `gorm:"column:requested_by" json:"requested_by"` // Institute admin user_id
+	ApprovedBy     *int64      `gorm:"column:approved_by" json:"approved_by"`
+	ApprovedAt     *time.Time  `gorm:"column:approved_at" json:"approved_at"`
+	Remarks        *string     `gorm:"column:remarks" json:"remarks"`
+}
+
+func (CollegeCourseApproval) TableName() string { return "college_course_approvals" }
+
+// MasterFeeType defines fee types created by University Admin
+type MasterFeeType struct {
+	FeeTypeID   int       `gorm:"column:fee_type_id;primaryKey;autoIncrement" json:"fee_type_id"`
+	FeeTypeName string    `gorm:"column:fee_type_name;unique" json:"fee_type_name"` // Registration, Exam, Miscellaneous
+	Description *string   `gorm:"column:description" json:"description"`
+	IsActive    bool      `gorm:"column:is_active;default:true" json:"is_active"`
+	CreatedBy   int64     `gorm:"column:created_by" json:"created_by"`
+	CreatedAt   time.Time `gorm:"column:created_at" json:"created_at"`
+}
+
+func (MasterFeeType) TableName() string { return "master_fee_types" }
+

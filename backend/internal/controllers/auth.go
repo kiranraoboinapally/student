@@ -143,7 +143,19 @@ func ChangePassword(c *gin.Context) {
 		return
 	}
 
-	userID := int64(userIDVal.(float64))
+	// Handle different possible types for user_id
+	var userID int64
+	switch v := userIDVal.(type) {
+	case int64:
+		userID = v
+	case float64:
+		userID = int64(v)
+	case int:
+		userID = int64(v)
+	default:
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user_id type"})
+		return
+	}
 
 	var req ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

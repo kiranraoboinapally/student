@@ -1,60 +1,80 @@
 import React, { useState, useEffect } from "react";
 import { useAuth, apiBase } from "../../auth/AuthProvider";
 import { Link } from "react-router-dom";
+import AttendanceMarker from "./AttendanceMarker";
+import InternalMarksEntry from "./InternalMarksEntry";
 
 export default function FacultyDashboard() {
-  const { authFetch, logout, roleId } = useAuth();
-  const [activeTab, setActiveTab] = useState("assignments");
+    const { authFetch, logout, roleId } = useAuth();
+    const [activeTab, setActiveTab] = useState("attendance");
 
-  return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* Navbar */}
-      <nav className="bg-blue-800 text-white p-4 flex justify-between items-center shadow-md">
-        <div className="text-xl font-bold flex items-center gap-2">
-           🏫 Faculty Portal
+    return (
+        <div className="min-h-screen bg-gray-100 flex flex-col">
+            {/* Navbar */}
+            <nav className="bg-blue-800 text-white p-4 flex justify-between items-center shadow-md">
+                <div className="text-xl font-bold flex items-center gap-2">
+                    🏫 Faculty Portal
+                </div>
+                <div className="flex gap-4 items-center">
+                    <span className="text-sm opacity-80">Role ID: {roleId}</span>
+                    <button onClick={logout} className="bg-red-500 px-4 py-2 rounded hover:bg-red-600 transition">
+                        Logout
+                    </button>
+                </div>
+            </nav>
+
+            <div className="flex flex-1">
+                {/* Sidebar */}
+                <aside className="w-64 bg-white shadow-lg hidden md:block">
+                    <div className="p-4">
+                        <h2 className="text-gray-500 uppercase text-xs font-semibold mb-2">Academic</h2>
+                        <ul className="space-y-2">
+                            <li>
+                                <button
+                                    onClick={() => setActiveTab("attendance")}
+                                    className={`w-full text-left px-4 py-2 rounded ${activeTab === "attendance" ? "bg-blue-100 text-blue-800 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                                >
+                                    📅 Mark Attendance
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    onClick={() => setActiveTab("marks")}
+                                    className={`w-full text-left px-4 py-2 rounded ${activeTab === "marks" ? "bg-blue-100 text-blue-800 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                                >
+                                    📝 Internal Marks
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    onClick={() => setActiveTab("assignments")}
+                                    className={`w-full text-left px-4 py-2 rounded ${activeTab === "assignments" ? "bg-blue-100 text-blue-800 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                                >
+                                    📋 Assignments
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    onClick={() => setActiveTab("courses")}
+                                    className={`w-full text-left px-4 py-2 rounded ${activeTab === "courses" ? "bg-blue-100 text-blue-800 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
+                                >
+                                    📚 My Courses
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </aside>
+
+                {/* Main Content */}
+                <main className="flex-1 p-8 overflow-y-auto">
+                    {activeTab === "attendance" && <AttendanceMarker />}
+                    {activeTab === "marks" && <InternalMarksEntry />}
+                    {activeTab === "assignments" && <AssignmentManager />}
+                    {activeTab === "courses" && <div className="text-gray-500">Course management (Coming Soon)</div>}
+                </main>
+            </div>
         </div>
-        <div className="flex gap-4 items-center">
-            <span className="text-sm opacity-80">Role ID: {roleId}</span>
-          <button onClick={logout} className="bg-red-500 px-4 py-2 rounded hover:bg-red-600 transition">
-            Logout
-          </button>
-        </div>
-      </nav>
-
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-lg hidden md:block">
-          <div className="p-4">
-            <h2 className="text-gray-500 uppercase text-xs font-semibold mb-2">Menu</h2>
-            <ul className="space-y-2">
-              <li>
-                <button
-                  onClick={() => setActiveTab("assignments")}
-                  className={`w-full text-left px-4 py-2 rounded ${activeTab === "assignments" ? "bg-blue-100 text-blue-800 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
-                >
-                  📝 Assignment Manager
-                </button>
-              </li>
-               <li>
-                <button
-                  onClick={() => setActiveTab("courses")}
-                  className={`w-full text-left px-4 py-2 rounded ${activeTab === "courses" ? "bg-blue-100 text-blue-800 font-medium" : "text-gray-600 hover:bg-gray-50"}`}
-                >
-                  📚 My Courses
-                </button>
-              </li>
-            </ul>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-8 overflow-y-auto">
-            {activeTab === "assignments" && <AssignmentManager />}
-            {activeTab === "courses" && <div className="text-gray-500">Course management (Coming Soon)</div>}
-        </main>
-      </div>
-    </div>
-  );
+    );
 }
 
 // -------------------- Sub-components --------------------
@@ -73,7 +93,7 @@ function AssignmentManager() {
         authFetch(`${apiBase}/admin/courses?limit=100`)
             .then(res => res.json())
             .then(data => {
-                 if (data.data) setCourses(data.data);
+                if (data.data) setCourses(data.data);
             })
             .catch(err => console.error(err));
     }, []);
@@ -97,7 +117,7 @@ function AssignmentManager() {
         <div className="space-y-6">
             <header className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-gray-800">Assignment Manager</h1>
-                <button 
+                <button
                     onClick={() => setShowCreateModal(true)}
                     className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 disabled:opacity-50"
                     disabled={!selectedCourse}
@@ -109,8 +129,8 @@ function AssignmentManager() {
             {/* Course Selector */}
             <div className="bg-white p-4 rounded shadow">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Course</label>
-                <select 
-                    value={selectedCourse} 
+                <select
+                    value={selectedCourse}
                     onChange={(e) => setSelectedCourse(e.target.value)}
                     className="w-full border-gray-300 rounded-md shadow-sm p-2 border"
                 >
@@ -132,7 +152,7 @@ function AssignmentManager() {
                                 <div>Due: {new Date(a.due_date).toLocaleDateString()}</div>
                             </div>
                             <div className="flex gap-2">
-                                <button 
+                                <button
                                     onClick={() => setViewSubmissionsId(a.assignment_id)}
                                     className="flex-1 bg-blue-50 text-blue-700 py-1 rounded hover:bg-blue-100 text-sm"
                                 >
@@ -150,23 +170,23 @@ function AssignmentManager() {
             )}
 
             {showCreateModal && (
-                <CreateAssignmentModal 
-                    courseId={selectedCourse} 
-                    onClose={() => setShowCreateModal(false)} 
+                <CreateAssignmentModal
+                    courseId={selectedCourse}
+                    onClose={() => setShowCreateModal(false)}
                     onSuccess={() => {
                         setShowCreateModal(false);
                         // Refresh
                         const c = selectedCourse;
                         setSelectedCourse("");
                         setTimeout(() => setSelectedCourse(c), 0);
-                    }} 
+                    }}
                 />
             )}
 
             {viewSubmissionsId && (
-                <SubmissionsModal 
-                    assignmentId={viewSubmissionsId} 
-                    onClose={() => setViewSubmissionsId(null)} 
+                <SubmissionsModal
+                    assignmentId={viewSubmissionsId}
+                    onClose={() => setViewSubmissionsId(null)}
                 />
             )}
         </div>
@@ -272,7 +292,7 @@ function SubmissionsModal({ assignmentId, onClose }: { assignmentId: number, onC
                     <h2 className="text-xl font-bold">Submissions</h2>
                     <button onClick={onClose} className="text-gray-500 hover:text-black">✖</button>
                 </div>
-                
+
                 <div className="flex-1 overflow-auto">
                     {loading ? <div className="text-center p-4">Loading...</div> : (
                         <table className="w-full text-left border-collapse">
@@ -311,15 +331,15 @@ function SubmissionRow({ sub, onGrade }: { sub: any, onGrade: (id: number, g: st
             <td className="p-3 text-blue-600 underline cursor-pointer">{sub.file_path}</td>
             <td className="p-3 text-sm text-gray-500">{new Date(sub.submitted_at).toLocaleString()}</td>
             <td className="p-3">
-                <input 
-                    className="w-16 border rounded p-1" 
-                    value={grade} 
-                    onChange={e => setGrade(e.target.value)} 
+                <input
+                    className="w-16 border rounded p-1"
+                    value={grade}
+                    onChange={e => setGrade(e.target.value)}
                     placeholder="A+"
                 />
             </td>
             <td className="p-3">
-                <button 
+                <button
                     onClick={() => onGrade(sub.submission_id, grade, feedback)}
                     className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
                 >

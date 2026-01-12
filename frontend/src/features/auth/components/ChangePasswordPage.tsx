@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth, apiBase } from "../AuthProvider";
 
 export default function ChangePasswordPage(): React.ReactNode {
-  const { authFetch } = useAuth();
+  const { authFetch, roleId, token } = useAuth();
   const navigate = useNavigate();
 
   const [newPassword, setNewPassword] = useState("");
@@ -11,6 +11,23 @@ export default function ChangePasswordPage(): React.ReactNode {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // Redirect if not authenticated
+  if (!token) {
+    navigate("/");
+    return null;
+  }
+
+  // Get redirect path based on role
+  const getRedirectPath = () => {
+    switch (roleId) {
+      case 1: return "/admin/dashboard";
+      case 2: return "/faculty/dashboard";
+      case 3: return "/institute/dashboard";
+      case 5: return "/student/dashboard";
+      default: return "/";
+    }
+  };
 
   const handleChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +58,7 @@ export default function ChangePasswordPage(): React.ReactNode {
       }
 
       setSuccess(true);
-      setTimeout(() => navigate("/student/dashboard"), 1000);
+      setTimeout(() => navigate(getRedirectPath()), 1000);
     } catch {
       setError("Network error");
     } finally {

@@ -89,8 +89,8 @@ export default function LandingPage() {
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => openInNewTab("/admin/login")}
-                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInNewTab("/admin/login")}
+                onClick={() => openInNewTab("/institute/login")}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openInNewTab("/institute/login")}
                 className="group bg-white/95 backdrop-blur-sm rounded-2xl p-6 text-center 
                            cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-white 
                            hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-white/30"

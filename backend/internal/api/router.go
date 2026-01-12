@@ -21,18 +21,28 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		auth.POST("/change-password", middleware.AuthRoleMiddleware(), controllers.ChangePassword)
 	}
 
-	// ================= ADMIN =================
+	// ================= UNIVERSITY ADMIN (Role 1) =================
 	admin := api.Group("/admin")
-	admin.Use(middleware.AuthRoleMiddleware(1))
+	admin.Use(middleware.AuthRoleMiddleware(middleware.RoleUniversityAdmin))
 	{
 		// 🔹 DASHBOARD
 		admin.GET("/stats", controllers.GetAdminStats)
+		admin.GET("/pending-approval-counts", controllers.GetPendingApprovalCounts)
 
-		// 🔹 STUDENTS (FIXED: FILTERED + PAGINATED)
-		// Supports:
-		// ?page=&limit=&institute_id=&course_id=&search=
-		admin.GET("/students", controllers.GetStudents)
-		admin.GET("/institutes/:id/courses", controllers.GetCoursesByInstitute)
+		// 🔹 APPROVALS (NEW)
+		admin.GET("/pending-approvals", controllers.GetPendingApprovals)
+		admin.POST("/approve-faculty", controllers.ApproveFaculty)
+		admin.POST("/approve-course-stream", controllers.ApproveCourseStream)
+
+		// 🔹 MARKS MANAGEMENT (Lock/Publish only - entry moved to Faculty)
+		admin.GET("/internal-marks", controllers.GetAllInternalMarks)
+		admin.POST("/marks/lock", controllers.LockMarks)
+		admin.POST("/marks/publish", controllers.PublishResults)
+
+		// 🔹 MASTER FEE TYPES (NEW)
+		admin.GET("/fee-types", controllers.GetMasterFeeTypes)
+		admin.POST("/fee-types", controllers.CreateMasterFeeType)
+
 		// 🔹 USERS
 		admin.POST("/users/create", controllers.CreateUserByAdmin)
 		admin.GET("/users", controllers.GetAllUsers)
@@ -41,27 +51,22 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		admin.GET("/pending-registrations", controllers.GetPendingRegistrations)
 		admin.POST("/approve-registration", controllers.ApproveRegistration)
 
-		// 🔹 FEES
+		// 🔹 FEES (Structure & Verification)
 		admin.GET("/fees/payments", controllers.GetAllFeePaymentHistory)
 		admin.POST("/fees/verify", controllers.VerifyPayment)
 		admin.POST("/fee-structure", controllers.CreateFeeStructure)
 		admin.POST("/fees/due", controllers.CreateFeeDue)
 
-		// 🔹 ATTENDANCE
-		admin.POST("/attendance/upload", controllers.UploadAttendance)
+		// 🔹 ATTENDANCE (View summary only - marking moved to Faculty)
 		admin.GET("/attendance/summary", controllers.GetAttendanceSummary)
 
-		// 🔹 MARKS
-		admin.POST("/marks/upload", controllers.UploadStudentMarks)
-
-		// ================= MASTER DATA =================
-
-		// 🔹 INSTITUTES
+		// 🔹 MASTER DATA - INSTITUTES
 		admin.GET("/institutes", controllers.GetInstitutes)
 		admin.POST("/institutes", controllers.CreateInstitute)
-		admin.POST("/institutes/users", controllers.CreateInstituteUser) // <--- New Route
+		admin.POST("/institutes/users", controllers.CreateInstituteUser)
 		admin.PUT("/institutes/:id", controllers.UpdateInstitute)
 		admin.DELETE("/institutes/:id", controllers.DeleteInstitute)
+		admin.GET("/institutes/:id/courses", controllers.GetCoursesByInstitute)
 
 		// 🔹 COURSES
 		admin.GET("/courses", controllers.GetCourses)
@@ -69,20 +74,20 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		admin.PUT("/courses/:id", controllers.UpdateCourse)
 		admin.DELETE("/courses/:id", controllers.DeleteCourse)
 
-		// 🔹 OPTIONAL (RECOMMENDED FOR DRILL-DOWN)
-		// admin.GET("/institutes/:id/courses", controllers.GetCoursesByInstitute)
-
 		// 🔹 SUBJECTS
 		admin.GET("/subjects", controllers.GetSubjects)
 		admin.POST("/subjects", controllers.CreateSubject)
 		admin.PUT("/subjects/:id", controllers.UpdateSubject)
 		admin.DELETE("/subjects/:id", controllers.DeleteSubject)
 
-		// 🔹 FACULTY
+		// 🔹 FACULTY (View/Manage from university level)
 		admin.GET("/faculty", controllers.GetFaculties)
 		admin.POST("/faculty", controllers.CreateFaculty)
 		admin.PUT("/faculty/:id", controllers.UpdateFaculty)
 		admin.DELETE("/faculty/:id", controllers.DeleteFaculty)
+
+		// 🔹 STUDENTS (View only)
+		admin.GET("/students", controllers.GetStudents)
 
 		// 🔹 NOTICES
 		admin.GET("/notices", controllers.GetNotices)
@@ -91,19 +96,69 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		admin.DELETE("/notices/:id", controllers.DeleteNotice)
 	}
 
-	// ================= FACULTY =================
+	// ================= FACULTY (Role 2) =================
 	faculty := api.Group("/faculty")
-	faculty.Use(middleware.AuthRoleMiddleware(2))
+	faculty.Use(middleware.AuthRoleMiddleware(middleware.RoleFaculty))
 	{
+		// 🔹 ATTENDANCE (NEW - Faculty marks attendance)
+		faculty.POST("/attendance/mark", controllers.FacultyMarkAttendance)
+		faculty.GET("/attendance", controllers.FacultyGetAttendance)
+
+		// 🔹 INTERNAL MARKS (NEW - Faculty enters marks)
+		faculty.POST("/internal-marks", controllers.FacultyAddInternalMarks)
+		faculty.PUT("/internal-marks/:id", controllers.FacultyUpdateInternalMarks)
+		faculty.POST("/internal-marks/submit", controllers.FacultySubmitMarks)
+		faculty.GET("/internal-marks", controllers.FacultyGetInternalMarks)
+
+		// 🔹 STUDENTS (View students in their institute)
+		faculty.GET("/students", controllers.FacultyGetStudents)
+
+		// 🔹 ASSIGNMENTS (Existing)
 		faculty.POST("/assignments", controllers.CreateAssignment)
 		faculty.GET("/assignments/course/:course_id", controllers.GetAssignmentsByCourse)
 		faculty.GET("/assignments/:id/submissions", controllers.GetSubmissionsByAssignment)
 		faculty.POST("/submissions/:id/grade", controllers.GradeSubmission)
 	}
 
-	// ================= STUDENT =================
+	// ================= INSTITUTE ADMIN (Role 3) =================
+	institute := api.Group("/institute")
+	institute.Use(
+		middleware.AuthRoleMiddleware(middleware.RoleInstituteAdmin),
+		middleware.RequireInstitute(),
+		middleware.CollegeBelongsToUser(),
+	)
+	{
+		// 🔹 DASHBOARD
+		institute.GET("/dashboard/stats", controllers.GetInstituteDashboardStats)
+
+		// 🔹 STUDENT MANAGEMENT (NEW)
+		institute.POST("/students", controllers.InstituteAddStudent)
+		institute.GET("/students", controllers.GetInstituteStudents)
+
+		// 🔹 FACULTY MANAGEMENT (NEW - Creates pending approval)
+		institute.POST("/faculty", controllers.InstituteAddFaculty)
+		institute.GET("/faculty", controllers.GetInstituteFaculty)
+
+		// 🔹 COURSE-STREAM REQUESTS (NEW)
+		institute.POST("/request-course-stream", controllers.RequestCourseStream)
+		institute.GET("/course-streams", controllers.GetInstituteCourseStreams)
+
+		// 🔹 FEES (View only - collection)
+		institute.GET("/fees", controllers.GetInstituteStudentFees)
+
+		// 🔹 ATTENDANCE (View summary only)
+		institute.GET("/attendance", controllers.GetInstituteAttendanceSummary)
+
+		// 🔹 INTERNAL MARKS (View only)
+		institute.GET("/internal-marks", controllers.GetInstituteInternalMarks)
+
+		// 🔹 COURSES (View only)
+		institute.GET("/courses", controllers.GetInstituteCourses)
+	}
+
+	// ================= STUDENT (Role 5) =================
 	student := api.Group("/student")
-	student.Use(middleware.AuthRoleMiddleware(5))
+	student.Use(middleware.AuthRoleMiddleware(middleware.RoleStudent))
 	{
 		student.GET("/profile", controllers.GetStudentProfile)
 		student.GET("/dashboard", controllers.GetStudentDashboard)
@@ -132,20 +187,12 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		student.POST("/assignments/:id/submit", controllers.SubmitAssignment)
 	}
 
-	// ================= PROFILE =================
+	// ================= PROFILE (Any authenticated user) =================
 	profile := api.Group("/profile")
 	profile.Use(middleware.AuthRoleMiddleware())
 	{
 		profile.GET("/me", controllers.GetMyProfile)
 		profile.GET("/:id", controllers.GetStudentByID)
 	}
-	// ================= INSTITUTE ADMIN =================
-	institute := api.Group("/institute")
-	institute.Use(middleware.AuthRoleMiddleware(3))
-	{
-		institute.GET("/dashboard/stats", controllers.GetInstituteDashboardStats)
-		institute.GET("/students", controllers.GetInstituteStudents)
-		institute.GET("/courses", controllers.GetInstituteCourses)
-		institute.GET("/faculty", controllers.GetInstituteFaculty)
-	}
 }
+

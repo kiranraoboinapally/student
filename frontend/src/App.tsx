@@ -6,6 +6,7 @@ import LandingPage from "./shared/components/LandingPage";
 import StudentLoginPage from "./features/student/components/StudentLoginPage";
 import StudentRegistrationPage from "./features/student/components/StudentRegistrationPage";
 import AdminLoginPage from "./features/admin/components/AdminLoginPage";
+import InstituteLoginPage from "./features/institute/components/InstituteLoginPage";
 
 import StudentDashboard from "./features/student/components/StudentDashboard";
 import AdminDashboard from "./features/admin/components/AdminDashboard";
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/institute/login" element={<InstituteLoginPage />} />
 
           {/* Protected Routes */}
           <Route
@@ -78,11 +80,7 @@ export default function App() {
           />
           <Route
             path="/change-password"
-            element={
-              <Protected allowedRole={5}>
-                <ChangePasswordPage />
-              </Protected>
-            }
+            element={<ChangePasswordPage />}
           />
 
           {/* Fallback */}
