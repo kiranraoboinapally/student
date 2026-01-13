@@ -51,9 +51,9 @@ export default function InstituteLoginPage(): React.ReactNode {
                 return;
             }
 
-            // Verify this is an Institute Admin (role_id === 3)
-            if (data.role_id !== 3) {
-                setError("Access denied. This portal is for Institute Admins only.");
+            // Allow only Institute Admin (3) and Faculty (2)
+            if (![2, 3].includes(data.role_id)) {
+                setError("Access denied.");
                 setLoading(false);
                 return;
             }
@@ -62,8 +62,10 @@ export default function InstituteLoginPage(): React.ReactNode {
 
             if (data.force_password_change) {
                 navigate("/change-password");
-            } else {
-                navigate("/institute/dashboard");
+            } else if (data.role_id === 3) {
+                navigate("/institute/dashboard"); // Institute Admin
+            } else if (data.role_id === 2) {
+                navigate("/faculty/dashboard"); // Faculty
             }
         } catch {
             setError("Connection error. Please try again.");
@@ -88,7 +90,7 @@ export default function InstituteLoginPage(): React.ReactNode {
                         borderColor: theme,
                     }}
                 >
-                    {/* Logo & Header */}
+                    {/* Header */}
                     <div className="text-center mb-8">
                         {logoSrc && <img src={logoSrc} alt="Logo" className="h-16 mx-auto mb-4" />}
                         <div className="flex items-center justify-center gap-2 mb-2">
@@ -97,11 +99,11 @@ export default function InstituteLoginPage(): React.ReactNode {
                                 Institute Portal
                             </h1>
                         </div>
-                        <p className="text-gray-500 text-sm">College Administration Login</p>
+                        <p className="text-gray-500 text-sm">Institute & Faculty Login</p>
                         <p className="text-gray-600 text-sm mt-2">{currentDate}</p>
                     </div>
 
-                    {/* Error Alert */}
+                    {/* Error */}
                     {error && (
                         <div
                             className="p-4 rounded-lg mb-6 text-sm font-medium text-white"
@@ -121,14 +123,9 @@ export default function InstituteLoginPage(): React.ReactNode {
                                 type="text"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                placeholder="e.g., institute_admin1"
                                 required
                                 disabled={loading}
-                                className="w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition"
-                                style={{
-                                    borderColor: username ? theme : "#e0e0e0",
-                                    backgroundColor: "#f9f9f9",
-                                }}
+                                className="w-full px-4 py-3 border-2 rounded-lg"
                             />
                         </div>
 
@@ -141,21 +138,16 @@ export default function InstituteLoginPage(): React.ReactNode {
                                     type={showPassword ? "text" : "password"}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Enter your password"
                                     required
                                     disabled={loading}
-                                    className="w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition pr-10"
-                                    style={{
-                                        borderColor: password ? theme : "#e0e0e0",
-                                        backgroundColor: "#f9f9f9",
-                                    }}
+                                    className="w-full px-4 py-3 border-2 rounded-lg pr-10"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600 hover:text-gray-800 transition"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2"
                                 >
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                    {showPassword ? <EyeOff /> : <Eye />}
                                 </button>
                             </div>
                         </div>
@@ -163,43 +155,13 @@ export default function InstituteLoginPage(): React.ReactNode {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full px-6 py-3 rounded-lg font-bold text-white flex items-center justify-center gap-2 transition transform hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:hover:scale-100"
+                            className="w-full px-6 py-3 rounded-lg font-bold text-white flex items-center justify-center gap-2"
                             style={{ backgroundColor: theme }}
                         >
-                            <LogIn className="w-5 h-5" />
-                            {loading ? "Logging in..." : "Login to Institute"}
+                            <LogIn />
+                            {loading ? "Logging in..." : "Login"}
                         </button>
                     </form>
-
-                    {/* Footer Links */}
-                    <div className="mt-6 text-center space-y-2">
-                        <p className="text-gray-600 text-sm">
-                            Need University Admin access?{" "}
-                            <a
-                                href="/admin/login"
-                                className="font-semibold hover:underline"
-                                style={{ color: theme }}
-                            >
-                                University Login
-                            </a>
-                        </p>
-                        <p className="text-gray-600 text-sm">
-                            <a
-                                href="/"
-                                className="font-semibold hover:underline"
-                                style={{ color: theme }}
-                            >
-                                ← Back to Home
-                            </a>
-                        </p>
-                    </div>
-                </div>
-
-                {/* Demo Credentials */}
-                <div className="mt-6 p-4 rounded-lg text-white text-xs" style={{ backgroundColor: "rgba(255,255,255,0.1)" }}>
-                    <p className="font-semibold mb-2">Demo Institute Credentials:</p>
-                    <p>Username: institute_admin1</p>
-                    <p>Password: institute123</p>
                 </div>
             </div>
         </div>

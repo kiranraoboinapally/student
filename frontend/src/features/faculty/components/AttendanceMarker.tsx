@@ -1,6 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth, apiBase } from '../../auth/AuthProvider';
-import { Calendar, CheckCircle, XCircle, RefreshCw, Users, Save } from 'lucide-react';
+import { useState, useEffect, useCallback } from "react";
+import { useAuth, apiBase } from "../../auth/AuthProvider";
+import {
+    Calendar,
+    CheckCircle,
+    XCircle,
+    RefreshCw,
+    Users,
+    Save
+} from "lucide-react";
 
 interface Student {
     enrollment_number: number;
@@ -8,20 +15,15 @@ interface Student {
     course_name?: string;
 }
 
-interface AttendanceRecord {
-    enrollment_number: number;
-    date: string;
-    present: boolean;
-    subject_code: string;
-}
-
 export default function AttendanceMarker() {
     const { authFetch } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [students, setStudents] = useState<Student[]>([]);
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-    const [subjectCode, setSubjectCode] = useState('');
+    const [selectedDate, setSelectedDate] = useState(
+        new Date().toISOString().split("T")[0]
+    );
+    const [subjectCode, setSubjectCode] = useState("");
     const [attendance, setAttendance] = useState<Record<number, boolean>>({});
 
     const loadStudents = useCallback(async () => {
@@ -32,15 +34,14 @@ export default function AttendanceMarker() {
                 const data = await res.json();
                 setStudents(data.students || []);
 
-                // Initialize all students as present by default
-                const initialAttendance: Record<number, boolean> = {};
+                const init: Record<number, boolean> = {};
                 (data.students || []).forEach((s: Student) => {
-                    initialAttendance[s.enrollment_number] = true;
+                    init[s.enrollment_number] = true;
                 });
-                setAttendance(initialAttendance);
+                setAttendance(init);
             }
         } catch (e) {
-            console.error('Failed to load students:', e);
+            console.error(e);
         } finally {
             setLoading(false);
         }
@@ -50,251 +51,229 @@ export default function AttendanceMarker() {
         loadStudents();
     }, [loadStudents]);
 
-    const toggleAttendance = (enrollmentNumber: number) => {
-        setAttendance(prev => ({
-            ...prev,
-            [enrollmentNumber]: !prev[enrollmentNumber]
-        }));
+    const toggleAttendance = (id: number) => {
+        setAttendance(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
-    const markAllPresent = () => {
+    const markAll = (value: boolean) => {
         const updated: Record<number, boolean> = {};
-        students.forEach(s => { updated[s.enrollment_number] = true; });
+        students.forEach(s => (updated[s.enrollment_number] = value));
         setAttendance(updated);
     };
 
-    const markAllAbsent = () => {
-        const updated: Record<number, boolean> = {};
-        students.forEach(s => { updated[s.enrollment_number] = false; });
-        setAttendance(updated);
-    };
-
-    const handleSaveAttendance = async () => {
-        if (!selectedDate) {
-            alert('Please select a date');
-            return;
-        }
-
-        const records = students.map(s => ({
-            enrollment_number: s.enrollment_number,
-            date: selectedDate,
-            present: attendance[s.enrollment_number] ?? true,
-            subject_code: subjectCode,
-        }));
-
+    const handleSave = async () => {
         setSaving(true);
         try {
-            const res = await authFetch(`${apiBase}/faculty/attendance/mark`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ records }),
-            });
+            const records = students.map(s => ({
+                enrollment_number: s.enrollment_number,
+                date: selectedDate,
+                present: attendance[s.enrollment_number] ?? true,
+                subject_code: subjectCode
+            }));
+
+            const res = await authFetch(
+                `${apiBase}/faculty/attendance/mark`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ records })
+                }
+            );
 
             if (res.ok) {
-                const data = await res.json();
-                alert(`Attendance marked successfully for ${data.count} students!`);
+                alert("Attendance saved successfully");
             } else {
-                const err = await res.json();
-                alert(err.error || 'Failed to save attendance');
+                alert("Failed to save attendance");
             }
-        } catch (e) {
-            console.error(e);
-            alert('Failed to save attendance');
         } finally {
             setSaving(false);
         }
     };
 
-    const presentCount = Object.values(attendance).filter(v => v).length;
-    const absentCount = Object.values(attendance).filter(v => !v).length;
+    const present = Object.values(attendance).filter(v => v).length;
+    const absent = Object.values(attendance).filter(v => !v).length;
 
     return (
         <div className="space-y-6 animate-fadeIn">
+            {/* HEADER */}
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Mark Attendance</h2>
-                    <p className="text-gray-500 text-sm mt-1">Mark daily attendance for your students</p>
+                    <h2 className="text-2xl font-bold text-gray-800">
+                        Attendance Management
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                        Mark daily attendance
+                    </p>
                 </div>
                 <button
                     onClick={loadStudents}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
                 >
-                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                    <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
                     Refresh
                 </button>
             </div>
 
-            {/* Date and Subject Selection */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            <Calendar size={16} className="inline mr-2" />
-                            Date
-                        </label>
-                        <input
-                            type="date"
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg p-2.5"
+            {/* DATE + SUBJECT */}
+            <Card>
+                <div className="grid md:grid-cols-3 gap-4">
+                    <Input
+                        label="Date"
+                        icon={<Calendar size={16} />}
+                        type="date"
+                        value={selectedDate}
+                        onChange={setSelectedDate}
+                    />
+                    <Input
+                        label="Subject Code"
+                        placeholder="CS101"
+                        value={subjectCode}
+                        onChange={setSubjectCode}
+                    />
+                    <div className="flex gap-2 items-end">
+                        <ActionButton
+                            text="All Present"
+                            onClick={() => markAll(true)}
+                            color="green"
                         />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Subject Code (Optional)
-                        </label>
-                        <input
-                            type="text"
-                            value={subjectCode}
-                            onChange={(e) => setSubjectCode(e.target.value)}
-                            placeholder="e.g., CS101"
-                            className="w-full border border-gray-300 rounded-lg p-2.5"
+                        <ActionButton
+                            text="All Absent"
+                            onClick={() => markAll(false)}
+                            color="red"
                         />
-                    </div>
-                    <div className="flex items-end gap-2">
-                        <button
-                            onClick={markAllPresent}
-                            className="flex-1 px-4 py-2.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 font-medium"
-                        >
-                            All Present
-                        </button>
-                        <button
-                            onClick={markAllAbsent}
-                            className="flex-1 px-4 py-2.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-medium"
-                        >
-                            All Absent
-                        </button>
                     </div>
                 </div>
-            </div>
+            </Card>
 
-            {/* Summary */}
+            {/* SUMMARY */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <SummaryCard
-                    label="Total Students"
-                    value={students.length}
-                    icon={<Users size={20} />}
-                    color="blue"
-                />
-                <SummaryCard
-                    label="Present"
-                    value={presentCount}
-                    icon={<CheckCircle size={20} />}
-                    color="green"
-                />
-                <SummaryCard
-                    label="Absent"
-                    value={absentCount}
-                    icon={<XCircle size={20} />}
-                    color="red"
-                />
-                <SummaryCard
+                <Summary label="Students" value={students.length} icon={<Users />} />
+                <Summary label="Present" value={present} icon={<CheckCircle />} color="green" />
+                <Summary label="Absent" value={absent} icon={<XCircle />} color="red" />
+                <Summary
                     label="Attendance %"
-                    value={students.length > 0 ? `${Math.round((presentCount / students.length) * 100)}%` : '0%'}
-                    icon={<Calendar size={20} />}
+                    value={
+                        students.length
+                            ? `${Math.round((present / students.length) * 100)}%`
+                            : "0%"
+                    }
+                    icon={<Calendar />}
                     color="purple"
                 />
             </div>
 
-            {/* Student List */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* TABLE */}
+            <Card>
                 {loading ? (
-                    <div className="p-12 text-center text-gray-500">Loading students...</div>
-                ) : students.length === 0 ? (
-                    <div className="p-12 text-center text-gray-500">No students found in your institute</div>
+                    <p className="text-center py-12 text-gray-500">
+                        Loading students...
+                    </p>
                 ) : (
                     <>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Enrollment</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <table className="w-full border-collapse">
+                            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                <tr>
+                                    <th className="p-3 text-left">Enrollment</th>
+                                    <th className="p-3 text-left">Name</th>
+                                    <th className="p-3 text-left">Course</th>
+                                    <th className="p-3 text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {students.map(s => (
+                                    <tr key={s.enrollment_number} className="border-t">
+                                        <td className="p-3 font-mono">{s.enrollment_number}</td>
+                                        <td className="p-3 font-medium">{s.student_name}</td>
+                                        <td className="p-3 text-gray-500">
+                                            {s.course_name || "-"}
+                                        </td>
+                                        <td className="p-3 text-center">
+                                            <button
+                                                onClick={() => toggleAttendance(s.enrollment_number)}
+                                                className={`px-4 py-1.5 rounded-lg font-medium ${
+                                                    attendance[s.enrollment_number]
+                                                        ? "bg-green-100 text-green-700"
+                                                        : "bg-red-100 text-red-700"
+                                                }`}
+                                            >
+                                                {attendance[s.enrollment_number]
+                                                    ? "Present"
+                                                    : "Absent"}
+                                            </button>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {students.map((student) => (
-                                        <tr key={student.enrollment_number} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4 text-sm font-mono text-gray-900">
-                                                {student.enrollment_number}
-                                            </td>
-                                            <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                                                {student.student_name}
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-gray-500">
-                                                {student.course_name || '-'}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <button
-                                                    onClick={() => toggleAttendance(student.enrollment_number)}
-                                                    className={`px-4 py-2 rounded-lg font-medium transition-all ${attendance[student.enrollment_number]
-                                                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                                            : 'bg-red-100 text-red-700 hover:bg-red-200'
-                                                        }`}
-                                                >
-                                                    {attendance[student.enrollment_number] ? (
-                                                        <span className="flex items-center gap-1">
-                                                            <CheckCircle size={14} /> Present
-                                                        </span>
-                                                    ) : (
-                                                        <span className="flex items-center gap-1">
-                                                            <XCircle size={14} /> Absent
-                                                        </span>
-                                                    )}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                ))}
+                            </tbody>
+                        </table>
 
-                        {/* Save Button */}
-                        <div className="p-4 border-t bg-gray-50 flex justify-end">
+                        <div className="flex justify-end pt-4 border-t">
                             <button
-                                onClick={handleSaveAttendance}
-                                disabled={saving || students.length === 0}
-                                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 shadow-md"
+                                onClick={handleSave}
+                                disabled={saving}
+                                className="flex items-center gap-2 px-6 py-2 rounded-lg bg-[#650C08] text-white hover:bg-[#520a06]"
                             >
                                 <Save size={18} />
-                                {saving ? 'Saving...' : 'Save Attendance'}
+                                {saving ? "Saving..." : "Save Attendance"}
                             </button>
                         </div>
                     </>
                 )}
-            </div>
+            </Card>
         </div>
     );
 }
 
-function SummaryCard({
-    label,
-    value,
-    icon,
-    color
-}: {
-    label: string;
-    value: number | string;
-    icon: React.ReactNode;
-    color: string;
-}) {
-    const colorClasses: Record<string, string> = {
-        blue: 'bg-blue-50 text-blue-600',
-        green: 'bg-green-50 text-green-600',
-        red: 'bg-red-50 text-red-600',
-        purple: 'bg-purple-50 text-purple-600',
-    };
+/* ================== UI HELPERS ================== */
 
+function Card({ children }: { children: React.ReactNode }) {
     return (
-        <div className={`p-4 rounded-xl ${colorClasses[color]} flex items-center gap-4`}>
-            <div className="p-3 rounded-full bg-white/50">
-                {icon}
-            </div>
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+            {children}
+        </div>
+    );
+}
+
+function Input({ label, value, onChange, type = "text", icon, placeholder }: any) {
+    return (
+        <div>
+            <label className="text-sm font-medium mb-1 flex gap-2 items-center">
+                {icon} {label}
+            </label>
+            <input
+                type={type}
+                value={value}
+                placeholder={placeholder}
+                onChange={e => onChange(e.target.value)}
+                className="w-full border rounded-lg p-2"
+            />
+        </div>
+    );
+}
+
+function ActionButton({ text, onClick, color }: any) {
+    const map: any = {
+        green: "bg-green-100 text-green-700 hover:bg-green-200",
+        red: "bg-red-100 text-red-700 hover:bg-red-200"
+    };
+    return (
+        <button onClick={onClick} className={`flex-1 px-4 py-2 rounded-lg ${map[color]}`}>
+            {text}
+        </button>
+    );
+}
+
+function Summary({ label, value, icon, color = "blue" }: any) {
+    const colors: any = {
+        blue: "bg-blue-50 text-blue-600",
+        green: "bg-green-50 text-green-600",
+        red: "bg-red-50 text-red-600",
+        purple: "bg-purple-50 text-purple-600"
+    };
+    return (
+        <div className={`p-4 rounded-xl flex gap-3 ${colors[color]}`}>
+            <div className="p-2 bg-white/50 rounded">{icon}</div>
             <div>
-                <p className="text-sm font-medium opacity-80">{label}</p>
+                <p className="text-sm">{label}</p>
                 <p className="text-2xl font-bold">{value}</p>
             </div>
         </div>
