@@ -220,6 +220,27 @@ func GetFacultyMyCourses(c *gin.Context) {
 		Order("courses_streams.course_name ASC").
 		Scan(&courses)
 
+	// If no course_stream assignments, use faculty's department field (which stores course_name)
+	if len(courses) == 0 && faculty.Department != "" && faculty.Department != "General" {
+		// Return the department as a course
+		courses = []struct {
+			AssignmentID   int64   `json:"assignment_id"`
+			CourseStreamID int     `json:"course_stream_id"`
+			CourseName     string  `json:"course_name"`
+			Stream         string  `json:"stream"`
+			Semester       *int    `json:"semester"`
+			SubjectCode    *string `json:"subject_code"`
+			AcademicYear   *string `json:"academic_year"`
+		}{
+			{
+				AssignmentID:   0,
+				CourseStreamID: 0,
+				CourseName:     faculty.Department,
+				Stream:         "Assigned via Institute",
+			},
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"faculty_id": faculty.FacultyID,
 		"courses":    courses,
