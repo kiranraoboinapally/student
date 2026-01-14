@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/joho/godotenv"
+	"github.com/kiranraoboinapally/student/backend/internal/models"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -57,4 +58,29 @@ func Init() {
 	}
 
 	DB = db
+
+	// Auto-migrate tables for Faculty Management
+	// Disable foreign key checks to avoid circular reference issues
+	log.Println("Running auto-migration for tables...")
+	DB.Exec("SET FOREIGN_KEY_CHECKS = 0")
+	
+	// Migrate Faculty table first
+	if err := DB.AutoMigrate(&models.Faculty{}); err != nil {
+		log.Printf("Warning: Faculty migration error: %v", err)
+	}
+	
+	// Migrate Department table
+	if err := DB.AutoMigrate(&models.Department{}); err != nil {
+		log.Printf("Warning: Department migration error: %v", err)
+	}
+	
+	// Migrate FacultyCourseAssignment table
+	if err := DB.AutoMigrate(&models.FacultyCourseAssignment{}); err != nil {
+		log.Printf("Warning: FacultyCourseAssignment migration error: %v", err)
+	}
+	
+	DB.Exec("SET FOREIGN_KEY_CHECKS = 1")
+	log.Println("Auto-migration completed")
 }
+
+
