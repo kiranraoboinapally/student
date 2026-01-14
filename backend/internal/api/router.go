@@ -94,6 +94,17 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		admin.POST("/notices", controllers.CreateNotice)
 		admin.PUT("/notices/:id", controllers.UpdateNotice)
 		admin.DELETE("/notices/:id", controllers.DeleteNotice)
+
+		// 🔹 DEPARTMENTS
+		admin.GET("/departments", controllers.GetDepartments)
+		admin.POST("/departments", controllers.CreateDepartment)
+		admin.PUT("/departments/:id", controllers.UpdateDepartment)
+		admin.DELETE("/departments/:id", controllers.DeleteDepartment)
+
+		// 🔹 STUDENT REGISTRATION APPROVALS
+		admin.GET("/pending-student-registrations", controllers.GetPendingStudentRegistrations)
+		admin.POST("/approve-student", controllers.ApproveStudentRegistration)
+		admin.POST("/approve-students-bulk", controllers.BulkApproveStudentRegistrations)
 	}
 
 	// ================= FACULTY (Role 2) =================
@@ -110,8 +121,11 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		faculty.POST("/internal-marks/submit", controllers.FacultySubmitMarks)
 		faculty.GET("/internal-marks", controllers.FacultyGetInternalMarks)
 
-		// 🔹 STUDENTS (View students in their institute)
+		// 🔹 STUDENTS (View students in their assigned courses)
 		faculty.GET("/students", controllers.FacultyGetStudents)
+
+		// 🔹 MY COURSES (Courses assigned to this faculty)
+		faculty.GET("/my-courses", controllers.GetFacultyMyCourses)
 
 		// 🔹 ASSIGNMENTS (Existing)
 		faculty.POST("/assignments", controllers.CreateAssignment)
@@ -154,6 +168,14 @@ func RegisterAPIRoutes(r *gin.Engine) {
 
 		// 🔹 COURSES (View only)
 		institute.GET("/courses", controllers.GetInstituteCourses)
+
+		// 🔹 DEPARTMENTS (View for this institute)
+		institute.GET("/departments", controllers.GetInstituteDepartments)
+
+		// 🔹 FACULTY COURSE ASSIGNMENTS
+		institute.POST("/faculty-assignments", controllers.AssignFacultyToCourse)
+		institute.GET("/faculty/:id/assignments", controllers.GetFacultyAssignments)
+		institute.DELETE("/faculty-assignments/:id", controllers.RemoveFacultyAssignment)
 	}
 
 	// ================= STUDENT (Role 5) =================

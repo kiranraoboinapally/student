@@ -144,8 +144,10 @@ func FacultyGetAttendance(c *gin.Context) {
 	})
 }
 
-// FacultyGetStudents returns students that faculty can access (from their institute)
+// FacultyGetStudents returns students that faculty can access (from their assigned courses)
 func FacultyGetStudents(c *gin.Context) {
+	userID := c.MustGet("user_id").(int64)
+
 	facultyInstituteID, exists := c.Get("faculty_institute_id")
 	if !exists {
 		facultyInstituteID, exists = c.Get("institute_id")
@@ -158,18 +160,69 @@ func FacultyGetStudents(c *gin.Context) {
 
 	db := config.DB
 
+	// Get faculty record
+	var faculty models.Faculty
+	if err := db.Where("user_id = ?", userID).First(&faculty).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "faculty record not found"})
+		return
+	}
+
 	// Get institute name
 	var instituteName string
 	db.Table("institutes").Select("institute_name").Where("institute_id = ?", instituteID).Scan(&instituteName)
 
-	// Get students from this institute
+	// Get assigned course names for this faculty
+	var assignedCourses []string
+	db.Table("faculty_course_assignments").
+		Select("DISTINCT courses_streams.course_name").
+		Joins("JOIN courses_streams ON faculty_course_assignments.course_stream_id = courses_streams.id").
+		Where("faculty_course_assignments.faculty_id = ? AND faculty_course_assignments.is_active = ?", faculty.FacultyID, true).
+		Scan(&assignedCourses)
+
+	// Optional course filter from query
+	courseFilter := c.Query("course_name")
+
 	var students []models.MasterStudent
-	db.Where("institute_name = ?", instituteName).
-		Order("student_name ASC").
-		Find(&students)
+
+	// If faculty has course assignments, filter by them
+	if len(assignedCourses) > 0 {
+		query := db.Where("institute_name = ?", instituteName)
+		
+		if courseFilter != "" {
+			// Check if the requested course is in faculty's assigned courses
+			found := false
+			for _, ac := range assignedCourses {
+				if ac == courseFilter {
+					found = true
+					break
+				}
+			}
+			if !found {
+				c.JSON(http.StatusForbidden, gin.H{"error": "you are not assigned to this course"})
+				return
+			}
+			query = query.Where("course_name = ?", courseFilter)
+		} else {
+			query = query.Where("course_name IN ?", assignedCourses)
+		}
+		
+		query.Order("student_name ASC").Find(&students)
+	} else {
+		// No course assignments - return empty or all students (based on policy)
+		// For now, return empty with a message
+		c.JSON(http.StatusOK, gin.H{
+			"students":        []models.MasterStudent{},
+			"total":           0,
+			"assigned_courses": assignedCourses,
+			"message":         "no courses assigned to you - contact institute admin",
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"students": students,
-		"total":    len(students),
+		"students":         students,
+		"total":            len(students),
+		"assigned_courses": assignedCourses,
+		"institute_name":   instituteName,
 	})
 }

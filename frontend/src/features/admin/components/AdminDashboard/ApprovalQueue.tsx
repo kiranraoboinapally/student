@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, apiBase } from '../../../auth/AuthProvider';
-import { CheckCircle, XCircle, Clock, Users, BookOpen, FileText, RefreshCw } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Users, BookOpen, FileText, RefreshCw, GraduationCap } from 'lucide-react';
 
 interface PendingFaculty {
     faculty_id: number;
@@ -33,34 +33,61 @@ interface PendingMarks {
     count: number;
 }
 
+interface PendingStudent {
+    user_id: number;
+    full_name: string;
+    email: string;
+    enrollment_number: string;
+    course_name: string;
+    stream: string;
+    institute_name: string;
+    created_at: string;
+}
+
 interface PendingCounts {
     faculty: number;
     course_stream: number;
     marks_batches: number;
+    students: number;
 }
 
 export default function ApprovalQueue() {
     const { authFetch } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'faculty' | 'courses' | 'marks'>('faculty');
+    const [activeTab, setActiveTab] = useState<'students' | 'faculty' | 'courses' | 'marks'>('students');
 
     const [pendingFaculty, setPendingFaculty] = useState<PendingFaculty[]>([]);
     const [pendingCourseStreams, setPendingCourseStreams] = useState<PendingCourseStream[]>([]);
     const [pendingMarks, setPendingMarks] = useState<PendingMarks[]>([]);
-    const [counts, setCounts] = useState<PendingCounts>({ faculty: 0, course_stream: 0, marks_batches: 0 });
+    const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
+    const [counts, setCounts] = useState<PendingCounts>({ faculty: 0, course_stream: 0, marks_batches: 0, students: 0 });
 
     const [actionLoading, setActionLoading] = useState<number | null>(null);
+    const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
 
     const loadPendingApprovals = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await authFetch(`${apiBase}/admin/pending-approvals`);
-            if (res.ok) {
-                const data = await res.json();
+            const [approvalsRes, studentsRes] = await Promise.all([
+                authFetch(`${apiBase}/admin/pending-approvals`),
+                authFetch(`${apiBase}/admin/pending-student-registrations`)
+            ]);
+
+            if (approvalsRes.ok) {
+                const data = await approvalsRes.json();
                 setPendingFaculty(data.pending_faculty_approvals || []);
                 setPendingCourseStreams(data.pending_course_stream_requests || []);
                 setPendingMarks(data.pending_marks_submissions || []);
-                setCounts(data.counts || { faculty: 0, course_stream: 0, marks_batches: 0 });
+
+                const countsData = data.counts || { faculty: 0, course_stream: 0, marks_batches: 0 };
+
+                if (studentsRes.ok) {
+                    const studentsData = await studentsRes.json();
+                    setPendingStudents(studentsData.students || []);
+                    countsData.students = studentsData.total || studentsData.students?.length || 0;
+                }
+
+                setCounts(countsData);
             }
         } catch (e) {
             console.error('Failed to load pending approvals:', e);
@@ -115,6 +142,70 @@ export default function ApprovalQueue() {
         }
     };
 
+    const handleApproveStudent = async (userId: number, action: 'approve' | 'reject') => {
+        setActionLoading(userId);
+        try {
+            const res = await authFetch(`${apiBase}/admin/approve-student`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, action }),
+            });
+            if (res.ok) {
+                await loadPendingApprovals();
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Failed to process approval');
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleBulkApprove = async (action: 'approve' | 'reject') => {
+        if (selectedStudents.length === 0) {
+            alert('Please select students first');
+            return;
+        }
+
+        setActionLoading(-1); // Use -1 for bulk action
+        try {
+            const res = await authFetch(`${apiBase}/admin/approve-students-bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_ids: selectedStudents, action }),
+            });
+            if (res.ok) {
+                setSelectedStudents([]);
+                await loadPendingApprovals();
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Failed to process bulk approval');
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const toggleSelectStudent = (userId: number) => {
+        setSelectedStudents(prev =>
+            prev.includes(userId)
+                ? prev.filter(id => id !== userId)
+                : [...prev, userId]
+        );
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedStudents.length === pendingStudents.length) {
+            setSelectedStudents([]);
+        } else {
+            setSelectedStudents(pendingStudents.map(s => s.user_id));
+        }
+    };
+
     return (
         <div className="space-y-6 animate-fadeIn">
             <div className="flex justify-between items-center">
@@ -129,7 +220,15 @@ export default function ApprovalQueue() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <SummaryCard
+                    title="Student Registrations"
+                    count={counts.students}
+                    icon={<GraduationCap size={20} />}
+                    color="green"
+                    active={activeTab === 'students'}
+                    onClick={() => setActiveTab('students')}
+                />
                 <SummaryCard
                     title="Faculty Approvals"
                     count={counts.faculty}
@@ -162,6 +261,87 @@ export default function ApprovalQueue() {
                     <div className="p-12 text-center text-gray-500">Loading pending approvals...</div>
                 ) : (
                     <>
+                        {activeTab === 'students' && (
+                            <div>
+                                {pendingStudents.length > 0 && (
+                                    <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedStudents.length === pendingStudents.length && pendingStudents.length > 0}
+                                                onChange={toggleSelectAll}
+                                                className="w-4 h-4 rounded border-gray-300"
+                                            />
+                                            <span className="text-sm text-gray-600">
+                                                {selectedStudents.length} selected
+                                            </span>
+                                        </div>
+                                        {selectedStudents.length > 0 && (
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleBulkApprove('approve')}
+                                                    disabled={actionLoading === -1}
+                                                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1"
+                                                >
+                                                    <CheckCircle size={16} /> Approve Selected
+                                                </button>
+                                                <button
+                                                    onClick={() => handleBulkApprove('reject')}
+                                                    disabled={actionLoading === -1}
+                                                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 flex items-center gap-1"
+                                                >
+                                                    <XCircle size={16} /> Reject Selected
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                <div className="divide-y">
+                                    {pendingStudents.length === 0 ? (
+                                        <div className="p-8 text-center text-gray-500">No pending student registrations</div>
+                                    ) : (
+                                        pendingStudents.map((s) => (
+                                            <div key={s.user_id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
+                                                <div className="flex items-center gap-3">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedStudents.includes(s.user_id)}
+                                                        onChange={() => toggleSelectStudent(s.user_id)}
+                                                        className="w-4 h-4 rounded border-gray-300"
+                                                    />
+                                                    <div>
+                                                        <h4 className="font-semibold text-gray-900">{s.full_name}</h4>
+                                                        <p className="text-sm text-gray-500">{s.email}</p>
+                                                        <div className="flex gap-4 mt-1 text-xs text-gray-400">
+                                                            <span className="font-medium">{s.enrollment_number}</span>
+                                                            <span>{s.course_name} - {s.stream}</span>
+                                                            <span className="font-medium text-blue-600">{s.institute_name}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleApproveStudent(s.user_id, 'approve')}
+                                                        disabled={actionLoading === s.user_id}
+                                                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1"
+                                                    >
+                                                        <CheckCircle size={16} /> Approve
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleApproveStudent(s.user_id, 'reject')}
+                                                        disabled={actionLoading === s.user_id}
+                                                        className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 flex items-center gap-1"
+                                                    >
+                                                        <XCircle size={16} /> Reject
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {activeTab === 'faculty' && (
                             <div className="divide-y">
                                 {pendingFaculty.length === 0 ? (
@@ -283,6 +463,7 @@ function SummaryCard({
     onClick: () => void;
 }) {
     const colorClasses: Record<string, string> = {
+        green: active ? 'bg-green-600 text-white' : 'bg-green-50 text-green-600 hover:bg-green-100',
         blue: active ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100',
         purple: active ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-600 hover:bg-purple-100',
         orange: active ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-600 hover:bg-orange-100',
@@ -304,3 +485,4 @@ function SummaryCard({
         </button>
     );
 }
+

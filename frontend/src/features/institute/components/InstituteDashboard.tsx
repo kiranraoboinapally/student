@@ -40,6 +40,7 @@ export default function InstituteDashboard(): React.ReactNode {
     // Modals
     const [showAddStudentModal, setShowAddStudentModal] = useState(false);
     const [showAddFacultyModal, setShowAddFacultyModal] = useState(false);
+    const [assignCourseModal, setAssignCourseModal] = useState<{ facultyId: number; facultyName: string } | null>(null);
 
     const loadStats = useCallback(async () => {
         try {
@@ -405,7 +406,7 @@ export default function InstituteDashboard(): React.ReactNode {
                                                 <p><span className="text-gray-400">Dept:</span> {f.department || 'General'}</p>
                                                 <p><span className="text-gray-400">Email:</span> {f.email}</p>
                                             </div>
-                                            <div className="mt-4 pt-4 border-t">
+                                            <div className="mt-4 pt-4 border-t flex justify-between items-center">
                                                 <span className={`px-3 py-1 text-xs rounded-full font-medium ${f.approval_status === 'approved'
                                                     ? 'bg-green-100 text-green-700'
                                                     : f.approval_status === 'rejected'
@@ -415,8 +416,16 @@ export default function InstituteDashboard(): React.ReactNode {
                                                     {f.approval_status === 'approved' && <CheckCircle size={12} className="inline mr-1" />}
                                                     {f.approval_status === 'pending' && <Clock size={12} className="inline mr-1" />}
                                                     {f.approval_status === 'rejected' && <XCircle size={12} className="inline mr-1" />}
-                                                    {f.approval_status || 'Pending University Approval'}
+                                                    {f.approval_status || 'Pending'}
                                                 </span>
+                                                {f.approval_status === 'approved' && (
+                                                    <button
+                                                        onClick={() => setAssignCourseModal({ facultyId: f.faculty_id || f.user_id, facultyName: f.full_name })}
+                                                        className="text-sm text-[#650C08] hover:underline font-medium"
+                                                    >
+                                                        Assign Courses
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -605,6 +614,20 @@ export default function InstituteDashboard(): React.ReactNode {
                     }}
                 />
             )}
+
+            {/* Assign Course Modal */}
+            {assignCourseModal && (
+                <AssignCourseModal
+                    authFetch={authFetch}
+                    facultyId={assignCourseModal.facultyId}
+                    facultyName={assignCourseModal.facultyName}
+                    onClose={() => setAssignCourseModal(null)}
+                    onSuccess={() => {
+                        setAssignCourseModal(null);
+                        loadFaculty();
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -748,19 +771,46 @@ function AddStudentModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
 
 function AddFacultyModal({ authFetch, onClose, onSuccess }: { authFetch: any; onClose: () => void; onSuccess: () => void }) {
     const [loading, setLoading] = useState(false);
+    const [courseStreams, setCourseStreams] = useState<any[]>([]);
     const [form, setForm] = useState({
         username: '',
         email: '',
         full_name: '',
-        department: '',
+        department: '', // Will be set from selected course name
         position: '',
-        temp_password: ''
+        temp_password: '',
+        course_stream_id: '' // For initial course assignment
     });
+
+    useEffect(() => {
+        // Load courses for this institute from master_students data
+        const loadCourses = async () => {
+            try {
+                const res = await authFetch(`${apiBase}/institute/courses`);
+                if (res.ok) {
+                    const data = await res.json();
+                    // courses come from master_students grouped by course_name
+                    setCourseStreams(data.data || []);
+                }
+            } catch (e) {
+                console.error('Failed to load courses:', e);
+            }
+        };
+        loadCourses();
+    }, [authFetch]);
+
+    const handleCourseChange = (courseName: string) => {
+        setForm({
+            ...form,
+            course_stream_id: courseName, // Using course_name instead of ID
+            department: courseName
+        });
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.username || !form.email || !form.full_name || !form.temp_password) {
-            alert('All required fields must be filled');
+        if (!form.username || !form.email || !form.full_name || !form.temp_password || !form.course_stream_id) {
+            alert('All required fields must be filled including course selection');
             return;
         }
 
@@ -769,11 +819,18 @@ function AddFacultyModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
             const res = await authFetch(`${apiBase}/institute/faculty`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form)
+                body: JSON.stringify({
+                    username: form.username,
+                    email: form.email,
+                    full_name: form.full_name,
+                    department: form.department || 'General',
+                    position: form.position,
+                    temp_password: form.temp_password
+                })
             });
 
             if (res.ok) {
-                alert('Faculty added successfully! They will be able to login once approved by the university.');
+                alert('Faculty added successfully! When they login, they can manage students in the assigned course.');
                 onSuccess();
             } else {
                 const err = await res.json();
@@ -823,26 +880,41 @@ function AddFacultyModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
                             required
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                            <input
-                                type="text"
-                                value={form.department}
-                                onChange={e => setForm({ ...form, department: e.target.value })}
-                                className="w-full border border-gray-300 rounded-lg p-2.5"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
-                            <input
-                                type="text"
-                                value={form.position}
-                                onChange={e => setForm({ ...form, position: e.target.value })}
-                                className="w-full border border-gray-300 rounded-lg p-2.5"
-                                placeholder="e.g., Professor"
-                            />
-                        </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Course *</label>
+                        <select
+                            value={form.course_stream_id}
+                            onChange={e => handleCourseChange(e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg p-2.5 bg-white"
+                            required
+                        >
+                            <option value="">Select a course...</option>
+                            {courseStreams.length === 0 ? (
+                                <option disabled>No courses available</option>
+                            ) : (
+                                courseStreams.map((cs, i) => (
+                                    <option key={i} value={cs.course_name}>
+                                        {cs.course_name} ({cs.student_count || cs.count || 0} students)
+                                    </option>
+                                ))
+                            )}
+                        </select>
+                        <p className="text-xs text-gray-400 mt-1">Faculty will be assigned to this course and can manage its students.</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                        <select
+                            value={form.position}
+                            onChange={e => setForm({ ...form, position: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg p-2.5 bg-white"
+                        >
+                            <option value="">Select...</option>
+                            <option value="Professor">Professor</option>
+                            <option value="Associate Professor">Associate Professor</option>
+                            <option value="Assistant Professor">Assistant Professor</option>
+                            <option value="Lecturer">Lecturer</option>
+                            <option value="Guest Faculty">Guest Faculty</option>
+                        </select>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password *</label>
@@ -852,6 +924,7 @@ function AddFacultyModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
                             onChange={e => setForm({ ...form, temp_password: e.target.value })}
                             className="w-full border border-gray-300 rounded-lg p-2.5"
                             minLength={6}
+                            placeholder="Min 6 characters"
                             required
                         />
                     </div>
@@ -872,3 +945,149 @@ function AddFacultyModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
         </div>
     );
 }
+
+// Modal for assigning courses to faculty
+function AssignCourseModal({ authFetch, facultyId, facultyName, onClose, onSuccess }: {
+    authFetch: any;
+    facultyId: number;
+    facultyName: string;
+    onClose: () => void;
+    onSuccess: () => void
+}) {
+    const [loading, setLoading] = useState(false);
+    const [courseStreams, setCourseStreams] = useState<any[]>([]);
+    const [form, setForm] = useState({
+        course_stream_id: '',
+        semester: '',
+        subject_code: '',
+        academic_year: ''
+    });
+
+    useEffect(() => {
+        const loadCourseStreams = async () => {
+            try {
+                const res = await authFetch(`${apiBase}/institute/course-streams`);
+                if (res.ok) {
+                    const data = await res.json();
+                    // Filter only approved course streams
+                    const approved = (data.course_streams || []).filter((cs: any) => cs.status === 'approved');
+                    setCourseStreams(approved);
+                }
+            } catch (e) {
+                console.error('Failed to load course streams:', e);
+            }
+        };
+        loadCourseStreams();
+    }, [authFetch]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!form.course_stream_id) {
+            alert('Please select a course');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const res = await authFetch(`${apiBase}/institute/faculty-assignments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    faculty_id: facultyId,
+                    course_stream_id: parseInt(form.course_stream_id),
+                    semester: form.semester ? parseInt(form.semester) : null,
+                    subject_code: form.subject_code || null,
+                    academic_year: form.academic_year || null
+                })
+            });
+
+            if (res.ok) {
+                alert('Faculty assigned to course successfully!');
+                onSuccess();
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Failed to assign course');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Failed to assign course');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+                <h2 className="text-xl font-bold mb-2 text-gray-900">Assign Course to Faculty</h2>
+                <p className="text-sm text-gray-500 mb-6">Assigning to: <strong>{facultyName}</strong></p>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Course *</label>
+                        <select
+                            value={form.course_stream_id}
+                            onChange={e => setForm({ ...form, course_stream_id: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg p-2.5 bg-white"
+                            required
+                        >
+                            <option value="">Select a course...</option>
+                            {courseStreams.map((cs, i) => (
+                                <option key={i} value={cs.course_stream_id || cs.id}>
+                                    {cs.course_name} - {cs.stream}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
+                            <select
+                                value={form.semester}
+                                onChange={e => setForm({ ...form, semester: e.target.value })}
+                                className="w-full border border-gray-300 rounded-lg p-2.5 bg-white"
+                            >
+                                <option value="">All</option>
+                                {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                                    <option key={s} value={s}>Semester {s}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+                            <input
+                                type="text"
+                                value={form.academic_year}
+                                onChange={e => setForm({ ...form, academic_year: e.target.value })}
+                                className="w-full border border-gray-300 rounded-lg p-2.5"
+                                placeholder="e.g., 2024-25"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Subject Code (Optional)</label>
+                        <input
+                            type="text"
+                            value={form.subject_code}
+                            onChange={e => setForm({ ...form, subject_code: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg p-2.5"
+                            placeholder="e.g., CS101"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-4">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="px-4 py-2 bg-[#650C08] text-white rounded-lg hover:bg-[#8B1A1A] disabled:opacity-50"
+                        >
+                            {loading ? 'Assigning...' : 'Assign Course'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+

@@ -55,16 +55,18 @@ func (Submission) TableName() string { return "submissions" }
 func (User) TableName() string { return "users" }
 
 type Faculty struct {
-	FacultyID      int64      `gorm:"column:faculty_id;primaryKey;autoIncrement" json:"faculty_id"`
-	UserID         int64      `gorm:"column:user_id" json:"user_id"`
-	User           User       `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	Department     string     `gorm:"column:department" json:"department"`
-	Position       string     `gorm:"column:position" json:"position"`
-	InstituteID    int        `gorm:"column:institute_id" json:"institute_id"`
-	Institute      Institute  `gorm:"foreignKey:InstituteID" json:"institute,omitempty"`
-	ApprovalStatus string     `gorm:"column:approval_status;default:'pending'" json:"approval_status"` // pending, approved, rejected
-	ApprovedBy     *int64     `gorm:"column:approved_by" json:"approved_by"`
-	ApprovedAt     *time.Time `gorm:"column:approved_at" json:"approved_at"`
+	FacultyID      int64       `gorm:"column:faculty_id;primaryKey;autoIncrement" json:"faculty_id"`
+	UserID         int64       `gorm:"column:user_id" json:"user_id"`
+	User           User        `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Department     string      `gorm:"column:department" json:"department"`
+	DepartmentID   *int        `gorm:"column:department_id" json:"department_id"`
+	DepartmentRef  *Department `gorm:"foreignKey:DepartmentID" json:"department_ref,omitempty"`
+	Position       string      `gorm:"column:position" json:"position"`
+	InstituteID    int         `gorm:"column:institute_id" json:"institute_id"`
+	Institute      Institute   `gorm:"foreignKey:InstituteID" json:"institute,omitempty"`
+	ApprovalStatus string      `gorm:"column:approval_status;default:'pending'" json:"approval_status"` // pending, approved, rejected
+	ApprovedBy     *int64      `gorm:"column:approved_by" json:"approved_by"`
+	ApprovedAt     *time.Time  `gorm:"column:approved_at" json:"approved_at"`
 }
 
 func (Faculty) TableName() string { return "faculty" }
@@ -497,3 +499,34 @@ type MasterFeeType struct {
 
 func (MasterFeeType) TableName() string { return "master_fee_types" }
 
+// ======================== DEPARTMENT & FACULTY COURSE ASSIGNMENT ========================
+
+// Department represents a department in the university/institute
+type Department struct {
+	DepartmentID   int       `gorm:"column:department_id;primaryKey;autoIncrement" json:"department_id"`
+	DepartmentName string    `gorm:"column:department_name;not null" json:"department_name"`
+	DepartmentCode string    `gorm:"column:department_code" json:"department_code"`
+	InstituteID    *int      `gorm:"column:institute_id" json:"institute_id"` // NULL for global departments
+	Description    *string   `gorm:"column:description" json:"description"`
+	IsActive       bool      `gorm:"column:is_active;default:true" json:"is_active"`
+	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at"`
+}
+
+func (Department) TableName() string { return "departments" }
+
+// FacultyCourseAssignment maps faculty to courses they can teach
+type FacultyCourseAssignment struct {
+	AssignmentID   int64        `gorm:"column:assignment_id;primaryKey;autoIncrement" json:"assignment_id"`
+	FacultyID      int64        `gorm:"column:faculty_id;not null" json:"faculty_id"`
+	Faculty        Faculty      `gorm:"foreignKey:FacultyID" json:"faculty,omitempty"`
+	CourseStreamID int          `gorm:"column:course_stream_id;not null" json:"course_stream_id"`
+	CourseStream   CourseStream `gorm:"foreignKey:CourseStreamID;references:ID" json:"course_stream,omitempty"`
+	Semester       *int         `gorm:"column:semester" json:"semester"`
+	SubjectCode    *string      `gorm:"column:subject_code" json:"subject_code"`
+	AcademicYear   *string      `gorm:"column:academic_year" json:"academic_year"`
+	IsActive       bool         `gorm:"column:is_active;default:true" json:"is_active"`
+	AssignedAt     time.Time    `gorm:"column:assigned_at" json:"assigned_at"`
+	AssignedBy     *int64       `gorm:"column:assigned_by" json:"assigned_by"`
+}
+
+func (FacultyCourseAssignment) TableName() string { return "faculty_course_assignments" }

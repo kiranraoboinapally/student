@@ -84,18 +84,21 @@ func GetPendingApprovals(c *gin.Context) {
 func GetPendingApprovalCounts(c *gin.Context) {
 	db := config.DB
 
-	var facultyCount, courseCount, marksCount int64
+	var facultyCount, courseCount, marksCount, studentCount int64
 	db.Model(&models.Faculty{}).Where("approval_status = ?", "pending").Count(&facultyCount)
 	db.Model(&models.CollegeCourseApproval{}).Where("status = ?", "pending").Count(&courseCount)
 	db.Model(&models.InternalMark{}).Where("status = ?", "submitted").Count(&marksCount)
+	db.Model(&models.User{}).Where("role_id = ? AND status = ?", 5, "inactive").Count(&studentCount)
 
 	c.JSON(http.StatusOK, gin.H{
-		"pending_faculty_approvals": facultyCount,
-		"pending_course_requests":   courseCount,
-		"pending_marks_submissions": marksCount,
-		"total_pending":             facultyCount + courseCount + marksCount,
+		"pending_faculty_approvals":  facultyCount,
+		"pending_course_requests":    courseCount,
+		"pending_marks_submissions":  marksCount,
+		"pending_student_registrations": studentCount,
+		"total_pending":              facultyCount + courseCount + marksCount + studentCount,
 	})
 }
+
 
 // ApproveFacultyRequest for approving/rejecting faculty accounts
 type ApproveFacultyRequest struct {
@@ -451,5 +454,163 @@ func GetMasterFeeTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"fee_types": feeTypes,
 		"total":     len(feeTypes),
+	})
+}
+
+// ======================== STUDENT REGISTRATION APPROVALS ========================
+
+// GetPendingStudentRegistrations returns students awaiting approval
+func GetPendingStudentRegistrations(c *gin.Context) {
+	db := config.DB
+
+	var pendingStudents []struct {
+		UserID    int64     `json:"user_id"`
+		Username  string    `json:"username"`
+		Email     string    `json:"email"`
+		FullName  string    `json:"full_name"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+
+	db.Table("users").
+		Select("user_id, username, email, full_name, created_at").
+		Where("role_id = ? AND status = ?", 5, "inactive").
+		Order("created_at DESC").
+		Scan(&pendingStudents)
+
+	// Also get enrollment details from master_students
+	var enrichedStudents []map[string]interface{}
+	for _, student := range pendingStudents {
+		// Try to match by username (enrollment number)
+		var masterStudent struct {
+			CourseName    *string `json:"course_name"`
+			InstituteName *string `json:"institute_name"`
+			Session       *string `json:"session"`
+		}
+		db.Table("master_students").
+			Select("course_name, institute_name, session").
+			Where("enrollment_number = ?", student.Username).
+			Scan(&masterStudent)
+
+		enriched := map[string]interface{}{
+			"user_id":        student.UserID,
+			"username":       student.Username,
+			"email":          student.Email,
+			"full_name":      student.FullName,
+			"created_at":     student.CreatedAt,
+			"course_name":    masterStudent.CourseName,
+			"institute_name": masterStudent.InstituteName,
+			"session":        masterStudent.Session,
+		}
+		enrichedStudents = append(enrichedStudents, enriched)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"pending_students": enrichedStudents,
+		"total":            len(enrichedStudents),
+	})
+}
+
+// ApproveStudentRequest for approving/rejecting student registrations
+type ApproveStudentRequest struct {
+	UserID  int64  `json:"user_id" binding:"required"`
+	Action  string `json:"action" binding:"required"` // approve, reject
+	Remarks string `json:"remarks"`
+}
+
+// ApproveStudentRegistration approves or rejects a student registration
+func ApproveStudentRegistration(c *gin.Context) {
+	var req ApproveStudentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action must be 'approve' or 'reject'"})
+		return
+	}
+
+	db := config.DB
+
+	// Verify user is a student with inactive status
+	var user models.User
+	if err := db.Where("user_id = ? AND role_id = ? AND status = ?", req.UserID, 5, "inactive").First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "student not found or already processed"})
+		return
+	}
+
+	newStatus := "active"
+	if req.Action == "reject" {
+		newStatus = "rejected"
+	}
+
+	if err := db.Model(&models.User{}).
+		Where("user_id = ?", req.UserID).
+		Update("status", newStatus).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update student status"})
+		return
+	}
+
+	SendAdminNotification("student_approval_status", gin.H{
+		"user_id": req.UserID,
+		"status":  newStatus,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "student registration " + req.Action + "d successfully",
+		"user_id": req.UserID,
+		"status":  newStatus,
+	})
+}
+
+// BulkApproveStudentsRequest for approving multiple students at once
+type BulkApproveStudentsRequest struct {
+	UserIDs []int64 `json:"user_ids" binding:"required"`
+	Action  string  `json:"action" binding:"required"` // approve, reject
+}
+
+// BulkApproveStudentRegistrations approves or rejects multiple student registrations
+func BulkApproveStudentRegistrations(c *gin.Context) {
+	var req BulkApproveStudentsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Action != "approve" && req.Action != "reject" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action must be 'approve' or 'reject'"})
+		return
+	}
+
+	if len(req.UserIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no user IDs provided"})
+		return
+	}
+
+	db := config.DB
+
+	newStatus := "active"
+	if req.Action == "reject" {
+		newStatus = "rejected"
+	}
+
+	result := db.Model(&models.User{}).
+		Where("user_id IN ? AND role_id = ? AND status = ?", req.UserIDs, 5, "inactive").
+		Update("status", newStatus)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update student statuses"})
+		return
+	}
+
+	SendAdminNotification("bulk_student_approval", gin.H{
+		"count":  result.RowsAffected,
+		"status": newStatus,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "students " + req.Action + "d successfully",
+		"affected_count": result.RowsAffected,
+		"status":         newStatus,
 	})
 }
