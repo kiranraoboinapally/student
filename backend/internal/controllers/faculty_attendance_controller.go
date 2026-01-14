@@ -179,12 +179,17 @@ func FacultyGetStudents(c *gin.Context) {
 		Where("faculty_course_assignments.faculty_id = ? AND faculty_course_assignments.is_active = ?", faculty.FacultyID, true).
 		Scan(&assignedCourses)
 
+	// If no course_stream assignments, use faculty's department field (which stores course_name)
+	if len(assignedCourses) == 0 && faculty.Department != "" && faculty.Department != "General" {
+		assignedCourses = []string{faculty.Department}
+	}
+
 	// Optional course filter from query
 	courseFilter := c.Query("course_name")
 
 	var students []models.MasterStudent
 
-	// If faculty has course assignments, filter by them
+	// If faculty has course assignments (via course_assignments table OR department field), filter by them
 	if len(assignedCourses) > 0 {
 		query := db.Where("institute_name = ?", instituteName)
 		
@@ -208,8 +213,7 @@ func FacultyGetStudents(c *gin.Context) {
 		
 		query.Order("student_name ASC").Find(&students)
 	} else {
-		// No course assignments - return empty or all students (based on policy)
-		// For now, return empty with a message
+		// No course assignments - return empty with a message
 		c.JSON(http.StatusOK, gin.H{
 			"students":        []models.MasterStudent{},
 			"total":           0,
@@ -226,3 +230,4 @@ func FacultyGetStudents(c *gin.Context) {
 		"institute_name":   instituteName,
 	})
 }
+
