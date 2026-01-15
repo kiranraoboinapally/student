@@ -241,9 +241,8 @@ export default function InstituteDashboard(): React.ReactNode {
 
     const studentTotalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
     const studentIndexOfLast = studentCurrentPage * ITEMS_PER_PAGE;
-    const studentIndexOfFirst = studentCurrentPage * ITEMS_PER_PAGE - ITEMS_PER_PAGE;
+    const studentIndexOfFirst = studentIndexOfLast - ITEMS_PER_PAGE; // More robust calculation
     const currentStudents = filteredStudents.slice(studentIndexOfFirst, studentIndexOfLast);
-
     // ─── Faculty filtering & pagination logic ─────────────────────────────────
     const filteredFaculty = useMemo(() => {
         let result = [...faculty];
@@ -370,7 +369,7 @@ export default function InstituteDashboard(): React.ReactNode {
                     </div>
                 </header>
 
-                <main className="flex-1 p-8 overflow-y-auto">
+                <main className="flex-1 p-2 overflow-y-auto">
                     <div className="max-w-7xl mx-auto">
                         {activeTab === "overview" && (
                             <div className="space-y-6 animate-fadeIn">
@@ -463,7 +462,7 @@ export default function InstituteDashboard(): React.ReactNode {
                         )}
 
                         {activeTab === "students" && (
-                            <div className="space-y-6 animate-fadeIn">
+                            <div className="space-y-2 animate-fadeIn">
                                 <div className="flex justify-between items-center flex-wrap gap-4">
                                     <h2 className="text-2xl font-bold text-gray-800">Student Management</h2>
                                     <button
@@ -474,7 +473,7 @@ export default function InstituteDashboard(): React.ReactNode {
                                     </button>
                                 </div>
 
-                                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                                <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-100">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
@@ -575,15 +574,19 @@ export default function InstituteDashboard(): React.ReactNode {
                                                                     {s.program_pattern || '-'} • {s.duration_years ? `${s.duration_years} year${s.duration_years > 1 ? 's' : ''}` : '-'}
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                                                                        s.status === 'Active' ? 'bg-green-100 text-green-800' :
-                                                                        s.status === 'PassOutDegreePending' ? 'bg-amber-100 text-amber-800' :
-                                                                        s.status === 'Alumni' ? 'bg-blue-100 text-blue-800' :
-                                                                        'bg-gray-100 text-gray-800'
-                                                                    }`}>
-                                                                        {s.status === 'PassOutDegreePending' ? 'Passout / Degree Pending' : s.status || 'Active'}
+                                                                    <span
+                                                                        className={`px-2 py-1 text-xs rounded-full font-medium whitespace-nowrap ${s.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                                                            s.status === 'PassOutDegreePending' ? 'bg-amber-100 text-amber-800' :
+                                                                                s.status === 'Alumni' ? 'bg-blue-100 text-blue-800' :
+                                                                                    'bg-gray-100 text-gray-800'
+                                                                            }`}
+                                                                    >
+                                                                        {s.status === 'PassOutDegreePending'
+                                                                            ? 'Passout / Degree Pending'
+                                                                            : s.status || 'Active'}
                                                                     </span>
                                                                 </td>
+
                                                             </tr>
                                                         ))}
                                                     </tbody>
@@ -662,43 +665,55 @@ export default function InstituteDashboard(): React.ReactNode {
                                                         <tr>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Position</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Courses</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned Course</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         {currentFaculty.map((f, i) => (
                                                             <tr key={i} className="hover:bg-gray-50">
-                                                                <td className="px-6 py-4 text-sm font-medium text-gray-900">{f.full_name}</td>
-                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.department || 'General'}</td>
-                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.position || 'Faculty'}</td>
-                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.email}</td>
+                                                                <td className="px-6 py-4">
+                                                                    <div className="text-sm font-medium text-gray-900">{f.full_name}</div>
+                                                                    <div className="text-xs text-gray-500">{f.email}</div>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                                    {/* Re-added Department column */}
+                                                                    {f.department || 'General'}
+                                                                </td>
                                                                 <td className="px-6 py-4 text-sm text-gray-500">{f.username}</td>
-                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.course_name || 'Not Assigned'}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                                    {f.course_name || 'Not Assigned'}
+                                                                </td>
                                                                 <td className="px-6 py-4">
                                                                     <span
-                                                                        className={`px-3 py-1 text-xs rounded-full font-medium ${
-                                                                            f.approval_status === 'approved'
-                                                                                ? 'bg-green-100 text-green-700'
-                                                                                : f.approval_status === 'rejected'
+                                                                        className={`px-3 py-1 text-xs rounded-full font-medium ${f.approval_status === 'approved'
+                                                                            ? 'bg-green-100 text-green-700'
+                                                                            : f.approval_status === 'rejected'
                                                                                 ? 'bg-red-100 text-red-700'
                                                                                 : 'bg-yellow-100 text-yellow-700'
-                                                                        }`}
+                                                                            }`}
                                                                     >
-                                                                        {f.approval_status === 'approved' && <CheckCircle size={12} className="inline mr-1" />}
-                                                                        {f.approval_status === 'pending' && <Clock size={12} className="inline mr-1" />}
-                                                                        {f.approval_status === 'rejected' && <XCircle size={12} className="inline mr-1" />}
                                                                         {f.approval_status || 'Pending'}
                                                                     </span>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-right">
+                                                                    {f.approval_status === 'approved' && (
+                                                                        <button
+                                                                            onClick={() => setAssignCourseModal({ facultyId: f.id, facultyName: f.full_name })}
+                                                                            className="text-[#650C08] hover:text-[#8B1A1A] text-sm font-semibold flex items-center justify-end gap-1 ml-auto"
+                                                                        >
+                                                                            <Plus size={14} /> Assign Course
+                                                                        </button>
+                                                                    )}
                                                                 </td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
                                                 </table>
                                             </div>
+
                                             <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 bg-gray-50">
                                                 <div className="text-sm text-gray-700">
                                                     Showing <span className="font-medium">{facultyIndexOfFirst + 1}</span> to{" "}
@@ -1098,11 +1113,12 @@ function AddStudentModal({ authFetch, onClose, onSuccess, availableCourses }: { 
                         <select
                             value={form.course_name}
                             onChange={e => setForm({ ...form, course_name: e.target.value })}
-                            className="w-full border border-gray-300 rounded-lg p-2.5"
+                            className="w-full border border-gray-300 rounded-lg p-2.5 bg-white"
                             required
                         >
                             <option value="">Select Course</option>
-                            {availableCourses.map((course, i) => (
+                            {/* filter(Boolean) ensures we don't show empty rows */}
+                            {availableCourses.filter(Boolean).map((course, i) => (
                                 <option key={i} value={course}>
                                     {course}
                                 </option>
