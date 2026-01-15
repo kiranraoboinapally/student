@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth, apiBase } from "../../auth/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import {
@@ -38,6 +38,15 @@ export default function InstituteDashboard(): React.ReactNode {
     const [marks, setMarks] = useState<any[]>([]);
     const [assignCourseCourses, setAssignCourseCourses] = useState<any[]>([]);
 
+    // Student Management - filters & pagination states
+    const [searchTerm, setSearchTerm] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
+    const [courseFilter, setCourseFilter] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
+    const [loadingStudents, setLoadingStudents] = useState(false);
+
+    const ITEMS_PER_PAGE = 10;
+
     // Modals
     const [showAddStudentModal, setShowAddStudentModal] = useState(false);
     const [showAddFacultyModal, setShowAddFacultyModal] = useState(false);
@@ -56,29 +65,35 @@ export default function InstituteDashboard(): React.ReactNode {
             setLoading(false);
         }
     }, [authFetch]);
-useEffect(() => {
-  const loadAssignCourses = async () => {
-    try {
-      const res = await authFetch(`${apiBase}/institute/courses`);
-      if (res.ok) {
-        const data = await res.json();
-        setAssignCourseCourses(data.data || data.courses || []);
-      }
-    } catch (e) {
-      console.error("Failed to fetch courses:", e);
-    }
-  };
 
-  loadAssignCourses();
-}, [authFetch]);
+    useEffect(() => {
+        const loadAssignCourses = async () => {
+            try {
+                const res = await authFetch(`${apiBase}/institute/courses`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAssignCourseCourses(data.data || data.courses || []);
+                }
+            } catch (e) {
+                console.error("Failed to fetch courses:", e);
+            }
+        };
+
+        loadAssignCourses();
+    }, [authFetch]);
 
     const loadStudents = useCallback(async () => {
         try {
+            setLoadingStudents(true);
             const res = await authFetch(`${apiBase}/institute/students`);
-            const data = await res.json();
-            setStudents(data.data || data.students || []);
+            if (res.ok) {
+                const data = await res.json();
+                setStudents(data.data || data.students || []);
+            }
         } catch (e) {
             console.error(e);
+        } finally {
+            setLoadingStudents(false);
         }
     }, [authFetch]);
 
@@ -176,6 +191,43 @@ useEffect(() => {
             <span className="font-medium">{label}</span>
         </button>
     );
+
+    // ─── Student filtering & pagination logic ─────────────────────────────────
+    const filteredStudents = useMemo(() => {
+        let result = [...students];
+
+        // Search by name or enrollment
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase().trim();
+            result = result.filter(s =>
+                (s.full_name || s.student_name || "").toLowerCase().includes(term) ||
+                String(s.enrollment_number || "").includes(term)
+            );
+        }
+
+        // Status filter
+        if (statusFilter) {
+            result = result.filter(s => (s.status || "Active") === statusFilter);
+        }
+
+        // Course filter
+        if (courseFilter) {
+            result = result.filter(s => s.course_name === courseFilter);
+        }
+
+        return result;
+    }, [students, searchTerm, statusFilter, courseFilter]);
+
+    const availableCourses = useMemo(() => {
+        const set = new Set(students.map(s => s.course_name).filter(Boolean));
+        return Array.from(set).sort() as string[];
+    }, [students]);
+
+    const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
+    const indexOfLast = currentPage * ITEMS_PER_PAGE;
+    const indexOfFirst = indexOfLast - ITEMS_PER_PAGE;
+    const currentPageStudents = filteredStudents.slice(indexOfFirst, indexOfLast);
+    // ─────────────────────────────────────────────────────────────────────────
 
     if (loading) {
         return (
@@ -348,140 +400,259 @@ useEffect(() => {
                             </div>
                         )}
 
+                        {/* ────────────────────────────────────────────────
+                            IMPROVED STUDENTS TAB
+                        ──────────────────────────────────────────────── */}
                         {activeTab === "students" && (
                             <div className="space-y-6 animate-fadeIn">
-                                <div className="flex justify-between items-center">
+                                <div className="flex justify-between items-center flex-wrap gap-4">
                                     <h2 className="text-2xl font-bold text-gray-800">Student Management</h2>
                                     <button
                                         onClick={() => setShowAddStudentModal(true)}
-                                        className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-md transition-all"
+                                        className="bg-[#650C08] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-md transition-all"
                                     >
                                         <Plus size={18} /> Add Student
                                     </button>
                                 </div>
 
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-gray-50">
-                                                <tr>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Enrollment</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
-                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="bg-white divide-y divide-gray-200">
-                                                {students.map((s, i) => (
-                                                    <tr key={i} className="hover:bg-gray-50">
-                                                        <td className="px-6 py-4 text-sm font-mono text-gray-900">{s.enrollment_number}</td>
-                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{s.student_name || s.full_name}</td>
-                                                        <td className="px-6 py-4 text-sm text-gray-500">{s.course_name || '-'}</td>
-                                                        <td className="px-6 py-4">
-                                                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                                                                {s.status || 'Active'}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
+                                {/* Filters */}
+                                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                                            <input
+                                                type="text"
+                                                value={searchTerm}
+                                                onChange={(e) => {
+                                                    setSearchTerm(e.target.value);
+                                                    setCurrentPage(1);
+                                                }}
+                                                placeholder="Name or Enrollment..."
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
+                                            />
+                                        </div>
+
+<div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+    <select
+        value={statusFilter}
+        onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1);
+        }}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
+    >
+        <option value="">All Statuses</option>
+        <option value="Active">Active</option>
+        <option value="PassOutDegreePending">Passout / Degree Pending</option>
+        <option value="Alumni">Alumni</option>
+    </select>
+</div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
+                                            <select
+                                                value={courseFilter}
+                                                onChange={(e) => {
+                                                    setCourseFilter(e.target.value);
+                                                    setCurrentPage(1);
+                                                }}
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
+                                            >
+                                                <option value="">All Courses</option>
+                                                {availableCourses.map(course => (
+                                                    <option key={course} value={course}>{course}</option>
                                                 ))}
-                                                {students.length === 0 && (
-                                                    <tr><td colSpan={4} className="px-6 py-12 text-center text-gray-500">No students found.</td></tr>
-                                                )}
-                                            </tbody>
-                                        </table>
+                                            </select>
+                                        </div>
+
+                                        <div className="flex items-end">
+                                            <p className="text-sm text-gray-600">
+                                                Showing {filteredStudents.length} of {students.length} students
+                                            </p>
+                                        </div>
                                     </div>
+                                </div>
+
+                                {/* Table */}
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                    {loadingStudents ? (
+                                        <div className="py-20 text-center text-gray-500">
+                                            <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-[#650C08]" />
+                                            <p>Loading students...</p>
+                                        </div>
+                                    ) : filteredStudents.length === 0 ? (
+                                        <div className="py-16 text-center text-gray-500">
+                                            <Users size={48} className="mx-auto mb-4 text-gray-300" />
+                                            <p className="text-lg font-medium">No students found</p>
+                                            <p className="text-sm mt-1">Try adjusting filters or add new student</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead className="bg-gray-50">
+                                                        <tr>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Enrollment</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pattern / Duration</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                        {currentPageStudents.map((s, i) => (
+                                                            <tr key={s.student_id || i} className="hover:bg-gray-50">
+                                                                <td className="px-6 py-4 text-sm font-mono text-gray-900">{s.enrollment_number}</td>
+                                                                <td className="px-6 py-4">
+                                                                    <div className="font-medium text-gray-900">{s.full_name || s.student_name || '-'}</div>
+                                                                    <div className="text-xs text-gray-500">{s.email || '-'}</div>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{s.course_name || '-'}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{s.batch || '-'}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                                    {s.program_pattern || '-'} • {s.duration_years ? `${s.duration_years} year${s.duration_years > 1 ? 's' : ''}` : '-'}
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                                                                        s.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                                                        s.status === 'PassoutDegreePending' ? 'bg-amber-100 text-amber-800' :
+                                                                        s.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                                                                        'bg-gray-100 text-gray-800'
+                                                                    }`}>
+                                                                        {s.status || 'Active'}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Pagination */}
+                                            {totalPages > 1 && (
+                                                <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 bg-gray-50">
+                                                    <div className="text-sm text-gray-700">
+                                                        Showing <span className="font-medium">{indexOfFirst + 1}</span> to{" "}
+                                                        <span className="font-medium">{Math.min(indexOfLast, filteredStudents.length)}</span> of{" "}
+                                                        <span className="font-medium">{filteredStudents.length}</span>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                                                            disabled={currentPage === 1}
+                                                            className="px-4 py-2 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            Previous
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                                                            disabled={currentPage === totalPages}
+                                                            className="px-4 py-2 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            Next
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         )}
 
-{activeTab === "faculty" && (
-  <div className="space-y-6 animate-fadeIn">
-    <div className="flex justify-between items-center">
-      <h2 className="text-2xl font-bold text-gray-800">Faculty Management</h2>
-      <button
-        onClick={() => setShowAddFacultyModal(true)}
-        className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-md transition-all"
-      >
-        <Plus size={18} /> Add Faculty
-      </button>
-    </div>
+                        {/* ────────────────────────────────────────────────
+                            The rest of your tabs remain unchanged
+                        ──────────────────────────────────────────────── */}
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {faculty.map((f, i) => (
-        <div
-          key={i}
-          className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all"
-        >
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-14 h-14 rounded-full bg-[#650C08]/10 flex items-center justify-center text-[#650C08] text-xl font-bold">
-              {(f.full_name || 'F').charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-900">{f.full_name}</h3>
-              <p className="text-sm text-gray-500">{f.position || 'Faculty'}</p>
-            </div>
-          </div>
+                        {activeTab === "faculty" && (
+                            <div className="space-y-6 animate-fadeIn">
+                                <div className="flex justify-between items-center">
+                                    <h2 className="text-2xl font-bold text-gray-800">Faculty Management</h2>
+                                    <button
+                                        onClick={() => setShowAddFacultyModal(true)}
+                                        className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-md transition-all"
+                                    >
+                                        <Plus size={18} /> Add Faculty
+                                    </button>
+                                </div>
 
-          <div className="space-y-2 text-sm text-gray-600">
-            <p><span className="text-gray-400">Dept:</span> {f.department || 'General'}</p>
-            <p><span className="text-gray-400">Email:</span> {f.email}</p>
-            <p><span className="text-gray-400">Username:</span> {f.username}</p>
-            <p>
-              <span className="text-gray-400">Courses:</span> {f.course_name || 'Not Assigned'}
-            </p>
-          </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {faculty.map((f, i) => (
+                                        <div
+                                            key={i}
+                                            className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all"
+                                        >
+                                            <div className="flex items-center gap-4 mb-4">
+                                                <div className="w-14 h-14 rounded-full bg-[#650C08]/10 flex items-center justify-center text-[#650C08] text-xl font-bold">
+                                                    {(f.full_name || 'F').charAt(0).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-gray-900">{f.full_name}</h3>
+                                                    <p className="text-sm text-gray-500">{f.position || 'Faculty'}</p>
+                                                </div>
+                                            </div>
 
-          <div className="mt-4 pt-4 border-t flex justify-between items-center">
-            <span
-              className={`px-3 py-1 text-xs rounded-full font-medium ${
-                f.approval_status === 'approved'
-                  ? 'bg-green-100 text-green-700'
-                  : f.approval_status === 'rejected'
-                  ? 'bg-red-100 text-red-700'
-                  : 'bg-yellow-100 text-yellow-700'
-              }`}
-            >
-              {f.approval_status === 'approved' && <CheckCircle size={12} className="inline mr-1" />}
-              {f.approval_status === 'pending' && <Clock size={12} className="inline mr-1" />}
-              {f.approval_status === 'rejected' && <XCircle size={12} className="inline mr-1" />}
-              {f.approval_status || 'Pending'}
-            </span>
+                                            <div className="space-y-2 text-sm text-gray-600">
+                                                <p><span className="text-gray-400">Dept:</span> {f.department || 'General'}</p>
+                                                <p><span className="text-gray-400">Email:</span> {f.email}</p>
+                                                <p><span className="text-gray-400">Username:</span> {f.username}</p>
+                                                <p>
+                                                    <span className="text-gray-400">Courses:</span> {f.course_name || 'Not Assigned'}
+                                                </p>
+                                            </div>
 
-            {f.approval_status === 'approved' && (
-              <button
-                onClick={() =>
-                  setAssignCourseModal({
-                    facultyId: f.faculty_id || f.user_id,
-                    facultyName: f.full_name,
-                  })
-                }
-                className="text-sm text-[#650C08] hover:underline font-medium"
-              >
-                Assign Courses
-              </button>
-            )}
-          </div>
-        </div>
-      ))}
+                                            <div className="mt-4 pt-4 border-t flex justify-between items-center">
+                                                <span
+                                                    className={`px-3 py-1 text-xs rounded-full font-medium ${
+                                                        f.approval_status === 'approved'
+                                                            ? 'bg-green-100 text-green-700'
+                                                            : f.approval_status === 'rejected'
+                                                            ? 'bg-red-100 text-red-700'
+                                                            : 'bg-yellow-100 text-yellow-700'
+                                                    }`}
+                                                >
+                                                    {f.approval_status === 'approved' && <CheckCircle size={12} className="inline mr-1" />}
+                                                    {f.approval_status === 'pending' && <Clock size={12} className="inline mr-1" />}
+                                                    {f.approval_status === 'rejected' && <XCircle size={12} className="inline mr-1" />}
+                                                    {f.approval_status || 'Pending'}
+                                                </span>
 
-      {faculty.length === 0 && (
-        <div className="col-span-full flex flex-col items-center justify-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-          <GraduationCap size={48} className="text-gray-300 mb-4" />
-          <p className="text-gray-500">No faculty members found</p>
-          <button
-            onClick={() => setShowAddFacultyModal(true)}
-            className="mt-4 text-[#650C08] font-medium hover:underline"
-          >
-            Add your first faculty member
-          </button>
-        </div>
-      )}
-    </div>
+                                                {f.approval_status === 'approved' && (
+                                                    <button
+                                                        onClick={() =>
+                                                            setAssignCourseModal({
+                                                                facultyId: f.faculty_id || f.user_id,
+                                                                facultyName: f.full_name,
+                                                            })
+                                                        }
+                                                        className="text-sm text-[#650C08] hover:underline font-medium"
+                                                    >
+                                                        Assign Courses
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
 
-    {/* Assign Courses Modal */}
-  </div>
-)}
+                                    {faculty.length === 0 && (
+                                        <div className="col-span-full flex flex-col items-center justify-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
+                                            <GraduationCap size={48} className="text-gray-300 mb-4" />
+                                            <p className="text-gray-500">No faculty members found</p>
+                                            <button
+                                                onClick={() => setShowAddFacultyModal(true)}
+                                                className="mt-4 text-[#650C08] font-medium hover:underline"
+                                            >
+                                                Add your first faculty member
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
 
+                                {/* Assign Courses Modal */}
+                            </div>
+                        )}
 
                         {activeTab === "courses" && (
                             <div className="space-y-6 animate-fadeIn">
@@ -654,18 +825,18 @@ useEffect(() => {
             )}
 
             {/* Assign Course Modal */}
-          {assignCourseModal && (
-  <AssignCourseModal
-    authFetch={authFetch}
-    facultyId={assignCourseModal.facultyId}
-    facultyName={assignCourseModal.facultyName}
-    onClose={() => setAssignCourseModal(null)}
-    onSuccess={() => {
-      setAssignCourseModal(null);
-      loadFaculty();
-    }}
-  />
-)}
+            {assignCourseModal && (
+                <AssignCourseModal
+                    authFetch={authFetch}
+                    facultyId={assignCourseModal.facultyId}
+                    facultyName={assignCourseModal.facultyName}
+                    onClose={() => setAssignCourseModal(null)}
+                    onSuccess={() => {
+                        setAssignCourseModal(null);
+                        loadFaculty();
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -1001,21 +1172,21 @@ function AssignCourseModal({ authFetch, facultyId, facultyName, onClose, onSucce
         academic_year: ''
     });
 
-useEffect(() => {
-  const loadCourseStreams = async () => {
-    try {
-      const res = await authFetch(`${apiBase}/institute/courses`);
-      if (res.ok) {
-        const data = await res.json();
-        setCourseStreams(data.data || []);
-      }
-    } catch (e) {
-      console.error('Failed to load courses:', e);
-    }
-  };
+    useEffect(() => {
+        const loadCourseStreams = async () => {
+            try {
+                const res = await authFetch(`${apiBase}/institute/courses`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setCourseStreams(data.data || []);
+                }
+            } catch (e) {
+                console.error('Failed to load courses:', e);
+            }
+        };
 
-  loadCourseStreams();
-}, [authFetch]);
+        loadCourseStreams();
+    }, [authFetch]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1070,8 +1241,8 @@ useEffect(() => {
                             <option value="">Select a course...</option>
                             {courseStreams.map((cs, i) => (
                                 <option key={i} value={cs.course_name}>
-  {cs.course_name} ({cs.student_count})
-</option>
+                                    {cs.course_name} ({cs.student_count})
+                                </option>
                             ))}
                         </select>
                     </div>
@@ -1127,4 +1298,3 @@ useEffect(() => {
         </div>
     );
 }
-
