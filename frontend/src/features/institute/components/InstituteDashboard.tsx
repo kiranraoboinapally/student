@@ -36,6 +36,7 @@ export default function InstituteDashboard(): React.ReactNode {
     const [fees, setFees] = useState<any[]>([]);
     const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
     const [marks, setMarks] = useState<any[]>([]);
+    const [assignCourseCourses, setAssignCourseCourses] = useState<any[]>([]);
 
     // Modals
     const [showAddStudentModal, setShowAddStudentModal] = useState(false);
@@ -55,6 +56,21 @@ export default function InstituteDashboard(): React.ReactNode {
             setLoading(false);
         }
     }, [authFetch]);
+useEffect(() => {
+  const loadAssignCourses = async () => {
+    try {
+      const res = await authFetch(`${apiBase}/institute/courses`);
+      if (res.ok) {
+        const data = await res.json();
+        setAssignCourseCourses(data.data || data.courses || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch courses:", e);
+    }
+  };
+
+  loadAssignCourses();
+}, [authFetch]);
 
     const loadStudents = useCallback(async () => {
         try {
@@ -378,72 +394,94 @@ export default function InstituteDashboard(): React.ReactNode {
                             </div>
                         )}
 
-                        {activeTab === "faculty" && (
-                            <div className="space-y-6 animate-fadeIn">
-                                <div className="flex justify-between items-center">
-                                    <h2 className="text-2xl font-bold text-gray-800">Faculty Management</h2>
-                                    <button
-                                        onClick={() => setShowAddFacultyModal(true)}
-                                        className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-md transition-all"
-                                    >
-                                        <Plus size={18} /> Add Faculty
-                                    </button>
-                                </div>
+{activeTab === "faculty" && (
+  <div className="space-y-6 animate-fadeIn">
+    <div className="flex justify-between items-center">
+      <h2 className="text-2xl font-bold text-gray-800">Faculty Management</h2>
+      <button
+        onClick={() => setShowAddFacultyModal(true)}
+        className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-md transition-all"
+      >
+        <Plus size={18} /> Add Faculty
+      </button>
+    </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {faculty.map((f, i) => (
-                                        <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all">
-                                            <div className="flex items-center gap-4 mb-4">
-                                                <div className="w-14 h-14 rounded-full bg-[#650C08]/10 flex items-center justify-center text-[#650C08] text-xl font-bold">
-                                                    {(f.full_name || 'F').charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-bold text-gray-900">{f.full_name}</h3>
-                                                    <p className="text-sm text-gray-500">{f.position || 'Faculty'}</p>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-2 text-sm text-gray-600">
-                                                <p><span className="text-gray-400">Dept:</span> {f.department || 'General'}</p>
-                                                <p><span className="text-gray-400">Email:</span> {f.email}</p>
-                                            </div>
-                                            <div className="mt-4 pt-4 border-t flex justify-between items-center">
-                                                <span className={`px-3 py-1 text-xs rounded-full font-medium ${f.approval_status === 'approved'
-                                                    ? 'bg-green-100 text-green-700'
-                                                    : f.approval_status === 'rejected'
-                                                        ? 'bg-red-100 text-red-700'
-                                                        : 'bg-yellow-100 text-yellow-700'
-                                                    }`}>
-                                                    {f.approval_status === 'approved' && <CheckCircle size={12} className="inline mr-1" />}
-                                                    {f.approval_status === 'pending' && <Clock size={12} className="inline mr-1" />}
-                                                    {f.approval_status === 'rejected' && <XCircle size={12} className="inline mr-1" />}
-                                                    {f.approval_status || 'Pending'}
-                                                </span>
-                                                {f.approval_status === 'approved' && (
-                                                    <button
-                                                        onClick={() => setAssignCourseModal({ facultyId: f.faculty_id || f.user_id, facultyName: f.full_name })}
-                                                        className="text-sm text-[#650C08] hover:underline font-medium"
-                                                    >
-                                                        Assign Courses
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {faculty.length === 0 && (
-                                        <div className="col-span-full flex flex-col items-center justify-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-                                            <GraduationCap size={48} className="text-gray-300 mb-4" />
-                                            <p className="text-gray-500">No faculty members found</p>
-                                            <button
-                                                onClick={() => setShowAddFacultyModal(true)}
-                                                className="mt-4 text-[#650C08] font-medium hover:underline"
-                                            >
-                                                Add your first faculty member
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {faculty.map((f, i) => (
+        <div
+          key={i}
+          className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all"
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-14 h-14 rounded-full bg-[#650C08]/10 flex items-center justify-center text-[#650C08] text-xl font-bold">
+              {(f.full_name || 'F').charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">{f.full_name}</h3>
+              <p className="text-sm text-gray-500">{f.position || 'Faculty'}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2 text-sm text-gray-600">
+            <p><span className="text-gray-400">Dept:</span> {f.department || 'General'}</p>
+            <p><span className="text-gray-400">Email:</span> {f.email}</p>
+            <p><span className="text-gray-400">Username:</span> {f.username}</p>
+            <p>
+              <span className="text-gray-400">Courses:</span> {f.course_name || 'Not Assigned'}
+            </p>
+          </div>
+
+          <div className="mt-4 pt-4 border-t flex justify-between items-center">
+            <span
+              className={`px-3 py-1 text-xs rounded-full font-medium ${
+                f.approval_status === 'approved'
+                  ? 'bg-green-100 text-green-700'
+                  : f.approval_status === 'rejected'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-yellow-100 text-yellow-700'
+              }`}
+            >
+              {f.approval_status === 'approved' && <CheckCircle size={12} className="inline mr-1" />}
+              {f.approval_status === 'pending' && <Clock size={12} className="inline mr-1" />}
+              {f.approval_status === 'rejected' && <XCircle size={12} className="inline mr-1" />}
+              {f.approval_status || 'Pending'}
+            </span>
+
+            {f.approval_status === 'approved' && (
+              <button
+                onClick={() =>
+                  setAssignCourseModal({
+                    facultyId: f.faculty_id || f.user_id,
+                    facultyName: f.full_name,
+                  })
+                }
+                className="text-sm text-[#650C08] hover:underline font-medium"
+              >
+                Assign Courses
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {faculty.length === 0 && (
+        <div className="col-span-full flex flex-col items-center justify-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
+          <GraduationCap size={48} className="text-gray-300 mb-4" />
+          <p className="text-gray-500">No faculty members found</p>
+          <button
+            onClick={() => setShowAddFacultyModal(true)}
+            className="mt-4 text-[#650C08] font-medium hover:underline"
+          >
+            Add your first faculty member
+          </button>
+        </div>
+      )}
+    </div>
+
+    {/* Assign Courses Modal */}
+  </div>
+)}
+
 
                         {activeTab === "courses" && (
                             <div className="space-y-6 animate-fadeIn">
@@ -616,18 +654,18 @@ export default function InstituteDashboard(): React.ReactNode {
             )}
 
             {/* Assign Course Modal */}
-            {assignCourseModal && (
-                <AssignCourseModal
-                    authFetch={authFetch}
-                    facultyId={assignCourseModal.facultyId}
-                    facultyName={assignCourseModal.facultyName}
-                    onClose={() => setAssignCourseModal(null)}
-                    onSuccess={() => {
-                        setAssignCourseModal(null);
-                        loadFaculty();
-                    }}
-                />
-            )}
+          {assignCourseModal && (
+  <AssignCourseModal
+    authFetch={authFetch}
+    facultyId={assignCourseModal.facultyId}
+    facultyName={assignCourseModal.facultyName}
+    onClose={() => setAssignCourseModal(null)}
+    onSuccess={() => {
+      setAssignCourseModal(null);
+      loadFaculty();
+    }}
+  />
+)}
         </div>
     );
 }
@@ -963,22 +1001,21 @@ function AssignCourseModal({ authFetch, facultyId, facultyName, onClose, onSucce
         academic_year: ''
     });
 
-    useEffect(() => {
-        const loadCourseStreams = async () => {
-            try {
-                const res = await authFetch(`${apiBase}/institute/course-streams`);
-                if (res.ok) {
-                    const data = await res.json();
-                    // Filter only approved course streams
-                    const approved = (data.course_streams || []).filter((cs: any) => cs.status === 'approved');
-                    setCourseStreams(approved);
-                }
-            } catch (e) {
-                console.error('Failed to load course streams:', e);
-            }
-        };
-        loadCourseStreams();
-    }, [authFetch]);
+useEffect(() => {
+  const loadCourseStreams = async () => {
+    try {
+      const res = await authFetch(`${apiBase}/institute/courses`);
+      if (res.ok) {
+        const data = await res.json();
+        setCourseStreams(data.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to load courses:', e);
+    }
+  };
+
+  loadCourseStreams();
+}, [authFetch]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1032,9 +1069,9 @@ function AssignCourseModal({ authFetch, facultyId, facultyName, onClose, onSucce
                         >
                             <option value="">Select a course...</option>
                             {courseStreams.map((cs, i) => (
-                                <option key={i} value={cs.course_stream_id || cs.id}>
-                                    {cs.course_name} - {cs.stream}
-                                </option>
+                                <option key={i} value={cs.course_name}>
+  {cs.course_name} ({cs.student_count})
+</option>
                             ))}
                         </select>
                     </div>

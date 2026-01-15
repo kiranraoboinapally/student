@@ -33,7 +33,7 @@ func GetInstituteDashboardStats(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Institute not found"})
 		return
 	}
-	
+
 	// Normalize Institute Name for query
 	instNameQuery := strings.TrimSpace(institute.InstituteName) // Ideally utilize LOWER() in DB if needed
 
@@ -46,17 +46,17 @@ func GetInstituteDashboardStats(c *gin.Context) {
 	db := config.DB
 
 	// Count Total Students
-	// Note: master_students usually stores the institute name string. 
-	// We need to be careful about matching. 
+	// Note: master_students usually stores the institute name string.
+	// We need to be careful about matching.
 	db.Model(&models.MasterStudent{}).Where("institute_name = ?", instNameQuery).Count(&totalStudents)
-	
+
 	// Count Active Students
 	db.Model(&models.MasterStudent{}).Where("institute_name = ? AND student_status LIKE ?", instNameQuery, "%active%").Count(&activeStudents)
 
 	// Count Courses (Distinct CourseName for this institute)
 	db.Model(&models.MasterStudent{}).Where("institute_name = ?", instNameQuery).Distinct("course_name").Count(&totalCourses)
 
-	// Count Faculty (Assuming Faculty table has InstituteID or link via User? Currently Faculty has nil. 
+	// Count Faculty (Assuming Faculty table has InstituteID or link via User? Currently Faculty has nil.
 	// Let's check User table for faculty in this InstituteID)
 	db.Model(&models.User{}).Where("institute_id = ? AND role_id = 2", instituteID).Count(&totalFaculty)
 
@@ -106,15 +106,15 @@ func GetInstituteCourses(c *gin.Context) {
 		CourseName string `json:"course_name"`
 		Count      int    `json:"student_count"`
 	}
-	
+
 	// Group by course name and count students per course for this institute
 	if err := config.DB.Model(&models.MasterStudent{}).
 		Select("course_name, count(*) as count").
 		Where("institute_name = ?", institute.InstituteName).
 		Group("course_name").
 		Scan(&courses).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch courses"})
-			return
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch courses"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": courses})
@@ -124,18 +124,41 @@ func GetInstituteCourses(c *gin.Context) {
 func GetInstituteFaculty(c *gin.Context) {
 	userID := c.MustGet("user_id").(int64)
 	var user models.User
-	config.DB.First(&user, userID)
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
 	if user.InstituteID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No institute linked"})
 		return
 	}
 
-	var facultyUsers []models.User
-	// Fetch users who are faculty (role_id=2) and belong to this institute
-	if err := config.DB.Preload("Role").Where("institute_id = ? AND role_id = ?", *user.InstituteID, 2).Find(&facultyUsers).Error; err != nil {
+	var faculties []models.Faculty
+
+	// Preload related User and Role, but only keep required fields in the response
+	if err := config.DB.
+		Preload("User").
+		Preload("User.Role").
+		Where("institute_id = ?", *user.InstituteID).
+		Find(&faculties).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch faculty"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": facultyUsers})
+	// Build response matching frontend field names
+	var response []gin.H
+	for _, f := range faculties {
+		response = append(response, gin.H{
+			"faculty_id":      f.FacultyID,
+			"full_name":       f.User.FullName, // frontend expects full_name
+			"username":        f.User.Username,
+			"email":           f.User.Email,
+			"mobile":          f.User.Mobile,
+			"department":      f.Department, // frontend expects department
+			"approval_status": f.ApprovalStatus,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
 }

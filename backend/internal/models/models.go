@@ -57,7 +57,7 @@ func (User) TableName() string { return "users" }
 type Faculty struct {
 	FacultyID      int64       `gorm:"column:faculty_id;primaryKey;autoIncrement" json:"faculty_id"`
 	UserID         int64       `gorm:"column:user_id" json:"user_id"`
-	User           User        `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	User           User        `gorm:"foreignKey:UserID;references:UserID" json:"user"`
 	Department     string      `gorm:"column:department" json:"department"`
 	DepartmentID   *int        `gorm:"column:department_id" json:"department_id"`
 	DepartmentRef  *Department `gorm:"foreignKey:DepartmentID" json:"department_ref,omitempty"`
@@ -455,13 +455,13 @@ type InternalMark struct {
 	Semester         int        `gorm:"column:semester" json:"semester"`
 	SubjectCode      string     `gorm:"column:subject_code" json:"subject_code"`
 	SubjectName      string     `gorm:"column:subject_name" json:"subject_name"`
-	MarkType         string     `gorm:"column:mark_type" json:"mark_type"`               // MSE1, MSE2, Assignment, Practical
+	MarkType         string     `gorm:"column:mark_type" json:"mark_type"` // MSE1, MSE2, Assignment, Practical
 	MarksObtained    float64    `gorm:"column:marks_obtained" json:"marks_obtained"`
 	MaxMarks         float64    `gorm:"column:max_marks;default:100" json:"max_marks"`
-	Status           string     `gorm:"column:status;default:'draft'" json:"status"`     // draft, submitted, locked, published
-	EnteredBy        int64      `gorm:"column:entered_by" json:"entered_by"`             // Faculty user_id
+	Status           string     `gorm:"column:status;default:'draft'" json:"status"` // draft, submitted, locked, published
+	EnteredBy        int64      `gorm:"column:entered_by" json:"entered_by"`         // Faculty user_id
 	SubmittedAt      *time.Time `gorm:"column:submitted_at" json:"submitted_at"`
-	LockedBy         *int64     `gorm:"column:locked_by" json:"locked_by"`               // University admin user_id
+	LockedBy         *int64     `gorm:"column:locked_by" json:"locked_by"` // University admin user_id
 	LockedAt         *time.Time `gorm:"column:locked_at" json:"locked_at"`
 	PublishedAt      *time.Time `gorm:"column:published_at" json:"published_at"`
 	CreatedAt        time.Time  `gorm:"column:created_at" json:"created_at"`
@@ -472,17 +472,17 @@ func (InternalMark) TableName() string { return "internal_marks" }
 
 // CollegeCourseApproval tracks which colleges can offer which course-streams
 type CollegeCourseApproval struct {
-	ApprovalID     int64       `gorm:"column:approval_id;primaryKey;autoIncrement" json:"approval_id"`
-	InstituteID    int         `gorm:"column:institute_id" json:"institute_id"`
-	Institute      Institute   `gorm:"foreignKey:InstituteID" json:"institute,omitempty"`
-	CourseStreamID int         `gorm:"column:course_stream_id" json:"course_stream_id"`
+	ApprovalID     int64        `gorm:"column:approval_id;primaryKey;autoIncrement" json:"approval_id"`
+	InstituteID    int          `gorm:"column:institute_id" json:"institute_id"`
+	Institute      Institute    `gorm:"foreignKey:InstituteID" json:"institute,omitempty"`
+	CourseStreamID int          `gorm:"column:course_stream_id" json:"course_stream_id"`
 	CourseStream   CourseStream `gorm:"foreignKey:CourseStreamID;references:ID" json:"course_stream,omitempty"`
-	Status         string      `gorm:"column:status;default:'pending'" json:"status"` // pending, approved, rejected
-	RequestedAt    time.Time   `gorm:"column:requested_at" json:"requested_at"`
-	RequestedBy    int64       `gorm:"column:requested_by" json:"requested_by"` // Institute admin user_id
-	ApprovedBy     *int64      `gorm:"column:approved_by" json:"approved_by"`
-	ApprovedAt     *time.Time  `gorm:"column:approved_at" json:"approved_at"`
-	Remarks        *string     `gorm:"column:remarks" json:"remarks"`
+	Status         string       `gorm:"column:status;default:'pending'" json:"status"` // pending, approved, rejected
+	RequestedAt    time.Time    `gorm:"column:requested_at" json:"requested_at"`
+	RequestedBy    int64        `gorm:"column:requested_by" json:"requested_by"` // Institute admin user_id
+	ApprovedBy     *int64       `gorm:"column:approved_by" json:"approved_by"`
+	ApprovedAt     *time.Time   `gorm:"column:approved_at" json:"approved_at"`
+	Remarks        *string      `gorm:"column:remarks" json:"remarks"`
 }
 
 func (CollegeCourseApproval) TableName() string { return "college_course_approvals" }
