@@ -37,7 +37,8 @@ interface PendingStudent {
     user_id: number;
     full_name: string;
     email: string;
-    enrollment_number: string;
+   username: string; // enrollment number
+   session: string;
     course_name: string;
     stream: string;
     institute_name: string;
@@ -79,12 +80,12 @@ export default function ApprovalQueue() {
                 setPendingCourseStreams(data.pending_course_stream_requests || []);
                 setPendingMarks(data.pending_marks_submissions || []);
 
-                const countsData = data.counts || { faculty: 0, course_stream: 0, marks_batches: 0 };
+                const countsData = data.counts || { faculty: 0, course_stream: 0, marks_batches: 0,students: 0 };
 
                 if (studentsRes.ok) {
                     const studentsData = await studentsRes.json();
-                    setPendingStudents(studentsData.students || []);
-                    countsData.students = studentsData.total || studentsData.students?.length || 0;
+                    setPendingStudents(studentsData.pending_students || []);
+                    countsData.students = studentsData.total || studentsData.pending_students?.length || 0;
                 }
 
                 setCounts(countsData);
@@ -313,8 +314,9 @@ export default function ApprovalQueue() {
                                                         <h4 className="font-semibold text-gray-900">{s.full_name}</h4>
                                                         <p className="text-sm text-gray-500">{s.email}</p>
                                                         <div className="flex gap-4 mt-1 text-xs text-gray-400">
-                                                            <span className="font-medium">{s.enrollment_number}</span>
+                                                            <span className="font-medium">{s.username}</span>
                                                             <span>{s.course_name} - {s.stream}</span>
+                                                            <span>Session {s.session}</span>
                                                             <span className="font-medium text-blue-600">{s.institute_name}</span>
                                                         </div>
                                                     </div>
