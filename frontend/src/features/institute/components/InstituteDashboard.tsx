@@ -39,17 +39,29 @@ export default function InstituteDashboard(): React.ReactNode {
     const [assignCourseCourses, setAssignCourseCourses] = useState<any[]>([]);
 
     // Student Management - filters & pagination states
-    const [searchTerm, setSearchTerm] = useState("");
-    const [statusFilter, setStatusFilter] = useState("");
-    const [courseFilter, setCourseFilter] = useState("");
-    const [currentPage, setCurrentPage] = useState(1);
+    const [studentSearchTerm, setStudentSearchTerm] = useState("");
+    const [studentStatusFilter, setStudentStatusFilter] = useState("");
+    const [studentCourseFilter, setStudentCourseFilter] = useState("");
+    const [studentCurrentPage, setStudentCurrentPage] = useState(1);
     const [loadingStudents, setLoadingStudents] = useState(false);
+
+    // Faculty Management - filters & pagination states
+    const [facultySearchTerm, setFacultySearchTerm] = useState("");
+    const [facultyStatusFilter, setFacultyStatusFilter] = useState("");
+    const [facultyCurrentPage, setFacultyCurrentPage] = useState(1);
+    const [loadingFaculty, setLoadingFaculty] = useState(false);
+
+    // Courses Management - filters & pagination states
+    const [courseSearchTerm, setCourseSearchTerm] = useState("");
+    const [courseCurrentPage, setCourseCurrentPage] = useState(1);
+    const [loadingCourses, setLoadingCourses] = useState(false);
 
     const ITEMS_PER_PAGE = 10;
 
     // Modals
     const [showAddStudentModal, setShowAddStudentModal] = useState(false);
     const [showAddFacultyModal, setShowAddFacultyModal] = useState(false);
+    const [showAddCourseModal, setShowAddCourseModal] = useState(false);
     const [assignCourseModal, setAssignCourseModal] = useState<{ facultyId: number; facultyName: string } | null>(null);
 
     const loadStats = useCallback(async () => {
@@ -86,10 +98,8 @@ export default function InstituteDashboard(): React.ReactNode {
         try {
             setLoadingStudents(true);
             const res = await authFetch(`${apiBase}/institute/students`);
-            if (res.ok) {
-                const data = await res.json();
-                setStudents(data.data || data.students || []);
-            }
+            const data = await res.json();
+            setStudents(data.data || data.students || []);
         } catch (e) {
             console.error(e);
         } finally {
@@ -99,21 +109,27 @@ export default function InstituteDashboard(): React.ReactNode {
 
     const loadFaculty = useCallback(async () => {
         try {
+            setLoadingFaculty(true);
             const res = await authFetch(`${apiBase}/institute/faculty`);
             const data = await res.json();
             setFaculty(data.data || data.faculty || []);
         } catch (e) {
             console.error(e);
+        } finally {
+            setLoadingFaculty(false);
         }
     }, [authFetch]);
 
     const loadCourses = useCallback(async () => {
         try {
+            setLoadingCourses(true);
             const res = await authFetch(`${apiBase}/institute/courses`);
             const data = await res.json();
             setCourses(data.data || data.courses || []);
         } catch (e) {
             console.error(e);
+        } finally {
+            setLoadingCourses(false);
         }
     }, [authFetch]);
 
@@ -197,8 +213,8 @@ export default function InstituteDashboard(): React.ReactNode {
         let result = [...students];
 
         // Search by name or enrollment
-        if (searchTerm.trim()) {
-            const term = searchTerm.toLowerCase().trim();
+        if (studentSearchTerm.trim()) {
+            const term = studentSearchTerm.toLowerCase().trim();
             result = result.filter(s =>
                 (s.full_name || s.student_name || "").toLowerCase().includes(term) ||
                 String(s.enrollment_number || "").includes(term)
@@ -206,28 +222,75 @@ export default function InstituteDashboard(): React.ReactNode {
         }
 
         // Status filter
-        if (statusFilter) {
-            result = result.filter(s => (s.status || "Active") === statusFilter);
+        if (studentStatusFilter) {
+            result = result.filter(s => (s.status || "Active") === studentStatusFilter);
         }
 
         // Course filter
-        if (courseFilter) {
-            result = result.filter(s => s.course_name === courseFilter);
+        if (studentCourseFilter) {
+            result = result.filter(s => s.course_name === studentCourseFilter);
         }
 
         return result;
-    }, [students, searchTerm, statusFilter, courseFilter]);
+    }, [students, studentSearchTerm, studentStatusFilter, studentCourseFilter]);
 
-    const availableCourses = useMemo(() => {
+    const availableStudentCourses = useMemo(() => {
         const set = new Set(students.map(s => s.course_name).filter(Boolean));
         return Array.from(set).sort() as string[];
     }, [students]);
 
-    const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
-    const indexOfLast = currentPage * ITEMS_PER_PAGE;
-    const indexOfFirst = indexOfLast - ITEMS_PER_PAGE;
-    const currentPageStudents = filteredStudents.slice(indexOfFirst, indexOfLast);
-    // ─────────────────────────────────────────────────────────────────────────
+    const studentTotalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
+    const studentIndexOfLast = studentCurrentPage * ITEMS_PER_PAGE;
+    const studentIndexOfFirst = studentCurrentPage * ITEMS_PER_PAGE - ITEMS_PER_PAGE;
+    const currentStudents = filteredStudents.slice(studentIndexOfFirst, studentIndexOfLast);
+
+    // ─── Faculty filtering & pagination logic ─────────────────────────────────
+    const filteredFaculty = useMemo(() => {
+        let result = [...faculty];
+
+        // Search by name, email, username
+        if (facultySearchTerm.trim()) {
+            const term = facultySearchTerm.toLowerCase().trim();
+            result = result.filter(f =>
+                (f.full_name || "").toLowerCase().includes(term) ||
+                (f.email || "").toLowerCase().includes(term) ||
+                (f.username || "").toLowerCase().includes(term)
+            );
+        }
+
+        // Status filter
+        if (facultyStatusFilter) {
+            result = result.filter(f => (f.approval_status || "pending") === facultyStatusFilter);
+        }
+
+        return result;
+    }, [faculty, facultySearchTerm, facultyStatusFilter]);
+
+    const facultyTotalPages = Math.ceil(filteredFaculty.length / ITEMS_PER_PAGE);
+    const facultyIndexOfLast = facultyCurrentPage * ITEMS_PER_PAGE;
+    const facultyIndexOfFirst = facultyCurrentPage * ITEMS_PER_PAGE - ITEMS_PER_PAGE;
+    const currentFaculty = filteredFaculty.slice(facultyIndexOfFirst, facultyIndexOfLast);
+
+    // ─── Courses filtering & pagination logic ─────────────────────────────────
+    const filteredCourses = useMemo(() => {
+        let result = [...courses];
+
+        // Search by course name or stream
+        if (courseSearchTerm.trim()) {
+            const term = courseSearchTerm.toLowerCase().trim();
+            result = result.filter(c =>
+                (c.course_name || "").toLowerCase().includes(term) ||
+                (c.stream || "").toLowerCase().includes(term)
+            );
+        }
+
+        return result;
+    }, [courses, courseSearchTerm]);
+
+    const coursesTotalPages = Math.ceil(filteredCourses.length / ITEMS_PER_PAGE);
+    const coursesIndexOfLast = courseCurrentPage * ITEMS_PER_PAGE;
+    const coursesIndexOfFirst = courseCurrentPage * ITEMS_PER_PAGE - ITEMS_PER_PAGE;
+    const currentCourses = filteredCourses.slice(coursesIndexOfFirst, coursesIndexOfLast);
 
     if (loading) {
         return (
@@ -375,7 +438,6 @@ export default function InstituteDashboard(): React.ReactNode {
                                             )}
                                         </div>
                                     </div>
-
                                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                                         <h3 className="text-lg font-bold text-gray-800 mb-4">Faculty Members</h3>
                                         <div className="space-y-3">
@@ -400,9 +462,6 @@ export default function InstituteDashboard(): React.ReactNode {
                             </div>
                         )}
 
-                        {/* ────────────────────────────────────────────────
-                            IMPROVED STUDENTS TAB
-                        ──────────────────────────────────────────────── */}
                         {activeTab === "students" && (
                             <div className="space-y-6 animate-fadeIn">
                                 <div className="flex justify-between items-center flex-wrap gap-4">
@@ -415,17 +474,16 @@ export default function InstituteDashboard(): React.ReactNode {
                                     </button>
                                 </div>
 
-                                {/* Filters */}
                                 <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
                                             <input
                                                 type="text"
-                                                value={searchTerm}
+                                                value={studentSearchTerm}
                                                 onChange={(e) => {
-                                                    setSearchTerm(e.target.value);
-                                                    setCurrentPage(1);
+                                                    setStudentSearchTerm(e.target.value);
+                                                    setStudentCurrentPage(1);
                                                 }}
                                                 placeholder="Name or Enrollment..."
                                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
@@ -435,10 +493,10 @@ export default function InstituteDashboard(): React.ReactNode {
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                                             <select
-                                                value={statusFilter}
+                                                value={studentStatusFilter}
                                                 onChange={(e) => {
-                                                    setStatusFilter(e.target.value);
-                                                    setCurrentPage(1);
+                                                    setStudentStatusFilter(e.target.value);
+                                                    setStudentCurrentPage(1);
                                                 }}
                                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
                                             >
@@ -452,16 +510,18 @@ export default function InstituteDashboard(): React.ReactNode {
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
                                             <select
-                                                value={courseFilter}
+                                                value={studentCourseFilter}
                                                 onChange={(e) => {
-                                                    setCourseFilter(e.target.value);
-                                                    setCurrentPage(1);
+                                                    setStudentCourseFilter(e.target.value);
+                                                    setStudentCurrentPage(1);
                                                 }}
                                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
                                             >
                                                 <option value="">All Courses</option>
-                                                {availableCourses.map(course => (
-                                                    <option key={course} value={course}>{course}</option>
+                                                {availableStudentCourses.map((course) => (
+                                                    <option key={course} value={course}>
+                                                        {course}
+                                                    </option>
                                                 ))}
                                             </select>
                                         </div>
@@ -485,7 +545,7 @@ export default function InstituteDashboard(): React.ReactNode {
                                         <div className="py-16 text-center text-gray-500">
                                             <Users size={48} className="mx-auto mb-4 text-gray-300" />
                                             <p className="text-lg font-medium">No students found</p>
-                                            <p className="text-sm mt-1">Try adjusting filters or add new student</p>
+                                            <p className="text-sm mt-1">Try adjusting filters or add a new student</p>
                                         </div>
                                     ) : (
                                         <>
@@ -502,8 +562,8 @@ export default function InstituteDashboard(): React.ReactNode {
                                                         </tr>
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
-                                                        {currentPageStudents.map((s, i) => (
-                                                            <tr key={s.student_id || i} className="hover:bg-gray-50">
+                                                        {currentStudents.map((s, i) => (
+                                                            <tr key={i} className="hover:bg-gray-50">
                                                                 <td className="px-6 py-4 text-sm font-mono text-gray-900">{s.enrollment_number}</td>
                                                                 <td className="px-6 py-4">
                                                                     <div className="font-medium text-gray-900">{s.full_name || s.student_name || '-'}</div>
@@ -515,12 +575,13 @@ export default function InstituteDashboard(): React.ReactNode {
                                                                     {s.program_pattern || '-'} • {s.duration_years ? `${s.duration_years} year${s.duration_years > 1 ? 's' : ''}` : '-'}
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${s.status === 'Active' ? 'bg-green-100 text-green-800' :
-                                                                            s.status === 'PassoutDegreePending' ? 'bg-amber-100 text-amber-800' :
-                                                                                s.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
-                                                                                    'bg-gray-100 text-gray-800'
-                                                                        }`}>
-                                                                        {s.status || 'Active'}
+                                                                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                                                                        s.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                                                        s.status === 'PassOutDegreePending' ? 'bg-amber-100 text-amber-800' :
+                                                                        s.status === 'Alumni' ? 'bg-blue-100 text-blue-800' :
+                                                                        'bg-gray-100 text-gray-800'
+                                                                    }`}>
+                                                                        {s.status === 'PassOutDegreePending' ? 'Passout / Degree Pending' : s.status || 'Active'}
                                                                     </span>
                                                                 </td>
                                                             </tr>
@@ -528,42 +589,11 @@ export default function InstituteDashboard(): React.ReactNode {
                                                     </tbody>
                                                 </table>
                                             </div>
-
-                                            {/* Pagination */}
-                                            {totalPages > 1 && (
-                                                <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 bg-gray-50">
-                                                    <div className="text-sm text-gray-700">
-                                                        Showing <span className="font-medium">{indexOfFirst + 1}</span> to{" "}
-                                                        <span className="font-medium">{Math.min(indexOfLast, filteredStudents.length)}</span> of{" "}
-                                                        <span className="font-medium">{filteredStudents.length}</span>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                                                            disabled={currentPage === 1}
-                                                            className="px-4 py-2 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            Previous
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                                                            disabled={currentPage === totalPages}
-                                                            className="px-4 py-2 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            Next
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </>
                                     )}
                                 </div>
                             </div>
                         )}
-
-                        {/* ────────────────────────────────────────────────
-                            The rest of your tabs remain unchanged
-                        ──────────────────────────────────────────────── */}
 
                         {activeTab === "faculty" && (
                             <div className="space-y-6 animate-fadeIn">
@@ -577,110 +607,215 @@ export default function InstituteDashboard(): React.ReactNode {
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {faculty.map((f, i) => (
-                                        <div
-                                            key={i}
-                                            className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all"
-                                        >
-                                            <div className="flex items-center gap-4 mb-4">
-                                                <div className="w-14 h-14 rounded-full bg-[#650C08]/10 flex items-center justify-center text-[#650C08] text-xl font-bold">
-                                                    {(f.full_name || 'F').charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-bold text-gray-900">{f.full_name}</h3>
-                                                    <p className="text-sm text-gray-500">{f.position || 'Faculty'}</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-2 text-sm text-gray-600">
-                                                <p><span className="text-gray-400">Dept:</span> {f.department || 'General'}</p>
-                                                <p><span className="text-gray-400">Email:</span> {f.email}</p>
-                                                <p><span className="text-gray-400">Username:</span> {f.username}</p>
-                                                <p>
-                                                    <span className="text-gray-400">Courses:</span> {f.course_name || 'Not Assigned'}
-                                                </p>
-                                            </div>
-
-                                            <div className="mt-4 pt-4 border-t flex justify-between items-center">
-                                                <span
-                                                    className={`px-3 py-1 text-xs rounded-full font-medium ${f.approval_status === 'approved'
-                                                            ? 'bg-green-100 text-green-700'
-                                                            : f.approval_status === 'rejected'
-                                                                ? 'bg-red-100 text-red-700'
-                                                                : 'bg-yellow-100 text-yellow-700'
-                                                        }`}
-                                                >
-                                                    {f.approval_status === 'approved' && <CheckCircle size={12} className="inline mr-1" />}
-                                                    {f.approval_status === 'pending' && <Clock size={12} className="inline mr-1" />}
-                                                    {f.approval_status === 'rejected' && <XCircle size={12} className="inline mr-1" />}
-                                                    {f.approval_status || 'Pending'}
-                                                </span>
-
-                                                {f.approval_status === 'approved' && (
-                                                    <button
-                                                        onClick={() =>
-                                                            setAssignCourseModal({
-                                                                facultyId: f.faculty_id || f.user_id,
-                                                                facultyName: f.full_name,
-                                                            })
-                                                        }
-                                                        className="text-sm text-[#650C08] hover:underline font-medium"
-                                                    >
-                                                        Assign Courses
-                                                    </button>
-                                                )}
-                                            </div>
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                                            <input
+                                                type="text"
+                                                value={facultySearchTerm}
+                                                onChange={(e) => {
+                                                    setFacultySearchTerm(e.target.value);
+                                                    setFacultyCurrentPage(1);
+                                                }}
+                                                placeholder="Name, email or username..."
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
+                                            />
                                         </div>
-                                    ))}
 
-                                    {faculty.length === 0 && (
-                                        <div className="col-span-full flex flex-col items-center justify-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-                                            <GraduationCap size={48} className="text-gray-300 mb-4" />
-                                            <p className="text-gray-500">No faculty members found</p>
-                                            <button
-                                                onClick={() => setShowAddFacultyModal(true)}
-                                                className="mt-4 text-[#650C08] font-medium hover:underline"
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                            <select
+                                                value={facultyStatusFilter}
+                                                onChange={(e) => {
+                                                    setFacultyStatusFilter(e.target.value);
+                                                    setFacultyCurrentPage(1);
+                                                }}
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
                                             >
-                                                Add your first faculty member
-                                            </button>
+                                                <option value="">All Statuses</option>
+                                                <option value="pending">Pending</option>
+                                                <option value="approved">Approved</option>
+                                                <option value="rejected">Rejected</option>
+                                            </select>
                                         </div>
-                                    )}
+                                    </div>
                                 </div>
 
-                                {/* Assign Courses Modal */}
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                    {loadingFaculty ? (
+                                        <div className="py-20 text-center text-gray-500">
+                                            <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-[#650C08]" />
+                                            <p>Loading faculty...</p>
+                                        </div>
+                                    ) : filteredFaculty.length === 0 ? (
+                                        <div className="py-16 text-center text-gray-500">
+                                            <GraduationCap size={48} className="mx-auto mb-4 text-gray-300" />
+                                            <p className="text-lg font-medium">No faculty found</p>
+                                            <p className="text-sm mt-1">Try adjusting filters or add a new faculty</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead className="bg-gray-50">
+                                                        <tr>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Position</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Courses</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                        {currentFaculty.map((f, i) => (
+                                                            <tr key={i} className="hover:bg-gray-50">
+                                                                <td className="px-6 py-4 text-sm font-medium text-gray-900">{f.full_name}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.department || 'General'}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.position || 'Faculty'}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.email}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.username}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{f.course_name || 'Not Assigned'}</td>
+                                                                <td className="px-6 py-4">
+                                                                    <span
+                                                                        className={`px-3 py-1 text-xs rounded-full font-medium ${
+                                                                            f.approval_status === 'approved'
+                                                                                ? 'bg-green-100 text-green-700'
+                                                                                : f.approval_status === 'rejected'
+                                                                                ? 'bg-red-100 text-red-700'
+                                                                                : 'bg-yellow-100 text-yellow-700'
+                                                                        }`}
+                                                                    >
+                                                                        {f.approval_status === 'approved' && <CheckCircle size={12} className="inline mr-1" />}
+                                                                        {f.approval_status === 'pending' && <Clock size={12} className="inline mr-1" />}
+                                                                        {f.approval_status === 'rejected' && <XCircle size={12} className="inline mr-1" />}
+                                                                        {f.approval_status || 'Pending'}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 bg-gray-50">
+                                                <div className="text-sm text-gray-700">
+                                                    Showing <span className="font-medium">{facultyIndexOfFirst + 1}</span> to{" "}
+                                                    <span className="font-medium">{Math.min(facultyIndexOfLast, filteredFaculty.length)}</span> of{" "}
+                                                    <span className="font-medium">{filteredFaculty.length}</span> results
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => setFacultyCurrentPage(p => Math.max(p - 1, 1))}
+                                                        disabled={facultyCurrentPage === 1}
+                                                        className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        Previous
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setFacultyCurrentPage(p => Math.min(p + 1, facultyTotalPages))}
+                                                        disabled={facultyCurrentPage === facultyTotalPages}
+                                                        className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        Next
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         )}
 
                         {activeTab === "courses" && (
                             <div className="space-y-6 animate-fadeIn">
-                                <h2 className="text-2xl font-bold text-gray-800">Courses & Programs</h2>
-                                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                                    {courses.map((c, i) => (
-                                        <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-lg transition-all">
-                                            <div className="flex items-center gap-4 mb-4">
-                                                <div className="p-3 rounded-full bg-purple-100 text-purple-600">
-                                                    <BookOpen size={24} />
-                                                </div>
-                                                <h3 className="font-bold text-lg text-gray-900">{c.course_name}</h3>
-                                            </div>
-                                            <div className="space-y-2 text-sm">
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-500">Stream</span>
-                                                    <span className="font-medium">{c.stream || '-'}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-500">Students</span>
-                                                    <span className="font-bold text-[#650C08]">{c.student_count || 0}</span>
-                                                </div>
-                                            </div>
+                                <div className="flex justify-between items-center">
+                                    <h2 className="text-2xl font-bold text-gray-800">Courses Management</h2>
+                                    <button
+                                        onClick={() => setShowAddCourseModal(true)}
+                                        className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-md transition-all"
+                                    >
+                                        <Plus size={18} /> Request New Course
+                                    </button>
+                                </div>
+
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-1 gap-4 max-w-md">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                                            <input
+                                                type="text"
+                                                value={courseSearchTerm}
+                                                onChange={(e) => {
+                                                    setCourseSearchTerm(e.target.value);
+                                                    setCourseCurrentPage(1);
+                                                }}
+                                                placeholder="Course name or stream..."
+                                                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#650C08]/30"
+                                            />
                                         </div>
-                                    ))}
-                                    {courses.length === 0 && (
-                                        <div className="col-span-full flex flex-col items-center justify-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-                                            <BookOpen size={48} className="text-gray-300 mb-4" />
-                                            <p className="text-gray-500">No courses found</p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                    {loadingCourses ? (
+                                        <div className="py-20 text-center text-gray-500">
+                                            <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-[#650C08]" />
+                                            <p>Loading courses...</p>
                                         </div>
+                                    ) : filteredCourses.length === 0 ? (
+                                        <div className="py-16 text-center text-gray-500">
+                                            <BookOpen size={48} className="mx-auto mb-4 text-gray-300" />
+                                            <p className="text-lg font-medium">No courses found</p>
+                                            <p className="text-sm mt-1">Try adjusting search or request a new course</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead className="bg-gray-50">
+                                                        <tr>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course Name</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stream</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student Count</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                        {currentCourses.map((c, i) => (
+                                                            <tr key={i} className="hover:bg-gray-50">
+                                                                <td className="px-6 py-4 text-sm font-medium text-gray-900">{c.course_name}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{c.stream || '-'}</td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">{c.student_count || 0}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 bg-gray-50">
+                                                <div className="text-sm text-gray-700">
+                                                    Showing <span className="font-medium">{coursesIndexOfFirst + 1}</span> to{" "}
+                                                    <span className="font-medium">{Math.min(coursesIndexOfLast, filteredCourses.length)}</span> of{" "}
+                                                    <span className="font-medium">{filteredCourses.length}</span> results
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => setCourseCurrentPage(p => Math.max(p - 1, 1))}
+                                                        disabled={courseCurrentPage === 1}
+                                                        className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        Previous
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setCourseCurrentPage(p => Math.min(p + 1, coursesTotalPages))}
+                                                        disabled={courseCurrentPage === coursesTotalPages}
+                                                        className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        Next
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -798,7 +933,7 @@ export default function InstituteDashboard(): React.ReactNode {
                 </main>
             </div>
 
-            {/* Add Student Modal */}
+            {/* Add Student Modal - Updated with course dropdown */}
             {showAddStudentModal && (
                 <AddStudentModal
                     authFetch={authFetch}
@@ -807,6 +942,7 @@ export default function InstituteDashboard(): React.ReactNode {
                         setShowAddStudentModal(false);
                         loadStudents();
                     }}
+                    availableCourses={assignCourseCourses.map((c) => c.course_name)}
                 />
             )}
 
@@ -818,6 +954,18 @@ export default function InstituteDashboard(): React.ReactNode {
                     onSuccess={() => {
                         setShowAddFacultyModal(false);
                         loadFaculty();
+                    }}
+                />
+            )}
+
+            {/* Add Course Modal */}
+            {showAddCourseModal && (
+                <AddCourseModal
+                    authFetch={authFetch}
+                    onClose={() => setShowAddCourseModal(false)}
+                    onSuccess={() => {
+                        setShowAddCourseModal(false);
+                        loadCourses();
                     }}
                 />
             )}
@@ -847,7 +995,6 @@ function StatCard({ title, value, icon, color }: { title: string; value: number 
         purple: "bg-purple-100 text-purple-600",
         red: "bg-red-100 text-red-600",
     };
-
     return (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
             <div className={`p-4 rounded-full ${colorClasses[color]}`}>{icon}</div>
@@ -859,7 +1006,7 @@ function StatCard({ title, value, icon, color }: { title: string; value: number 
     );
 }
 
-function AddStudentModal({ authFetch, onClose, onSuccess }: { authFetch: any; onClose: () => void; onSuccess: () => void }) {
+function AddStudentModal({ authFetch, onClose, onSuccess, availableCourses }: { authFetch: any; onClose: () => void; onSuccess: () => void; availableCourses: string[] }) {
     const [loading, setLoading] = useState(false);
     const [form, setForm] = useState({
         enrollment_number: '',
@@ -875,7 +1022,6 @@ function AddStudentModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
             alert('Enrollment number and name are required');
             return;
         }
-
         setLoading(true);
         try {
             const res = await authFetch(`${apiBase}/institute/students`, {
@@ -889,7 +1035,6 @@ function AddStudentModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
                     course_name: form.course_name || null
                 })
             });
-
             if (res.ok) {
                 alert('Student added successfully!');
                 onSuccess();
@@ -904,7 +1049,6 @@ function AddStudentModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
             setLoading(false);
         }
     };
-
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in">
@@ -950,13 +1094,20 @@ function AddStudentModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Course Name</label>
-                        <input
-                            type="text"
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Course Name *</label>
+                        <select
                             value={form.course_name}
                             onChange={e => setForm({ ...form, course_name: e.target.value })}
                             className="w-full border border-gray-300 rounded-lg p-2.5"
-                        />
+                            required
+                        >
+                            <option value="">Select Course</option>
+                            {availableCourses.map((course, i) => (
+                                <option key={i} value={course}>
+                                    {course}
+                                </option>
+                            ))}
+                        </select>
                     </div>
                     <div className="flex justify-end gap-3 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
@@ -968,6 +1119,89 @@ function AddStudentModal({ authFetch, onClose, onSuccess }: { authFetch: any; on
                             className="px-4 py-2 bg-[#650C08] text-white rounded-lg hover:bg-[#8B1A1A] disabled:opacity-50"
                         >
                             {loading ? 'Adding...' : 'Add Student'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+function AddCourseModal({ authFetch, onClose, onSuccess }: { authFetch: any; onClose: () => void; onSuccess: () => void }) {
+    const [loading, setLoading] = useState(false);
+    const [form, setForm] = useState({
+        course_name: '',
+        stream: ''
+    });
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!form.course_name || !form.stream) {
+            alert('Course name and stream are required');
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await authFetch(`${apiBase}/institute/request-course-stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    course_name: form.course_name,
+                    stream: form.stream
+                })
+            });
+            if (res.ok) {
+                alert('Course request submitted successfully! It will appear once approved.');
+                onSuccess();
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Failed to submit course request');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Failed to submit course request');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in">
+                <h2 className="text-xl font-bold mb-6 text-gray-900">Request New Course</h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Course Name *</label>
+                        <input
+                            type="text"
+                            value={form.course_name}
+                            onChange={e => setForm({ ...form, course_name: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg p-2.5"
+                            placeholder="e.g., MASTER OF ARTS - PSYCHOLOGY"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Stream *</label>
+                        <input
+                            type="text"
+                            value={form.stream}
+                            onChange={e => setForm({ ...form, stream: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg p-2.5"
+                            placeholder="e.g., Arts"
+                            required
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-4">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="px-4 py-2 bg-[#650C08] text-white rounded-lg hover:bg-[#8B1A1A] disabled:opacity-50"
+                        >
+                            {loading ? 'Submitting...' : 'Submit Request'}
                         </button>
                     </div>
                 </form>
