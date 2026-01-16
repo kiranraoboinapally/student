@@ -37,8 +37,16 @@ func GetStudentLeaves(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
+
 	db := config.DB
+	var student models.MasterStudent
+	if err := db.Where("enrollment_number = ?", enrollment).First(&student).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Student not found"})
+		return
+	}
+
 	var leaves []models.Leave
-	db.Where("student_id = ?", enrollment).Order("created_at desc").Find(&leaves)
+	db.Where("student_id = ?", student.StudentID).Order("created_at desc").Find(&leaves)
+
 	c.JSON(http.StatusOK, gin.H{"data": leaves})
 }

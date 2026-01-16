@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -193,49 +194,56 @@ func GetCurrentSemesterMarks(c *gin.Context) {
 
 	c.JSON(http.StatusOK, marks)
 }
-
 func GetStudentAttendance(c *gin.Context) {
 	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	db := config.DB
 
-	semester := resolveCurrentSemester(enrollment)
-	if semester == nil || semester == 0 {
+	semesterRaw := resolveCurrentSemester(enrollment)
+	var semInt int
+	switch s := semesterRaw.(type) {
+	case int:
+		semInt = s
+	case int64:
+		semInt = int(s)
+	case float64:
+		semInt = int(s)
+	default:
 		c.JSON(http.StatusOK, gin.H{"attendance": []interface{}{}})
 		return
 	}
 
-	semInt, ok := semester.(int)
-	if !ok {
-		semInt = 0
+	if semInt == 0 {
+		c.JSON(http.StatusOK, gin.H{"attendance": []interface{}{}})
+		return
 	}
 
 	type AttendanceRecord struct {
-		SubjectName     string `gorm:"column:subject_name"`
-		TotalClasses    int    `gorm:"column:total_classes"`
-		AttendedClasses int    `gorm:"column:attended_classes"`
+		SubjectName     string `gorm:"column:subject_name" json:"subject_name"`
+		TotalClasses    int    `gorm:"column:total_classes" json:"total_classes"`
+		AttendedClasses int    `gorm:"column:attended_classes" json:"attended_classes"`
 	}
 
 	var attendance []AttendanceRecord
+
 	query := `
-        SELECT
-            sm.subject_name,
-            COALESCE(COUNT(a.class_date), 0) AS total_classes,
-            COALESCE(SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END), 0) AS attended_classes
-        FROM subjects_master sm
-        LEFT JOIN attendance a
-            ON sm.subject_code = a.subject_code
-            AND a.enrollment_number = ?
-            AND a.semester = ?
-        WHERE sm.semester = ?
-        GROUP BY sm.subject_name
+    SELECT
+        sm.subject_name,
+        COALESCE(COUNT(a.date), 0) AS total_classes,
+        COALESCE(SUM(CASE WHEN a.present = TRUE THEN 1 ELSE 0 END), 0) AS attended_classes
+    FROM subjects_master sm
+    LEFT JOIN attendance a
+        ON sm.subject_code = a.subject_code
+        AND a.enrollment_number = ?
+    WHERE sm.semester = ?
+    GROUP BY sm.subject_name
     `
 
-	if err := db.Raw(query, enrollment, semInt, semInt).
-		Scan(&attendance).Error; err != nil {
+	db := config.DB
+	if err := db.Raw(query, enrollment, semInt).Scan(&attendance).Error; err != nil {
+		log.Println("Error fetching attendance:", err)
 		c.JSON(http.StatusOK, gin.H{"attendance": []interface{}{}})
 		return
 	}
