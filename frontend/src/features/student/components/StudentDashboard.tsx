@@ -64,6 +64,116 @@ function getEnrollmentNumber(profile: StudentProfile | null): string {
   const userEnr = profile.user?.username;
   return (masterEnr || actEnr || userEnr || "").toString();
 }
+// Add this component before StudentDashboard
+const TimetableGrid = ({ timetable, theme }: { timetable: TimetableItem[], theme: string }) => {
+  // Define days and time slots
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const timeSlots = [
+    '09:00-10:00',
+    '10:00-11:00',
+    '11:00-12:00',
+    '12:00-01:00', // Lunch break
+    '02:00-03:00',
+    '03:00-04:00',
+    '04:00-05:00'
+  ];
+
+  // Create a map for quick lookup
+  const timetableMap: { [key: string]: TimetableItem } = {};
+  timetable.forEach(slot => {
+    const key = `${slot.day}-${slot.time_slot}`;
+    timetableMap[key] = slot;
+  });
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse">
+        <thead>
+          <tr>
+            <th
+              className="border border-gray-300 px-4 py-3 text-sm font-semibold text-white sticky left-0 z-10"
+              style={{ backgroundColor: theme }}
+            >
+              Time / Day
+            </th>
+            {days.map(day => (
+              <th
+                key={day}
+                className="border border-gray-300 px-4 py-3 text-sm font-semibold text-white min-w-[150px]"
+                style={{ backgroundColor: theme }}
+              >
+                {day}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {timeSlots.map((time, timeIndex) => {
+            const isLunchBreak = time === '12:00-01:00';
+
+            if (isLunchBreak) {
+              return (
+                <tr key={time}>
+                  <td
+                    className="border border-gray-300 px-4 py-3 text-sm font-medium bg-gray-100 sticky left-0"
+                  >
+                    {time}
+                  </td>
+                  <td
+                    colSpan={5}
+                    className="border border-gray-300 px-4 py-6 text-center bg-yellow-50 text-gray-600 font-semibold"
+                  >
+                    🍽️ LUNCH BREAK
+                  </td>
+                </tr>
+              );
+            }
+
+            return (
+              <tr key={time} className="hover:bg-gray-50">
+                <td
+                  className="border border-gray-300 px-4 py-3 text-sm font-medium bg-gray-100 sticky left-0"
+                >
+                  {time}
+                </td>
+                {days.map(day => {
+                  const slot = timetableMap[`${day}-${time}`];
+
+                  return (
+                    <td
+                      key={`${day}-${time}`}
+                      className="border border-gray-300 px-4 py-3 text-sm min-w-[150px]"
+                    >
+                      {slot ? (
+                        <div className="space-y-1">
+                          <div
+                            className="font-semibold text-sm"
+                            style={{ color: theme }}
+                          >
+                            {slot.subject_name}
+                          </div>
+                          {slot.room_number && (
+                            <div className="text-xs text-gray-500">
+                              📍 Room: {slot.room_number}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center text-gray-300 text-xs">
+                          Free Period
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 export default function StudentDashboard(): React.ReactElement {
   const { authFetch, logout } = useAuth();
@@ -681,10 +791,10 @@ export default function StudentDashboard(): React.ReactElement {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {subjects.length > 0 ? subjects.map((sub) => (
-                      <tr key={sub.subject_code} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{sub.subject_code}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.subject_name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.subject_type}</td>
+                      <tr key={sub.code} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{sub.code}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sub.type}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{sub.credits}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">{sub.semester}</td>
                       </tr>
@@ -694,6 +804,7 @@ export default function StudentDashboard(): React.ReactElement {
                       </tr>
                     )}
                   </tbody>
+
                 </table>
               </div>
             )}
@@ -877,38 +988,11 @@ export default function StudentDashboard(): React.ReactElement {
         {/* TIMETABLE */}
         {active === "timetable" && (
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Timetable</h2>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: theme }}>Weekly Timetable</h2>
             {loadingTimetable ? (
               <div className="text-center py-8 text-gray-500">Loading timetable...</div>
             ) : (
-              <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Day</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Slot</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Faculty</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Room</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {timetable.length > 0 ? timetable.map((slot, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{slot.day}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{slot.time_slot}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{slot.subject_name || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{slot.faculty_name || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{slot.room_number || '-'}</td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">No timetable available.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <TimetableGrid timetable={timetable} theme={theme} />
             )}
           </div>
         )}

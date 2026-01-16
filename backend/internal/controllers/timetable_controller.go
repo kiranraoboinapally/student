@@ -18,7 +18,7 @@ func GetTimetable(c *gin.Context) {
 
 	semester := resolveCurrentSemester(enrollment)
 	if semester == nil || semester == 0 {
-		c.JSON(http.StatusOK, gin.H{"data": []models.Timetable{}})
+		c.JSON(http.StatusOK, gin.H{"data": []gin.H{}})
 		return
 	}
 
@@ -32,5 +32,15 @@ func GetTimetable(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": timetable})
+	// Transform the data to match frontend expectations
+	var response []gin.H
+	for _, slot := range timetable {
+		response = append(response, gin.H{
+			"day":          slot.Day,
+			"time_slot":    slot.Time,
+			"subject_name": slot.Subject,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
 }

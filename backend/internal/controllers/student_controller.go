@@ -150,23 +150,29 @@ func GetCurrentSemester(c *gin.Context) {
 	semester := resolveCurrentSemester(enrollment)
 	c.JSON(http.StatusOK, gin.H{"current_semester": semester})
 }
-
 func GetCurrentSemesterSubjects(c *gin.Context) {
 	enrollment, err := getEnrollmentOrError(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	db := config.DB
 
+	db := config.DB
 	semester := resolveCurrentSemester(enrollment)
-	if semester == nil || semester == 0 {
+
+	// Type assert to int (or int64)
+	sem, ok := semester.(int)
+	if !ok || sem == 0 {
 		c.JSON(http.StatusOK, []models.SubjectMaster{})
 		return
 	}
 
 	var subjects []models.SubjectMaster
-	db.Where("semester = ?", semester).Find(&subjects)
+	result := db.Where("semester = ? AND is_active = ?", sem, true).Find(&subjects)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
 
 	c.JSON(http.StatusOK, subjects)
 }

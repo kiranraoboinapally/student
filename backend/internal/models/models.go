@@ -133,12 +133,12 @@ type ActStudent struct {
 func (ActStudent) TableName() string { return "act_students" }
 
 type SubjectMaster struct {
-	SubjectID   int    `gorm:"column:subject_id;primaryKey" json:"subject_id"`
-	SubjectCode string `gorm:"column:subject_code;uniqueIndex" json:"code"`
+	SubjectID   int64  `gorm:"column:subject_id;primaryKey" json:"subject_id"`
+	SubjectCode string `gorm:"column:subject_code" json:"code"`
 	SubjectName string `gorm:"column:subject_name" json:"name"`
 	SubjectType string `gorm:"column:subject_type" json:"type"`
-	Credits     int    `gorm:"column:credits" json:"credits"`
-	Semester    int    `gorm:"column:semester" json:"semester"`
+	Credits     int64  `gorm:"column:credits" json:"credits"`
+	Semester    int64  `gorm:"column:semester" json:"semester"`
 	CourseName  string `gorm:"column:course_name" json:"course_name"`
 	IsActive    bool   `gorm:"column:is_active" json:"is_active"`
 }
