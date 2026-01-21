@@ -29,7 +29,6 @@ export default function UniversityOverview({ stats, pendingUsers, notices, onRev
     const totalActiveStudents = stats.total_active_students || 0;
     const totalFaculty = stats.total_faculty || 0;
 
-
     return (
         <div className="space-y-6">
             {/* Top Metrics Row */}
