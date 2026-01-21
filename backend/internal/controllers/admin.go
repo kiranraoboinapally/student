@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -306,7 +307,7 @@ func CreateInstituteUser(c *gin.Context) {
 	}
 
 	db := config.DB
-	
+
 	// Check Institute Exists
 	var institute models.Institute
 	if err := db.First(&institute, req.InstituteID).Error; err != nil {
@@ -339,10 +340,10 @@ func CreateInstituteUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message":  "Institute user created successfully",
-		"user_id":  user.UserID,
-		"username": user.Username,
-		"role_id":  user.RoleID,
+		"message":   "Institute user created successfully",
+		"user_id":   user.UserID,
+		"username":  user.Username,
+		"role_id":   user.RoleID,
 		"institute": institute.InstituteName,
 	})
 }
@@ -414,28 +415,10 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		enNum = val
 	}
 
-	mapDisplayStatus := func(s *string) string {
-		if s == nil {
-			return "unknown"
-		}
-		v := strings.ToLower(strings.TrimSpace(*s))
-		switch {
-		case strings.Contains(v, "success") || strings.Contains(v, "verified"):
-			return "verified"
-		case strings.Contains(v, "paid"):
-			return "needs_verification"
-		case strings.Contains(v, "pending"):
-			return "pending"
-		case strings.Contains(v, "failed") || strings.Contains(v, "error"):
-			return "failed"
-		default:
-			return v
-		}
-	}
-
 	var results []UnifiedPayment
+	seenPayments := make(map[string]struct{}) // for uniqueness
 
-	fetchFrom := func(table, idCol, nameCol, amountCol, txnCol, dateCol, statusCol, source string) error {
+	fetchFrom := func(table, idCol, nameCol, amountCol, txnCol, dateCol, statusCol, source, instCol, courseCol string) error {
 		if sourceFilter != "" && sourceFilter != source {
 			return nil
 		}
@@ -443,7 +426,8 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		rows, err := db.Table(table).
 			Select(idCol + " AS payment_id, enrollment_number, " + nameCol + " AS student_name, " +
 				amountCol + " AS fee_amount, " + txnCol + " AS transaction_number, " +
-				dateCol + " AS transaction_date, " + statusCol + " AS status").
+				dateCol + " AS transaction_date, " + statusCol + " AS status, " +
+				instCol + " AS institute_name, " + courseCol + " AS course_name").
 			Rows()
 		if err != nil {
 			return err
@@ -452,19 +436,45 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 
 		for rows.Next() {
 			var up UnifiedPayment
+			var instName, courseName sql.NullString
+			var status sql.NullString
+
 			if err := rows.Scan(&up.PaymentID, &up.EnrollmentNo, &up.StudentName, &up.FeeAmount,
-				&up.TransactionNo, &up.TransactionDate, &up.Status); err != nil {
+				&up.TransactionNo, &up.TransactionDate, &status, &instName, &courseName); err != nil {
 				continue
 			}
 
 			up.Source = source
-			up.DisplayStatus = mapDisplayStatus(up.Status)
 
-			if statusFilter != "" && strings.ToLower(statusFilter) != up.DisplayStatus {
+			// Save status exactly as-is (even if nil)
+			if status.Valid {
+				up.Status = &status.String
+			} else {
+				up.Status = nil
+			}
+
+			if instName.Valid {
+				up.InstituteName = &instName.String
+			}
+			if courseName.Valid {
+				up.CourseName = &courseName.String
+			}
+
+			// Skip duplicates (payment_id + source)
+			key := fmt.Sprintf("%d_%s", up.PaymentID, up.Source)
+			if _, exists := seenPayments[key]; exists {
 				continue
 			}
+			seenPayments[key] = struct{}{}
+
+			// Apply filters
 			if hasEnrollmentFilter && (up.EnrollmentNo == nil || *up.EnrollmentNo != enNum) {
 				continue
+			}
+			if statusFilter != "" {
+				if up.Status == nil || strings.ToLower(*up.Status) != strings.ToLower(statusFilter) {
+					continue
+				}
 			}
 
 			results = append(results, up)
@@ -473,21 +483,21 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 	}
 
 	tables := []struct {
-		table, idCol, nameCol, amountCol, txnCol, dateCol, statusCol, source string
+		table, idCol, nameCol, amountCol, txnCol, dateCol, statusCol, source, instCol, courseCol string
 	}{
-		{"registration_fees", "regn_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "registration"},
-		{"examination_fees", "exam_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "examination"},
-		{"miscellaneous_fees", "misc_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "miscellaneous"},
+		{"registration_fees", "regn_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "registration", "institute_name", "course_name"},
+		{"examination_fees", "exam_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "examination", "institute_name", "course_name"},
+		{"miscellaneous_fees", "misc_fee_id", "student_name", "COALESCE(fee_amount,0)", "transaction_number", "transaction_date", "payment_status", "miscellaneous", "institute_name", "course_name"},
 	}
 
 	for _, t := range tables {
-		if err := fetchFrom(t.table, t.idCol, t.nameCol, t.amountCol, t.txnCol, t.dateCol, t.statusCol, t.source); err != nil {
+		if err := fetchFrom(t.table, t.idCol, t.nameCol, t.amountCol, t.txnCol, t.dateCol, t.statusCol, t.source, t.instCol, t.courseCol); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
 			return
 		}
 	}
 
-	// Enrich with master student data
+	// Enrich with MasterStudent only if institute/course is missing
 	if len(results) > 0 {
 		enrollSet := make(map[int64]struct{})
 		for _, r := range results {
@@ -513,8 +523,12 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 			for i := range results {
 				if results[i].EnrollmentNo != nil {
 					if m, ok := masterMap[*results[i].EnrollmentNo]; ok {
-						results[i].InstituteName = m.InstituteName
-						results[i].CourseName = m.CourseName
+						if results[i].InstituteName == nil {
+							results[i].InstituteName = m.InstituteName
+						}
+						if results[i].CourseName == nil {
+							results[i].CourseName = m.CourseName
+						}
 						results[i].ProgramPattern = m.ProgramPattern
 					}
 				}
@@ -522,12 +536,12 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		}
 	}
 
-	// Institute filter
+	// Apply institute filter (case-insensitive)
 	if instituteFilter != "" {
 		needle := strings.ToLower(strings.TrimSpace(instituteFilter))
 		filtered := results[:0]
 		for _, r := range results {
-			if r.InstituteName != nil && (strings.Contains(strings.ToLower(*r.InstituteName), needle)) {
+			if r.InstituteName != nil && strings.Contains(strings.ToLower(*r.InstituteName), needle) {
 				filtered = append(filtered, r)
 			}
 		}
@@ -541,11 +555,10 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		if !di.IsZero() && !dj.IsZero() {
 			return di.After(dj)
 		}
-		si := ""
+		si, sj := "", ""
 		if results[i].TransactionDate != nil {
 			si = *results[i].TransactionDate
 		}
-		sj := ""
 		if results[j].TransactionDate != nil {
 			sj = *results[j].TransactionDate
 		}
@@ -553,7 +566,7 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 	})
 
 	// Pagination
-	total := int(len(results))
+	total := len(results)
 	start := offset
 	if start > total {
 		start = total
@@ -570,7 +583,7 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 			"page":        page,
 			"limit":       limit,
 			"total":       total,
-			"total_pages": (total + int(limit) - 1) / int(limit),
+			"total_pages": (total + limit - 1) / limit,
 		},
 	})
 }
