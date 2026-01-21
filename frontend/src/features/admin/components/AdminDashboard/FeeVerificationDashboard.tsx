@@ -180,7 +180,7 @@ export default function FeeVerificationDashboard({
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-sm font-semibold text-red-700 mb-1 uppercase tracking-wider">Pending/Due</p>
-                            <h3 className="text-2xl font-bold text-red-600">{stats.pendingCount}</h3>
+                            <h3 className="text-2xl font-bold text-red-600">₹{(adminStats?.total_pending_fees ?? 0).toLocaleString("en-IN")}</h3>
                         </div>
                         <div className="p-3 bg-red-100 rounded-lg shadow-sm">
                             <AlertCircle className="w-6 h-6 text-red-600" />
