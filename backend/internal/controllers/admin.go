@@ -391,6 +391,25 @@ type UnifiedPayment struct {
 	ProgramPattern  *string  `json:"program_pattern"`
 }
 
+func normalizePaymentStatus(s *string) string {
+	if s == nil {
+		return "pending"
+	}
+
+	v := strings.ToLower(strings.TrimSpace(*s))
+
+	switch {
+	case strings.Contains(v, "success"), strings.Contains(v, "verified"):
+		return "verified"
+	case strings.Contains(v, "reject"), strings.Contains(v, "fail"):
+		return "rejected"
+	case strings.Contains(v, "pending"), strings.Contains(v, "paid"):
+		return "pending"
+	default:
+		return "pending"
+	}
+}
+
 func GetAllFeePaymentHistory(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
@@ -416,7 +435,7 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 	}
 
 	var results []UnifiedPayment
-	seenPayments := make(map[string]struct{}) // for uniqueness
+	seenPayments := make(map[string]struct{})
 
 	fetchFrom := func(table, idCol, nameCol, amountCol, txnCol, dateCol, statusCol, source, instCol, courseCol string) error {
 		if sourceFilter != "" && sourceFilter != source {
@@ -439,19 +458,29 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 			var instName, courseName sql.NullString
 			var status sql.NullString
 
-			if err := rows.Scan(&up.PaymentID, &up.EnrollmentNo, &up.StudentName, &up.FeeAmount,
-				&up.TransactionNo, &up.TransactionDate, &status, &instName, &courseName); err != nil {
+			if err := rows.Scan(
+				&up.PaymentID,
+				&up.EnrollmentNo,
+				&up.StudentName,
+				&up.FeeAmount,
+				&up.TransactionNo,
+				&up.TransactionDate,
+				&status,
+				&instName,
+				&courseName,
+			); err != nil {
 				continue
 			}
 
 			up.Source = source
 
-			// Save status exactly as-is (even if nil)
+			// ✅ NORMALIZE STATUS
+			var rawStatus *string
 			if status.Valid {
-				up.Status = &status.String
-			} else {
-				up.Status = nil
+				rawStatus = &status.String
 			}
+			normalizedStatus := normalizePaymentStatus(rawStatus)
+			up.Status = &normalizedStatus
 
 			if instName.Valid {
 				up.InstituteName = &instName.String
@@ -460,21 +489,20 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 				up.CourseName = &courseName.String
 			}
 
-			// Skip duplicates (payment_id + source)
+			// Deduplication
 			key := fmt.Sprintf("%d_%s", up.PaymentID, up.Source)
 			if _, exists := seenPayments[key]; exists {
 				continue
 			}
 			seenPayments[key] = struct{}{}
 
-			// Apply filters
+			// Filters
 			if hasEnrollmentFilter && (up.EnrollmentNo == nil || *up.EnrollmentNo != enNum) {
 				continue
 			}
-			if statusFilter != "" {
-				if up.Status == nil || strings.ToLower(*up.Status) != strings.ToLower(statusFilter) {
-					continue
-				}
+
+			if statusFilter != "" && strings.ToLower(*up.Status) != strings.ToLower(statusFilter) {
+				continue
 			}
 
 			results = append(results, up)
@@ -491,54 +519,26 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 	}
 
 	for _, t := range tables {
-		if err := fetchFrom(t.table, t.idCol, t.nameCol, t.amountCol, t.txnCol, t.dateCol, t.statusCol, t.source, t.instCol, t.courseCol); err != nil {
+		if err := fetchFrom(
+			t.table,
+			t.idCol,
+			t.nameCol,
+			t.amountCol,
+			t.txnCol,
+			t.dateCol,
+			t.statusCol,
+			t.source,
+			t.instCol,
+			t.courseCol,
+		); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch payments"})
 			return
 		}
 	}
 
-	// Enrich with MasterStudent only if institute/course is missing
-	if len(results) > 0 {
-		enrollSet := make(map[int64]struct{})
-		for _, r := range results {
-			if r.EnrollmentNo != nil {
-				enrollSet[*r.EnrollmentNo] = struct{}{}
-			}
-		}
-
-		if len(enrollSet) > 0 {
-			ids := make([]int64, 0, len(enrollSet))
-			for id := range enrollSet {
-				ids = append(ids, id)
-			}
-
-			var masters []models.MasterStudent
-			db.Where("enrollment_number IN ?", ids).Find(&masters)
-
-			masterMap := make(map[int64]models.MasterStudent)
-			for _, m := range masters {
-				masterMap[m.EnrollmentNumber] = m
-			}
-
-			for i := range results {
-				if results[i].EnrollmentNo != nil {
-					if m, ok := masterMap[*results[i].EnrollmentNo]; ok {
-						if results[i].InstituteName == nil {
-							results[i].InstituteName = m.InstituteName
-						}
-						if results[i].CourseName == nil {
-							results[i].CourseName = m.CourseName
-						}
-						results[i].ProgramPattern = m.ProgramPattern
-					}
-				}
-			}
-		}
-	}
-
-	// Apply institute filter (case-insensitive)
+	// Institute filter
 	if instituteFilter != "" {
-		needle := strings.ToLower(strings.TrimSpace(instituteFilter))
+		needle := strings.ToLower(instituteFilter)
 		filtered := results[:0]
 		for _, r := range results {
 			if r.InstituteName != nil && strings.Contains(strings.ToLower(*r.InstituteName), needle) {
@@ -548,21 +548,14 @@ func GetAllFeePaymentHistory(c *gin.Context) {
 		results = filtered
 	}
 
-	// Sort by date descending
+	// Sort by date desc
 	sort.SliceStable(results, func(i, j int) bool {
 		di := parseDateString(results[i].TransactionDate)
 		dj := parseDateString(results[j].TransactionDate)
 		if !di.IsZero() && !dj.IsZero() {
 			return di.After(dj)
 		}
-		si, sj := "", ""
-		if results[i].TransactionDate != nil {
-			si = *results[i].TransactionDate
-		}
-		if results[j].TransactionDate != nil {
-			sj = *results[j].TransactionDate
-		}
-		return si > sj
+		return false
 	})
 
 	// Pagination
