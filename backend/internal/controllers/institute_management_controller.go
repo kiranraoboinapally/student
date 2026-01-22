@@ -57,20 +57,20 @@ func InstituteAddStudent(c *gin.Context) {
 
 	now := time.Now()
 	student := models.MasterStudent{
-		EnrollmentNumber: req.EnrollmentNumber,
-		StudentName:      req.StudentName,
-		FatherName:       req.FatherName,
-		StudentEmailID:   req.Email,
+		EnrollmentNumber:   req.EnrollmentNumber,
+		StudentName:        req.StudentName,
+		FatherName:         req.FatherName,
+		StudentEmailID:     req.Email,
 		StudentPhoneNumber: req.Phone,
-		InstituteName:    &instituteName,
-		CourseName:       req.CourseName,
-		StudentStatus:    stringPtr("active"),
-		Session:          req.Session,
-		Batch:            req.Batch,
-		ProgramPattern:   req.ProgramPattern,
-		ProgramDuration:  req.ProgramDuration,
-		CreatedAt:        &now,
-		UpdatedAt:        &now,
+		InstituteName:      &instituteName,
+		CourseName:         req.CourseName,
+		StudentStatus:      stringPtr("active"),
+		Session:            req.Session,
+		Batch:              req.Batch,
+		ProgramPattern:     req.ProgramPattern,
+		ProgramDuration:    req.ProgramDuration,
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
 	}
 
 	if err := db.Create(&student).Error; err != nil {
@@ -221,10 +221,10 @@ func RequestCourseStream(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message":       "course-stream request submitted, pending university approval",
-		"approval_id":   approval.ApprovalID,
-		"course_name":   courseStream.CourseName,
-		"stream":        courseStream.Stream,
+		"message":     "course-stream request submitted, pending university approval",
+		"approval_id": approval.ApprovalID,
+		"course_name": courseStream.CourseName,
+		"stream":      courseStream.Stream,
 	})
 }
 
@@ -237,12 +237,12 @@ func GetInstituteCourseStreams(c *gin.Context) {
 
 	// Get approved course-streams
 	var approvals []struct {
-		ApprovalID   int64     `json:"approval_id"`
-		CourseName   string    `json:"course_name"`
-		Stream       string    `json:"stream"`
-		Status       string    `json:"status"`
-		RequestedAt  time.Time `json:"requested_at"`
-		ApprovedAt   *time.Time `json:"approved_at"`
+		ApprovalID  int64      `json:"approval_id"`
+		CourseName  string     `json:"course_name"`
+		Stream      string     `json:"stream"`
+		Status      string     `json:"status"`
+		RequestedAt time.Time  `json:"requested_at"`
+		ApprovedAt  *time.Time `json:"approved_at"`
 	}
 	db.Table("college_course_approvals").
 		Select("college_course_approvals.approval_id, courses_streams.course_name, courses_streams.stream, college_course_approvals.status, college_course_approvals.requested_at, college_course_approvals.approved_at").
