@@ -1,12 +1,22 @@
 import { useState, useEffect } from "react";
-import { Users, Edit, Trash2, UserPlus, RefreshCw } from "lucide-react";
+import { Users, Edit, Trash2, UserPlus, RefreshCw, X } from "lucide-react";
 import { useAuth } from "../../../auth/AuthProvider";
 
 export default function InstituteUserManagement() {
     const { authFetch } = useAuth();
 
     const [users, setUsers] = useState<any[]>([]);
+    const [institutes, setInstitutes] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createForm, setCreateForm] = useState({
+        name: "",
+        email: "",
+        mobile: "",
+        password: "",
+        role_id: "3", // Default to Institute Admin
+        institute_id: ""
+    });
     const [pagination, setPagination] = useState({
         page: 1,
         limit: 50,
@@ -16,7 +26,20 @@ export default function InstituteUserManagement() {
 
     useEffect(() => {
         loadUsers();
+        loadInstitutes();
     }, [pagination.page]);
+
+    const loadInstitutes = async () => {
+        try {
+            const res = await authFetch("/api/admin/institutes");
+            if (res.ok) {
+                const data = await res.json();
+                setInstitutes(data.data || []);
+            }
+        } catch (err) {
+            console.error("Failed to load institutes:", err);
+        }
+    };
 
     const loadUsers = async () => {
         setLoading(true);
@@ -33,6 +56,46 @@ export default function InstituteUserManagement() {
             console.error("Failed to load users:", err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCreateUser = async () => {
+        if (!createForm.name || !createForm.email || !createForm.password) {
+            alert("Name, Email, and Password are required");
+            return;
+        }
+
+        if (!createForm.institute_id) {
+            alert("Please select an Institute");
+            return;
+        }
+
+        try {
+            const res = await authFetch("/api/auth/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(createForm)
+            });
+
+            if (res.ok) {
+                alert("✅ User created successfully!");
+                setShowCreateModal(false);
+                setCreateForm({
+                    name: "",
+                    email: "",
+                    mobile: "",
+                    password: "",
+                    role_id: "3",
+                    institute_id: ""
+                });
+                loadUsers();
+            } else {
+                const error = await res.json();
+                alert(`❌ Failed: ${error.error || "Unknown error"}`);
+            }
+        } catch (err) {
+            console.error("Failed to create user:", err);
+            alert("Failed to create user");
         }
     };
 
@@ -75,13 +138,21 @@ export default function InstituteUserManagement() {
                             <p className="text-sm text-gray-500">View and manage all system users</p>
                         </div>
                     </div>
-                    <button
-                        onClick={loadUsers}
-                        disabled={loading}
-                        className="p-2 text-gray-500 hover:text-[#650C08] hover:bg-gray-50 rounded-full transition-all"
-                    >
-                        <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={loadUsers}
+                            disabled={loading}
+                            className="p-2 text-gray-500 hover:text-[#650C08] hover:bg-gray-50 rounded-full transition-all"
+                        >
+                            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="bg-[#650C08] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-colors shadow-md"
+                        >
+                            <UserPlus size={18} /> Create User
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -213,6 +284,113 @@ export default function InstituteUserManagement() {
                     </div>
                 )}
             </div>
+
+            {/* Create User Modal */}
+            {showCreateModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-gray-900">Create New User</h3>
+                            <button
+                                onClick={() => setShowCreateModal(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                                <input
+                                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
+                                    placeholder="Full Name"
+                                    value={createForm.name}
+                                    onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                                <input
+                                    type="email"
+                                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
+                                    placeholder="email@example.com"
+                                    value={createForm.email}
+                                    onChange={e => setCreateForm({ ...createForm, email: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
+                                <input
+                                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
+                                    placeholder="Phone Number"
+                                    value={createForm.mobile}
+                                    onChange={e => setCreateForm({ ...createForm, mobile: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                                <input
+                                    type="password"
+                                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
+                                    placeholder="Password"
+                                    value={createForm.password}
+                                    onChange={e => setCreateForm({ ...createForm, password: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                                <select
+                                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
+                                    value={createForm.role_id}
+                                    onChange={e => setCreateForm({ ...createForm, role_id: e.target.value })}
+                                >
+                                    <option value="1">University Admin</option>
+                                    <option value="2">Faculty</option>
+                                    <option value="3">Institute Admin</option>
+                                    <option value="4">Accountant</option>
+                                    <option value="5">Student</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Institute *</label>
+                                <select
+                                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent"
+                                    value={createForm.institute_id}
+                                    onChange={e => setCreateForm({ ...createForm, institute_id: e.target.value })}
+                                >
+                                    <option value="">-- Select Institute --</option>
+                                    {institutes.map(inst => (
+                                        <option key={inst.institute_id} value={inst.institute_id}>
+                                            {inst.institute_name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setShowCreateModal(false)}
+                                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleCreateUser}
+                                className="px-4 py-2 bg-[#650C08] text-white rounded-lg hover:bg-[#8B1A1A]"
+                            >
+                                Create User
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
