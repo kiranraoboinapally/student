@@ -26,7 +26,6 @@ import {
     File as FileIcon,
     Edit,
     Trash2,
-    BookOpen,
     UserPlus,
     ChevronLeft
 } from "lucide-react";
@@ -40,6 +39,7 @@ import UniversityOverview from "./UniversityOverview";
 import InstituteUserManagement from "./InstituteUserManagement";
 import ApprovalQueue from "./ApprovalQueue";
 import MarksLockPanel from "./MarksLockPanel";
+import SystemSettings from "./SystemSettings";
 
 const Pagination = ({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) => {
     const totalPages = Math.ceil(total / 20);
@@ -69,7 +69,7 @@ const Pagination = ({ current, total, onPageChange }: { current: number, total: 
     );
 };
 
-type TabType = "overview" | "institutes" | "analytics" | "subjects" | "approvals" | "marks" | "faculty" | "notices" | "fees" | "users";
+type TabType = "overview" | "institutes" | "analytics" | "approvals" | "marks" | "faculty" | "notices" | "fees" | "users" | "settings";
 type DrillDownLevel = "institutes" | "courses" | "students";
 
 export default function AdminDashboard() {
@@ -95,8 +95,7 @@ export default function AdminDashboard() {
     const [institutesTotal, setInstitutesTotal] = useState(0);
     const [courses, setCourses] = useState<Course[]>([]);
     const [coursesTotal, setCoursesTotal] = useState(0);
-    const [subjects, setSubjects] = useState<Subject[]>([]);
-    const [subjectsTotal, setSubjectsTotal] = useState(0);
+
     const [faculty, setFaculty] = useState<Faculty[]>([]);
     const [facultyTotal, setFacultyTotal] = useState(0);
     const [notices, setNotices] = useState<Notice[]>([]);
@@ -107,7 +106,6 @@ export default function AdminDashboard() {
         students: 1,
         institutes: 1,
         courses: 1,
-        subjects: 1,
         faculty: 1,
         fees: 1,
         pending: 1
@@ -115,13 +113,11 @@ export default function AdminDashboard() {
 
     const [showInstituteModal, setShowInstituteModal] = useState(false);
     const [showCourseModal, setShowCourseModal] = useState(false);
-    const [showSubjectModal, setShowSubjectModal] = useState(false);
     const [showFacultyModal, setShowFacultyModal] = useState(false);
     const [showNoticeModal, setShowNoticeModal] = useState(false);
 
     const [instituteForm, setInstituteForm] = useState<Institute>({ institute_name: "", institute_code: "", address: "", city: "", state: "", contact_number: "", contact_email: "" } as any);
     const [courseForm, setCourseForm] = useState<Course>({ name: "", code: "", duration_years: 0, institute_id: 0 } as any);
-    const [subjectForm, setSubjectForm] = useState<Subject>({ subject_name: "", subject_code: "", credits: 0, semester: 0, course_id: 0 } as any);
     const [facultyForm, setFacultyForm] = useState<Faculty>({ faculty_name: "", email: "", phone: "", department: "", position: "" } as any);
     const [noticeForm, setNoticeForm] = useState<Notice>({ title: "", description: "", created_at: new Date().toISOString() });
 
@@ -154,7 +150,6 @@ export default function AdminDashboard() {
             setStudents([]);
             setStudentsTotal(0);
             setNotices([]);
-            setSubjects([]);
             setFaculty([]);
 
             setLoading(false);
@@ -180,13 +175,6 @@ export default function AdminDashboard() {
                     const iData = await service.getInstitutes(page, limit);
                     setInstitutes(iData.institutes || iData.data || []);
                     setInstitutesTotal(iData.total || 0);
-                    break;
-                case "subjects":
-                    if (typeof service.getSubjects === "function") {
-                        const subData = await service.getSubjects(page, limit);
-                        setSubjects(subData.subjects || subData.data || []);
-                        setSubjectsTotal(subData.total || 0);
-                    }
                     break;
                 case "faculty":
                     if (typeof service.getFaculty === "function") {
@@ -258,9 +246,6 @@ export default function AdminDashboard() {
         } else if (type === 'course') {
             setCourseForm(item);
             setShowCourseModal(true);
-        } else if (type === 'subject') {
-            setSubjectForm(item);
-            setShowSubjectModal(true);
         } else if (type === 'faculty') {
             setFacultyForm(item);
             setShowFacultyModal(true);
@@ -310,25 +295,7 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleCreateOrUpdateSubject = async () => {
-        if (!subjectForm.subject_name) { alert("Name required"); return; }
-        try {
-            if (editingId) {
-                await service.updateSubject(editingId, subjectForm);
-                alert("Subject updated successfully");
-            } else {
-                await service.createSubject(subjectForm);
-                alert("Subject created successfully");
-            }
-            setShowSubjectModal(false);
-            setEditingId(null);
-            setSubjectForm({ subject_name: "", subject_code: "", credits: 0, semester: 0, course_id: 0 } as any);
-            loadAllData();
-        } catch (err) {
-            console.error(err);
-            alert("Failed to save subject");
-        }
-    };
+
 
     const handleCreateOrUpdateFaculty = async () => {
         if (!facultyForm.faculty_name) { alert("Name required"); return; }
@@ -377,12 +344,7 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleDeleteSubject = async (id: number) => {
-        if (window.confirm("Delete this subject?")) {
-            await service.deleteSubject(id);
-            loadAllData();
-        }
-    };
+
 
     const handleDeleteFaculty = async (id: number) => {
         if (window.confirm("Delete this faculty?")) {
@@ -502,7 +464,7 @@ export default function AdminDashboard() {
                         <SidebarItem id="users" label="User Management" icon={UserPlus} />
                         <SidebarItem id="fees" label="Fee Payments" icon={DollarSign} />
                         <SidebarItem id="notices" label="Holidays & Notices" icon={Bell} />
-                        <SidebarItem id="subjects" label="Subjects" icon={BookOpen} />
+                        <SidebarItem id="settings" label="Settings" icon={FileIcon} />
                     </div>
                 </div>
 
@@ -588,9 +550,25 @@ export default function AdminDashboard() {
                                 {drillDownLevel === "institutes" && (
                                     <InstituteDrillDown
                                         institutes={institutes}
-                                        courses={courses}
-                                        students={[]}
                                         onSelectInstitute={handleSelectInstitute}
+                                        onAdd={() => {
+                                            setEditingId(null);
+                                            setInstituteForm({ institute_name: "", institute_code: "", address: "", city: "", state: "", contact_number: "", contact_email: "" } as any);
+                                            setShowInstituteModal(true);
+                                        }}
+                                        onEdit={(inst) => startEdit('institute', inst)}
+                                        onDelete={async (id) => {
+                                            if (window.confirm("Delete this college?")) {
+                                                try {
+                                                    await service.deleteInstitute(id);
+                                                    loadAllData();
+                                                    alert("College deleted successfully");
+                                                } catch (err) {
+                                                    console.error(err);
+                                                    alert("Failed to delete college");
+                                                }
+                                            }
+                                        }}
                                     />
                                 )}
                                 {drillDownLevel === "courses" && selectedInstitute && (
@@ -628,12 +606,13 @@ export default function AdminDashboard() {
                                 courses={courses}
                                 students={students}
                                 feePayments={feePayments}
-                                subjects={subjects}
                                 adminStats={adminStats}
                             />
                         )}
 
                         {activeTab === "users" && <InstituteUserManagement />}
+
+                        {activeTab === "settings" && <SystemSettings />}
 
                         {activeTab === "approvals" && (
                             <ApprovalQueue />
@@ -643,58 +622,7 @@ export default function AdminDashboard() {
                             <MarksLockPanel />
                         )}
 
-                        {activeTab === "subjects" && (
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
-                                    <div>
-                                        <h2 className="text-lg font-bold text-gray-900">Subjects Repository</h2>
-                                        <p className="text-sm text-gray-500">Manage subjects and credits</p>
-                                    </div>
-                                    <button
-                                        onClick={() => setShowSubjectModal(true)}
-                                        className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-sm transition-all"
-                                    >
-                                        <Plus size={18} /> Add Subject
-                                    </button>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-gray-50 text-gray-600 font-medium">
-                                            <tr>
-                                                <th className="py-3 px-6">Subject Name</th>
-                                                <th className="py-3 px-6">Code</th>
-                                                <th className="py-3 px-6">Semester</th>
-                                                <th className="py-3 px-6">Credits</th>
-                                                <th className="py-3 px-6 text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {subjects.length > 0 ? subjects.map(subject => (
-                                                <tr key={subject.subject_id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="py-4 px-6 font-medium text-gray-900">{subject.subject_name}</td>
-                                                    <td className="py-4 px-6 text-gray-600"><span className="bg-gray-100 px-2 py-1 rounded text-xs">{subject.subject_code || 'N/A'}</span></td>
-                                                    <td className="py-4 px-6 text-gray-600">Sem {subject.semester}</td>
-                                                    <td className="py-4 px-6 text-gray-600">{subject.credits}</td>
-                                                    <td className="py-4 px-6 text-right flex justify-end gap-2">
-                                                        <button onClick={() => startEdit('subject', subject)} className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded"><Edit size={16} /></button>
-                                                        <button onClick={() => handleDeleteSubject(subject.subject_id!)} className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
-                                                    </td>
-                                                </tr>
-                                            )) : (
-                                                <tr>
-                                                    <td colSpan={5} className="py-8 text-center text-gray-500">No subjects found.</td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <Pagination
-                                    current={pages.subjects}
-                                    total={subjectsTotal}
-                                    onPageChange={(p) => setPages({ ...pages, subjects: p })}
-                                />
-                            </div>
-                        )}
+
 
                         {activeTab === "faculty" && (
                             <div className="space-y-6">
@@ -897,16 +825,7 @@ export default function AdminDashboard() {
                 </Modal>
             )}
 
-            {showSubjectModal && (
-                <Modal onClose={() => setShowSubjectModal(false)} onSave={handleCreateOrUpdateSubject} title={editingId ? "Edit Subject" : "Add Subject"}>
-                    <div className="space-y-4">
-                        <input className="w-full p-2 border rounded" placeholder="Subject Name" value={subjectForm.subject_name} onChange={e => setSubjectForm({ ...subjectForm, subject_name: e.target.value })} />
-                        <input className="w-full p-2 border rounded" placeholder="Code" value={subjectForm.subject_code} onChange={e => setSubjectForm({ ...subjectForm, subject_code: e.target.value })} />
-                        <input className="w-full p-2 border rounded" type="number" placeholder="Semester" value={subjectForm.semester} onChange={e => setSubjectForm({ ...subjectForm, semester: Number(e.target.value) })} />
-                        <input className="w-full p-2 border rounded" type="number" placeholder="Credits" value={subjectForm.credits} onChange={e => setSubjectForm({ ...subjectForm, credits: Number(e.target.value) })} />
-                    </div>
-                </Modal>
-            )}
+
 
             {showFacultyModal && (
                 <Modal onClose={() => setShowFacultyModal(false)} onSave={handleCreateOrUpdateFaculty} title={editingId ? "Edit Faculty" : "Add Faculty"}>
