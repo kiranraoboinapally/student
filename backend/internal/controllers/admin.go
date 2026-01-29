@@ -184,53 +184,65 @@ func GetCoursesByInstitute(c *gin.Context) {
 	type CourseSummary struct {
 		Name           string  `json:"name"`
 		StudentCount   int64   `json:"student_count"`
+		CompletedCount int64   `json:"completed_count"`
+		CompletionRate float64 `json:"completion_rate"`
 		ProgramPattern *string `json:"program_pattern,omitempty"`
 		DurationYears  *int    `json:"duration_years,omitempty"`
 	}
 
-	// First: Get the institute_name from institutes table using institute_id
+	// Get institute_name
 	var instituteName string
 	err = db.Table("institutes").
 		Select("institute_name").
 		Where("institute_id = ?", instituteID).
 		Scan(&instituteName).Error
 
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "institute not found or DB error"})
-		return
-	}
-
-	if instituteName == "" {
-		// Institute exists but name is empty? Or not found
+	if err != nil || instituteName == "" {
 		c.JSON(http.StatusOK, gin.H{"courses": []CourseSummary{}})
 		return
 	}
 
-	// Now query master_students using the string institute_name
-	var courses []CourseSummary = []CourseSummary{}
+	var courses []CourseSummary
 
 	err = db.Table("master_students").
 		Select(`
 			course_name AS name,
 			COUNT(*) AS student_count,
+			SUM(
+				CASE 
+					WHEN student_status = 'Alumni' THEN 1 
+					ELSE 0 
+				END
+			) AS completed_count,
+			ROUND(
+				(SUM(CASE WHEN student_status = 'Alumni' THEN 1 ELSE 0 END) * 100.0)
+				/ COUNT(*),
+				2
+			) AS completion_rate,
 			MAX(program_pattern) AS program_pattern,
 			MAX(program_duration) AS duration_years
 		`).
-		Where("institute_name = ? AND course_name IS NOT NULL AND TRIM(course_name) != ''", instituteName).
+		Where(`
+			institute_name = ?
+			AND course_name IS NOT NULL
+			AND course_name != ''
+		`, instituteName).
 		Group("course_name").
 		Order("course_name ASC").
 		Scan(&courses).Error
 
 	if err != nil {
-		// Log this in production! But for now, just return empty
-		fmt.Printf("Error scanning courses for institute %d (%s): %v\n", instituteID, instituteName, err)
+		fmt.Printf(
+			"Error scanning courses for institute %d (%s): %v\n",
+			instituteID,
+			instituteName,
+			err,
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch courses"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"courses": courses, // Will be [] if no courses
-	})
+	c.JSON(http.StatusOK, gin.H{"courses": courses})
 }
 
 type AdminCreateStudentUserRequest struct {

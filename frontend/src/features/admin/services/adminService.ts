@@ -238,13 +238,18 @@ class AdminService {
   }
 
   // Updated to return derived courses from student data
-  async getCoursesByInstitute(instituteId: number): Promise<{ courses: CourseFromStudents[] }> {
-    const res = await this.authFetch(`${apiBase}/admin/institutes/${instituteId}/courses`);
-    if (!res.ok) throw new Error("Failed to fetch courses for this institute");
+ async getCoursesByInstitute(
+  instituteId: number
+): Promise<{ courses: CourseFromStudents[] }> {
+  const res = await this.authFetch(
+    `${apiBase}/admin/institutes/${instituteId}/courses`
+  );
+  if (!res.ok) throw new Error("Failed to fetch courses for this institute");
 
-    const data = await res.json();
-    return { courses: data.courses || [] };
-  }
+  const data = await res.json();
+  return { courses: data.courses || [] };
+}
+
 
   // ======================= FEE PAYMENTS =======================
   async getFeePayments(

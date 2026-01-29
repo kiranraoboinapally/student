@@ -49,7 +49,11 @@ export default function CourseDrillDown({
       const enrolled = course.student_count;
       // Assuming all enrolled are active (since we don't have status in derived data)
       const active = enrolled;
-      const completionRate = enrolled > 0 ? 100 : 0; // Placeholder - can improve later
+      const completionRate =
+        typeof course.completion_rate === "number"
+          ? Math.round(course.completion_rate)
+          : 0;
+
 
       return {
         ...course,
