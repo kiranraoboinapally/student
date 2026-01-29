@@ -27,7 +27,8 @@ import {
     Edit,
     Trash2,
     UserPlus,
-    ChevronLeft
+    ChevronLeft,
+    Settings as SettingsIcon
 } from "lucide-react";
 import Modal from "../../../../shared/components/Modal";
 import InstituteDrillDown from "./InstituteDrillDown";
@@ -40,6 +41,7 @@ import InstituteUserManagement from "./InstituteUserManagement";
 import ApprovalQueue from "./ApprovalQueue";
 import MarksLockPanel from "./MarksLockPanel";
 import SystemSettings from "./SystemSettings";
+import FeeManagement from "./FeeManagement";
 
 const Pagination = ({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) => {
     const totalPages = Math.ceil(total / 20);
@@ -462,9 +464,9 @@ export default function AdminDashboard() {
                     <div className="space-y-1 mt-8">
                         <p className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Management</p>
                         <SidebarItem id="users" label="User Management" icon={UserPlus} />
-                        <SidebarItem id="fees" label="Fee Payments" icon={DollarSign} />
+                        <SidebarItem id="fees" label="Fee Management" icon={DollarSign} />
                         <SidebarItem id="notices" label="Holidays & Notices" icon={Bell} />
-                        <SidebarItem id="settings" label="Settings" icon={FileIcon} />
+                        <SidebarItem id="settings" label="Settings" icon={SettingsIcon} />
                     </div>
                 </div>
 
@@ -620,6 +622,10 @@ export default function AdminDashboard() {
 
                         {activeTab === "marks" && (
                             <MarksLockPanel />
+                        )}
+
+                        {activeTab === "fees" && (
+                            <FeeManagement />
                         )}
 
 

@@ -247,66 +247,66 @@ class AdminService {
   }
 
   // ======================= FEE PAYMENTS =======================
-async getFeePayments(
-  page: number = 1,
-  limit: number = 20,
-  filters?: {
-    enrollment_number?: string;
-    institute_name?: string;
-    status?: string;
-    source?: string;
-  }
-) {
-  const query = new URLSearchParams();
-  query.set("page", String(page));
-  query.set("limit", String(limit));
-  if (filters?.enrollment_number) query.set("enrollment_number", filters.enrollment_number);
-  if (filters?.institute_name) query.set("institute_name", filters.institute_name);
-  if (filters?.status) query.set("status", filters.status);
-  if (filters?.source) query.set("source", filters.source);
+  async getFeePayments(
+    page: number = 1,
+    limit: number = 20,
+    filters?: {
+      enrollment_number?: string;
+      institute_name?: string;
+      status?: string;
+      source?: string;
+    }
+  ) {
+    const query = new URLSearchParams();
+    query.set("page", String(page));
+    query.set("limit", String(limit));
+    if (filters?.enrollment_number) query.set("enrollment_number", filters.enrollment_number);
+    if (filters?.institute_name) query.set("institute_name", filters.institute_name);
+    if (filters?.status) query.set("status", filters.status);
+    if (filters?.source) query.set("source", filters.source);
 
-  const res = await this.authFetch(
-    `${apiBase}/admin/fees/payments?${query.toString()}`
-  );
+    const res = await this.authFetch(
+      `${apiBase}/admin/fees/payments?${query.toString()}`
+    );
 
-  if (!res.ok) {
+    if (!res.ok) {
+      return {
+        payments: [],
+        total_records: 0,
+        pagination: { page, limit, total: 0, total_pages: 0 },
+      };
+    }
+
+    const data = await res.json();
     return {
-      payments: [],
-      total_records: 0,
-      pagination: { page, limit, total: 0, total_pages: 0 },
+      payments: data.payments || [],
+      total_records: data.total_records || 0,
+      pagination: data.pagination,
     };
   }
 
-  const data = await res.json();
-  return {
-    payments: data.payments || [],
-    total_records: data.total_records || 0,
-    pagination: data.pagination,
-  };
-}
+  async verifyPayment(
+    paymentId: number,
+    source: "registration" | "examination" | "miscellaneous",
+    action: "verify" | "reject" = "verify"
+  ) {
+    const res = await this.authFetch(`${apiBase}/admin/fees/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        payment_id: paymentId,
+        source,
+        action,
+      }),
+    });
 
-async verifyPayment(
-  paymentId: number,
-  source: "registration" | "examination" | "miscellaneous",
-  action: "verify" | "reject" = "verify"
-) {
-  const res = await this.authFetch(`${apiBase}/admin/fees/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      payment_id: paymentId,
-      source,
-      action,
-    }),
-  });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to ${action} payment: ${err}`);
+    }
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Failed to ${action} payment: ${err}`);
+    return res.json();
   }
-
-  return res.json();
-}
 
 
   // ======================= MARKS & ATTENDANCE =======================
@@ -404,6 +404,145 @@ async verifyPayment(
       total_pending_fees: 0,
     };
 
+    return res.json();
+  }
+
+  // ======================= GRADING SYSTEM =======================
+  async getGradingRules() {
+    const res = await this.authFetch(`${apiBase}/admin/grading-rules`);
+    if (!res.ok) return [];
+    return res.json();
+  }
+
+  async createGradingRule(data: {
+    marks_percent: string;
+    grade: string;
+    grade_points: string;
+    remarks?: string;
+  }) {
+    const res = await this.authFetch(`${apiBase}/admin/grading-rules`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error("Failed to create grading rule");
+    return res.json();
+  }
+
+  async updateGradingRule(id: number, data: any) {
+    const res = await this.authFetch(`${apiBase}/admin/grading-rules/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error("Failed to update grading rule");
+    return res.json();
+  }
+
+  async deleteGradingRule(id: number) {
+    const res = await this.authFetch(`${apiBase}/admin/grading-rules/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete grading rule");
+    return res.json();
+  }
+
+  // ======================= INSTITUTE CRUD =======================
+  async createInstitute(data: Institute) {
+    const res = await this.authFetch(`${apiBase}/admin/institutes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error("Failed to create institute");
+    return res.json();
+  }
+
+  async updateInstitute(id: number, data: Institute) {
+    const res = await this.authFetch(`${apiBase}/admin/institutes/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error("Failed to update institute");
+    return res.json();
+  }
+
+  async deleteInstitute(id: number) {
+    const res = await this.authFetch(`${apiBase}/admin/institutes/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete institute");
+    return res.json();
+  }
+
+  // ======================= ACADEMIC RULES =======================
+  async getAcademicRules() {
+    const res = await this.authFetch(`${apiBase}/admin/academic-rules`);
+    if (!res.ok) return { rules: "" };
+    return res.json();
+  }
+
+  async updateAcademicRules(rules: string) {
+    const res = await this.authFetch(`${apiBase}/admin/academic-rules`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules }),
+    });
+    if (!res.ok) throw new Error("Failed to update academic rules");
+    return res.json();
+  }
+
+  // ======================= FEE MANAGEMENT =======================
+  async bulkUpdateExpectedFees(data: {
+    institute_id?: number;
+    institute_name?: string;
+    course_name?: string;
+    batch?: string;
+    session?: string;
+    expected_exam_fee?: number;
+    expected_registration_fee?: number;
+    expected_misc_fee?: number;
+  }) {
+    const res = await this.authFetch(`${apiBase}/admin/fees/bulk-update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error("Failed to bulk update fees");
+    return res.json();
+  }
+
+  async getFeeOverview(filters?: {
+    page?: number;
+    limit?: number;
+    institute_id?: string;
+    institute_name?: string;
+    course_name?: string;
+    session?: string;
+    status?: string;
+  }) {
+    const query = new URLSearchParams();
+    if (filters?.page) query.set("page", String(filters.page));
+    if (filters?.limit) query.set("limit", String(filters.limit));
+    if (filters?.institute_id) query.set("institute_id", filters.institute_id);
+    if (filters?.institute_name) query.set("institute_name", filters.institute_name);
+    if (filters?.course_name) query.set("course_name", filters.course_name);
+    if (filters?.session) query.set("session", filters.session);
+    if (filters?.status) query.set("status", filters.status);
+
+    const res = await this.authFetch(`${apiBase}/admin/fees/overview?${query.toString()}`);
+    if (!res.ok) return { data: [], pagination: { page: 1, limit: 50, total: 0, total_pages: 0 } };
+    return res.json();
+  }
+
+  async getPaymentVerificationQueue(source: string = "registration", instituteFilter?: string) {
+    const query = new URLSearchParams();
+    query.set("source", source);
+    if (instituteFilter) query.set("institute_name", instituteFilter);
+
+    const res = await this.authFetch(`${apiBase}/admin/fees/verification-queue?${query.toString()}`);
+    if (!res.ok) return { payments: [], pagination: { page: 1, limit: 50, total: 0, total_pages: 0 } };
     return res.json();
   }
 }

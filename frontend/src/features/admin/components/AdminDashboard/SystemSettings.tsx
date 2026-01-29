@@ -1,40 +1,152 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Settings as SettingsIcon, Plus, Edit, Trash2, Save } from "lucide-react";
+import { useAuth } from "../../../auth/AuthProvider";
 
 export default function SystemSettings() {
-    const [gradingRules, setGradingRules] = useState([
-        { id: 1, marks_percent: "90-100", grade: "A+", grade_points: "10", remarks: "Outstanding" },
-        { id: 2, marks_percent: "80-89", grade: "A", grade_points: "9", remarks: "Excellent" },
-        { id: 3, marks_percent: "70-79", grade: "B+", grade_points: "8", remarks: "Very Good" },
-        { id: 4, marks_percent: "60-69", grade: "B", grade_points: "7", remarks: "Good" },
-        { id: 5, marks_percent: "50-59", grade: "C", grade_points: "6", remarks: "Average" },
-        { id: 6, marks_percent: "40-49", grade: "D", grade_points: "5", remarks: "Pass" },
-        { id: 7, marks_percent: "0-39", grade: "F", grade_points: "0", remarks: "Fail" },
-    ]);
+    const { authFetch } = useAuth();
 
+    const [gradingRules, setGradingRules] = useState<any[]>([]);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [form, setForm] = useState({ marks_percent: "", grade: "", grade_points: "", remarks: "" });
     const [showAddModal, setShowAddModal] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    const handleEdit = (rule: typeof gradingRules[0]) => {
-        setEditingId(rule.id);
-        setForm(rule);
-    };
+    // Academic Rules
+    const [academicRules, setAcademicRules] = useState("");
+    const [savingRules, setSavingRules] = useState(false);
 
-    const handleSave = () => {
-        if (editingId) {
-            setGradingRules(gradingRules.map(r => r.id === editingId ? { ...form, id: editingId } : r));
-            setEditingId(null);
-        } else {
-            setGradingRules([...gradingRules, { ...form, id: Date.now() }]);
-            setShowAddModal(false);
+    // Load grading rules on mount
+    useEffect(() => {
+        loadGradingRules();
+        loadAcademicRules();
+    }, []);
+
+    const loadGradingRules = async () => {
+        try {
+            const res = await authFetch("/api/admin/grading-rules");
+            if (res.ok) {
+                const data = await res.json();
+                setGradingRules(data);
+            }
+        } catch (err) {
+            console.error("Failed to load grading rules:", err);
         }
-        setForm({ marks_percent: "", grade: "", grade_points: "", remarks: "" });
     };
 
-    const handleDelete = (id: number) => {
-        if (window.confirm("Delete this grading rule?")) {
-            setGradingRules(gradingRules.filter(r => r.id !== id));
+    const loadAcademicRules = async () => {
+        try {
+            const res = await authFetch("/api/admin/academic-rules");
+            if (res.ok) {
+                const data = await res.json();
+                setAcademicRules(data.rules || "");
+            }
+        } catch (err) {
+            console.error("Failed to load academic rules:", err);
+        }
+    };
+
+    const handleEdit = (rule: any) => {
+        setEditingId(rule.id);
+        setForm({
+            marks_percent: rule.marks_percent,
+            grade: rule.grade,
+            grade_points: rule.grade_points,
+            remarks: rule.remarks || ""
+        });
+    };
+
+    const handleSave = async () => {
+        if (!form.marks_percent || !form.grade || !form.grade_points) {
+            alert("Please fill all required fields");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            if (editingId) {
+                // Update existing
+                const res = await authFetch(`/api/admin/grading-rules/${editingId}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(form)
+                });
+
+                if (res.ok) {
+                    alert("Grading rule updated successfully");
+                    await loadGradingRules();
+                    setEditingId(null);
+                } else {
+                    const error = await res.text();
+                    alert(`Failed to update: ${error}`);
+                }
+            } else {
+                // Create new
+                const res = await authFetch("/api/admin/grading-rules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(form)
+                });
+
+                if (res.ok) {
+                    alert("Grading rule created successfully");
+                    await loadGradingRules();
+                    setShowAddModal(false);
+                } else {
+                    const error = await res.text();
+                    alert(`Failed to create: ${error}`);
+                }
+            }
+            setForm({ marks_percent: "", grade: "", grade_points: "", remarks: "" });
+        } catch (err) {
+            console.error("Failed to save grading rule:", err);
+            alert("Failed to save grading rule");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async (id: number) => {
+        if (!window.confirm("Delete this grading rule?")) return;
+
+        setLoading(true);
+        try {
+            const res = await authFetch(`/api/admin/grading-rules/${id}`, {
+                method: "DELETE"
+            });
+
+            if (res.ok) {
+                alert("Grading rule deleted successfully");
+                await loadGradingRules();
+            } else {
+                alert("Failed to delete grading rule");
+            }
+        } catch (err) {
+            console.error("Failed to delete grading rule:", err);
+            alert("Failed to delete grading rule");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSaveAcademicRules = async () => {
+        setSavingRules(true);
+        try {
+            const res = await authFetch("/api/admin/academic-rules", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rules: academicRules })
+            });
+
+            if (res.ok) {
+                alert("Academic rules updated successfully");
+            } else {
+                alert("Failed to update academic rules");
+            }
+        } catch (err) {
+            console.error("Failed to save academic rules:", err);
+            alert("Failed to save academic rules");
+        } finally {
+            setSavingRules(false);
         }
     };
 
@@ -48,7 +160,7 @@ export default function SystemSettings() {
                     </div>
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900">System Settings</h2>
-                        <p className="text-sm text-gray-500">Configure university-wide settingsand policies</p>
+                        <p className="text-sm text-gray-500">Configure university-wide settings and policies</p>
                     </div>
                 </div>
             </div>
@@ -63,6 +175,7 @@ export default function SystemSettings() {
                     <button
                         onClick={() => { setForm({ marks_percent: "", grade: "", grade_points: "", remarks: "" }); setShowAddModal(true); }}
                         className="bg-[#650C08] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] shadow-sm transition-all"
+                        disabled={loading}
                     >
                         <Plus size={18} /> Add Grade
                     </button>
@@ -89,17 +202,19 @@ export default function SystemSettings() {
                                         </span>
                                     </td>
                                     <td className="py-4 px-6 text-gray-600">{rule.grade_points}</td>
-                                    <td className="py-4 px-6 text-gray-600">{rule.remarks}</td>
+                                    <td className="py-4 px-6 text-gray-600">{rule.remarks || "-"}</td>
                                     <td className="py-4 px-6 text-right flex justify-end gap-2">
                                         <button
                                             onClick={() => handleEdit(rule)}
                                             className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded"
+                                            disabled={loading}
                                         >
                                             <Edit size={16} />
                                         </button>
                                         <button
                                             onClick={() => handleDelete(rule.id)}
                                             className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded"
+                                            disabled={loading}
                                         >
                                             <Trash2 size={16} />
                                         </button>
@@ -118,11 +233,16 @@ export default function SystemSettings() {
                     className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#650C08] focus:border-transparent resize-none"
                     rows={6}
                     placeholder="Enter university academic rules and policies..."
-                    defaultValue="1. Minimum 75% attendance required for semester eligibility.&#10;2. Internal assessments count for 30% of final grade.&#10;3. Re-examination allowed for one subject per semester."
+                    value={academicRules}
+                    onChange={(e) => setAcademicRules(e.target.value)}
                 />
                 <div className="flex justify-end mt-3">
-                    <button className="bg-[#650C08] text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-all">
-                        <Save size={18} /> Save Rules
+                    <button
+                        className="bg-[#650C08] text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-[#8B1A1A] transition-all"
+                        onClick={handleSaveAcademicRules}
+                        disabled={savingRules}
+                    >
+                        <Save size={18} /> {savingRules ? "Saving..." : "Save Rules"}
                     </button>
                 </div>
             </div>
@@ -155,7 +275,7 @@ export default function SystemSettings() {
                             />
                             <input
                                 className="w-full p-2 border border-gray-200 rounded-lg"
-                                placeholder="Remarks"
+                                placeholder="Remarks (optional)"
                                 value={form.remarks}
                                 onChange={e => setForm({ ...form, remarks: e.target.value })}
                             />
@@ -164,14 +284,16 @@ export default function SystemSettings() {
                             <button
                                 onClick={() => { setShowAddModal(false); setEditingId(null); setForm({ marks_percent: "", grade: "", grade_points: "", remarks: "" }); }}
                                 className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                disabled={loading}
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleSave}
                                 className="px-4 py-2 bg-[#650C08] text-white rounded-lg hover:bg-[#8B1A1A]"
+                                disabled={loading}
                             >
-                                Save
+                                {loading ? "Saving..." : "Save"}
                             </button>
                         </div>
                     </div>

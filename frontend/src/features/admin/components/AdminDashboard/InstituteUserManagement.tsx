@@ -1,227 +1,218 @@
-import React, { useState, useEffect } from "react";
-import { useAuth, apiBase } from "../../../auth/AuthProvider"; // Adjust path as needed
-import { UserPlus, School, User } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, Edit, Trash2, UserPlus, RefreshCw } from "lucide-react";
+import { useAuth } from "../../../auth/AuthProvider";
 
 export default function InstituteUserManagement() {
     const { authFetch } = useAuth();
 
-    const [institutes, setInstitutes] = useState<any[]>([]);
+    const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [loadingInstitutes, setLoadingInstitutes] = useState(true);
-    const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-    const [formData, setFormData] = useState({
-        institute_id: "",
-        username: "",
-        full_name: "",
-        email: "",
-        role_id: 3, // Default to Institute Admin
-        temp_password: "",
+    const [pagination, setPagination] = useState({
+        page: 1,
+        limit: 50,
+        total: 0,
+        total_pages: 0
     });
 
     useEffect(() => {
-        fetchInstitutes();
-    }, []);
+        loadUsers();
+    }, [pagination.page]);
 
-    const fetchInstitutes = async () => {
+    const loadUsers = async () => {
+        setLoading(true);
         try {
-            // Assuming existing endpoint returns list of institutes
-            const res = await authFetch(`${apiBase}/admin/institutes?limit=100`);
+            const res = await authFetch(`/api/admin/users/all?page=${pagination.page}&limit=${pagination.limit}`);
             if (res.ok) {
                 const data = await res.json();
-                setInstitutes(data.data || []);
-            }
-        } catch (e) {
-            console.error("Failed to load institutes", e);
-        } finally {
-            setLoadingInstitutes(false);
-        }
-    };
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setMessage(null);
-
-        try {
-            const payload = {
-                ...formData,
-                institute_id: Number(formData.institute_id),
-                role_id: Number(formData.role_id),
-            };
-
-            const res = await authFetch(`${apiBase}/admin/institutes/users`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                setMessage({ type: "success", text: "User created successfully!" });
-                setFormData({
-                    institute_id: formData.institute_id, // Keep institute selected
-                    username: "",
-                    full_name: "",
-                    email: "",
-                    role_id: 3,
-                    temp_password: "",
-                });
-            } else {
-                setMessage({ type: "error", text: data.error || "Failed to create user" });
+                setUsers(data.users || []);
+                if (data.pagination) {
+                    setPagination(prev => ({ ...prev, ...data.pagination }));
+                }
             }
         } catch (err) {
-            setMessage({ type: "error", text: "Connection failed" });
+            console.error("Failed to load users:", err);
         } finally {
             setLoading(false);
         }
     };
 
+    const getRoleName = (roleId: number) => {
+        const roles: { [key: number]: string } = {
+            1: "University Admin",
+            2: "Faculty",
+            3: "Institute Admin",
+            4: "Accountant",
+            5: "Student"
+        };
+        return roles[roleId] || "Unknown";
+    };
+
+    const getStatusBadge = (status: string) => {
+        const statusMap: { [key: string]: { bg: string; text: string } } = {
+            approved: { bg: "bg-green-100", text: "text-green-700" },
+            pending: { bg: "bg-yellow-100", text: "text-yellow-700" },
+            rejected: { bg: "bg-red-100", text: "text-red-700" }
+        };
+        const style = statusMap[status?.toLowerCase()] || { bg: "bg-gray-100", text: "text-gray-700" };
+        return (
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${style.bg} ${style.text} capitalize`}>
+                {status || "Pending"}
+            </span>
+        );
+    };
+
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto mt-6">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b">
-                <div className="p-3 bg-indigo-100 text-indigo-700 rounded-full">
-                    <UserPlus className="w-6 h-6" />
-                </div>
-                <div>
-                    <h2 className="text-xl font-bold text-gray-800">Create Institute User</h2>
-                    <p className="text-sm text-gray-500">Create Admin or Faculty accounts for an institute</p>
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                            <Users className="text-blue-600" size={24} />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
+                            <p className="text-sm text-gray-500">View and manage all system users</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={loadUsers}
+                        disabled={loading}
+                        className="p-2 text-gray-500 hover:text-[#650C08] hover:bg-gray-50 rounded-full transition-all"
+                    >
+                        <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
                 </div>
             </div>
 
-            {message && (
-                <div className={`p-4 mb-4 rounded ${message.type === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                    {message.text}
+            {/* Users Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    ID
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    Name
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    Email
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    Mobile
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    Role
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    Status
+                                </th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    Created
+                                </th>
+                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {loading && users.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="px-6 py-12 text-center">
+                                        <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
+                                        <p className="text-gray-500">Loading users...</p>
+                                    </td>
+                                </tr>
+                            ) : users.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="px-6 py-12 text-center">
+                                        <Users className="w-16 h-16 text-gray-300 mx-auto mb-3" />
+                                        <p className="text-gray-500 font-medium">No users found</p>
+                                    </td>
+                                </tr>
+                            ) : (
+                                users.map((user) => (
+                                    <tr key={user.user_id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                            #{user.user_id}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-[#650C08] text-white flex items-center justify-center font-bold text-sm">
+                                                    {user.name?.charAt(0).toUpperCase() || "?"}
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-gray-900">{user.name || "N/A"}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            {user.email || "N/A"}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            {user.mobile || "N/A"}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
+                                                {getRoleName(user.role_id)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {getStatusBadge(user.approval_status)}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                            {user.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A"}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    title="Edit User"
+                                                >
+                                                    <Edit size={16} />
+                                                </button>
+                                                <button
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Delete User"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-            )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Institute Selection */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Institute</label>
-                    <div className="relative">
-                        <select
-                            name="institute_id"
-                            value={formData.institute_id}
-                            onChange={handleChange}
-                            required
-                            className="w-full pl-10 pr-4 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none appearance-none"
-                        >
-                            <option value="">-- Choose Institute --</option>
-                            {institutes.map((inst: any) => (
-                                <option key={inst.institute_id} value={inst.institute_id}>
-                                    {inst.name || inst.institute_name} ({inst.code || inst.institute_code})
-                                </option>
-                            ))}
-                        </select>
-                        <School className="absolute left-3 top-2.5 w-5 h-5 text-gray-400 pointer-events-none" />
-                    </div>
-                    {loadingInstitutes && <p className="text-xs text-gray-400 mt-1">Loading institutes...</p>}
-                </div>
-
-                {/* Role Selection */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                    <div className="flex gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer border p-3 rounded hover:bg-gray-50 flex-1">
-                            <input
-                                type="radio"
-                                name="role_id"
-                                value="3"
-                                checked={Number(formData.role_id) === 3}
-                                onChange={handleChange}
-                                className="text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className="font-medium">Institute Admin</span>
-                        </label>
-                        {/* 
-               <label className="flex items-center gap-2 cursor-pointer border p-3 rounded hover:bg-gray-50 flex-1">
-                 <input
-                    type="radio"
-                    name="role_id"
-                    value="2"
-                    checked={Number(formData.role_id) === 2}
-                    onChange={handleChange}
-                    className="text-indigo-600 focus:ring-indigo-500"
-                 />
-                 <span className="font-medium">Faculty (Direct)</span>
-              </label> 
-              */}
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                        <div className="relative">
-                            <input
-                                type="text"
-                                name="username"
-                                value={formData.username}
-                                onChange={handleChange}
-                                required
-                                placeholder="e.g. admin_mit"
-                                className="w-full pl-10 pr-4 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                            />
-                            <User className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
+                {/* Pagination */}
+                {pagination.total_pages > 1 && (
+                    <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center bg-gray-50">
+                        <p className="text-sm text-gray-600">
+                            Showing page {pagination.page} of {pagination.total_pages} ({pagination.total} total users)
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                                disabled={pagination.page === 1}
+                                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                                disabled={pagination.page >= pagination.total_pages}
+                                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Next
+                            </button>
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                        <input
-                            type="text"
-                            name="full_name"
-                            value={formData.full_name}
-                            onChange={handleChange}
-                            required
-                            placeholder="e.g. John Doe"
-                            className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                        />
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                        <input
-                            type="email"
-                            name="email"
-                            value={formData.email}
-                            onChange={handleChange}
-                            required
-                            placeholder="admin@institute.com"
-                            className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Generic Password</label>
-                        <input
-                            type="text"
-                            name="temp_password"
-                            value={formData.temp_password}
-                            onChange={handleChange}
-                            required
-                            placeholder="Min 6 chars"
-                            className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                        />
-                    </div>
-                </div>
-
-                <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded transition flex items-center justify-center gap-2"
-                >
-                    {loading ? "Creating..." : "Create User"}
-                </button>
-
-            </form>
+                )}
+            </div>
         </div>
     );
 }

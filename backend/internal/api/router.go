@@ -68,6 +68,23 @@ func RegisterAPIRoutes(r *gin.Engine) {
 		admin.DELETE("/institutes/:id", controllers.DeleteInstitute)
 		admin.GET("/institutes/:id/courses", controllers.GetCoursesByInstitute)
 
+		// 🔹 GRADING SYSTEM
+		admin.GET("/grading-rules", controllers.GetGradingRules)
+		admin.POST("/grading-rules", controllers.CreateGradingRule)
+		admin.PUT("/grading-rules/:id", controllers.UpdateGradingRule)
+		admin.DELETE("/grading-rules/:id", controllers.DeleteGradingRule)
+
+		// 🔹 ACADEMIC RULES
+		admin.GET("/academic-rules", controllers.GetAcademicRules)
+		admin.PUT("/academic-rules", controllers.UpdateAcademicRules)
+
+		// 🔹 FEE MANAGEMENT (NEW)
+		admin.GET("/fees/active-courses", controllers.GetActiveCoursesByInstitute)
+		admin.POST("/fees/create-for-active", controllers.CreateFeesForActiveStudents)
+
+		// 🔹 USER MANAGEMENT
+		admin.GET("/users/all", controllers.GetAllUsers)
+
 		// 🔹 COURSES
 		admin.GET("/courses", controllers.GetCourses)
 		admin.POST("/courses", controllers.CreateCourse)
