@@ -31,6 +31,8 @@ export default function InstituteDashboard(): React.ReactNode {
 
     // Data Lists
     const [students, setStudents] = useState<any[]>([]);
+    const [studentTotalRecords, setStudentTotalRecords] = useState(0);
+
     const [faculty, setFaculty] = useState<any[]>([]);
     const [courses, setCourses] = useState<any[]>([]);
     const [fees, setFees] = useState<any[]>([]);
@@ -94,18 +96,25 @@ export default function InstituteDashboard(): React.ReactNode {
         loadAssignCourses();
     }, [authFetch]);
 
-    const loadStudents = useCallback(async () => {
-        try {
-            setLoadingStudents(true);
-            const res = await authFetch(`${apiBase}/institute/students`);
-            const data = await res.json();
-            setStudents(data.data || data.students || []);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoadingStudents(false);
-        }
-    }, [authFetch]);
+    const loadStudents = useCallback(
+        async (page = 1) => {
+            try {
+                setLoadingStudents(true);
+                const res = await authFetch(
+                    `${apiBase}/institute/students?page=${page}&limit=${ITEMS_PER_PAGE}`
+                );
+                const json = await res.json();
+                // your backend returns { data: [ … ], total_count: 123, … }
+                setStudents(json.data || []);
+                setStudentTotalRecords(json.total_count ?? json.data.length);
+            } catch (e) {
+                console.error("Failed to fetch students:", e);
+            } finally {
+                setLoadingStudents(false);
+            }
+        },
+        [authFetch]
+    );
 
     const loadFaculty = useCallback(async () => {
         try {
@@ -168,13 +177,13 @@ export default function InstituteDashboard(): React.ReactNode {
     }, [loadStats]);
 
     useEffect(() => {
-        if (activeTab === "students") loadStudents();
+        if (activeTab === "students") loadStudents(studentCurrentPage);
         if (activeTab === "faculty") loadFaculty();
         if (activeTab === "courses") loadCourses();
         if (activeTab === "fees") loadFees();
         if (activeTab === "attendance") loadAttendance();
         if (activeTab === "marks") loadMarks();
-    }, [activeTab, loadStudents, loadFaculty, loadCourses, loadFees, loadAttendance, loadMarks]);
+    }, [activeTab, studentCurrentPage, loadStudents, loadFaculty, loadCourses, loadFees, loadAttendance, loadMarks]);
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -239,10 +248,11 @@ export default function InstituteDashboard(): React.ReactNode {
         return Array.from(set).sort() as string[];
     }, [students]);
 
-    const studentTotalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
-    const studentIndexOfLast = studentCurrentPage * ITEMS_PER_PAGE;
-    const studentIndexOfFirst = studentIndexOfLast - ITEMS_PER_PAGE; // More robust calculation
-    const currentStudents = filteredStudents.slice(studentIndexOfFirst, studentIndexOfLast);
+    const studentTotalPages = Math.ceil(studentTotalRecords / ITEMS_PER_PAGE);
+    const first = (studentCurrentPage - 1) * ITEMS_PER_PAGE;
+    const last = first + ITEMS_PER_PAGE;
+    const pageRows = students.slice(first, last); // More robust calculation
+    const currentStudents = filteredStudents.slice(first, last);
     // ─── Faculty filtering & pagination logic ─────────────────────────────────
     const filteredFaculty = useMemo(() => {
         let result = [...faculty];
@@ -591,6 +601,28 @@ export default function InstituteDashboard(): React.ReactNode {
                                                         ))}
                                                     </tbody>
                                                 </table>
+                                                {/* Pagination Footer */}
+                                                <div className="px-6 py-4 flex items-center justify-between border-t bg-gray-50">
+                                                    <div className="text-sm text-gray-700">
+                                                        Showing page {studentCurrentPage} of {studentTotalPages}
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => setStudentCurrentPage(p => Math.max(p - 1, 1))}
+                                                            disabled={studentCurrentPage === 1}
+                                                            className="px-4 py-2 border rounded disabled:opacity-50"
+                                                        >
+                                                            Previous
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setStudentCurrentPage(p => Math.min(p + 1, studentTotalPages))}
+                                                            disabled={studentCurrentPage === studentTotalPages}
+                                                            className="px-4 py-2 border rounded disabled:opacity-50"
+                                                        >
+                                                            Next
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </>
                                     )}

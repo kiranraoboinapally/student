@@ -84,7 +84,7 @@ func GetInstituteStudents(c *gin.Context) {
 
 	var students []models.MasterStudent
 	// Fetch students
-	config.DB.Where("institute_name = ?", institute.InstituteName).Limit(100).Find(&students)
+	config.DB.Where("institute_name = ?", institute.InstituteName).Limit(3000).Find(&students)
 
 	c.JSON(http.StatusOK, gin.H{"data": students})
 }
